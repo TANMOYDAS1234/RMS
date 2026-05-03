@@ -1,12 +1,12 @@
 class AppConfig {
   static const String baseUrl = String.fromEnvironment(
     'BASE_URL',
-    defaultValue: 'http://192.168.1.23:3000',
+    defaultValue: 'https://rms-1-7hu6.onrender.com',
   );
 
   static const String wsUrl = String.fromEnvironment(
     'WS_URL',
-    defaultValue: 'http://192.168.1.23:3000',
+    defaultValue: 'https://rms-1-7hu6.onrender.com',
   );
 
   static const Duration connectTimeout = Duration(seconds: 10);
