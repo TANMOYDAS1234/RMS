@@ -1,0 +1,62 @@
+name: rms_app
+description: Production-grade Restaurant Management System
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State Management
+  flutter_riverpod: ^2.4.9
+  riverpod_annotation: ^2.3.3
+
+  # Navigation
+  go_router: ^13.0.0
+
+  # Network
+  dio: ^5.4.0
+  socket_io_client: ^2.0.3+1
+
+  # Local Storage
+  hive_flutter: ^1.1.0
+  hive: ^2.2.3
+
+  # Firebase (configure google-services.json to enable)
+  # firebase_core: ^2.24.2
+  # firebase_messaging: ^14.7.10
+
+  # Utilities
+  uuid: ^4.3.3
+  connectivity_plus: ^5.0.2
+  intl: ^0.19.0
+  equatable: ^2.0.5
+  dartz: ^0.10.1
+
+  # UI
+  flutter_animate: ^4.5.0
+  shimmer: ^3.0.0
+  fl_chart: ^0.66.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  build_runner: ^2.4.8
+  riverpod_generator: ^2.3.9
+  hive_generator: ^2.0.1
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/icons/
+
+dependency_overrides:
+  path_provider_foundation: ^2.3.2
+  objective_c: ^9.3.0
+  jni: ^1.0.0
+  jni_flutter: ^1.0.1
