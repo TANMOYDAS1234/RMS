@@ -138,7 +138,11 @@ class _NewOrderScreenState extends ConsumerState<NewOrderScreen> {
                               onAdd: () => setState(() => _cart[item.id] = (_cart[item.id] ?? 0) + 1),
                               onRemove: () => setState(() {
                                 final q = (_cart[item.id] ?? 0) - 1;
-                                if (q <= 0) _cart.remove(item.id); else _cart[item.id] = q;
+                                if (q <= 0) {
+                                  _cart.remove(item.id);
+                                } else {
+                                  _cart[item.id] = q;
+                                }
                               }),
                             )),
                       ],
@@ -157,7 +161,7 @@ class _NewOrderScreenState extends ConsumerState<NewOrderScreen> {
               icon: _submitting
                   ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                   : const Icon(Icons.check),
-              label: Text('Place Order', style: const TextStyle(fontWeight: FontWeight.w700)),
+              label: const Text('Place Order', style: TextStyle(fontWeight: FontWeight.w700)),
               onPressed: _submitting ? null : _placeOrder,
             )
           : null,

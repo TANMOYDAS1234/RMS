@@ -33,6 +33,11 @@ export class Bill {
   @Prop() paidAt?: Date;
   @Prop() cashierId?: string;
   @Prop({ type: [String], default: [] }) processedKeys: string[];
+
+  // Refund tracking (admin only)
+  @Prop({ default: false }) isRefunded: boolean;
+  @Prop() refundedAt?: Date;
+  @Prop() refundedBy?: string;
 }
 
 export const BillSchema = SchemaFactory.createForClass(Bill);

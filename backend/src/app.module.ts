@@ -10,6 +10,10 @@ import { MenuModule } from './modules/menu/menu.module';
 import { TablesModule } from './modules/tables/tables.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
+import { SessionsModule } from './modules/sessions/sessions.module';
+import { BranchesModule } from './modules/branches/branches.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { AdminModule } from './modules/admin/admin.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { IdempotencyInterceptor } from './common/interceptors/idempotency.interceptor';
 
@@ -31,6 +35,10 @@ import { IdempotencyInterceptor } from './common/interceptors/idempotency.interc
     TablesModule,
     BillingModule,
     InventoryModule,
+    SessionsModule,
+    BranchesModule,
+    AnalyticsModule,
+    AdminModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: GlobalExceptionFilter },

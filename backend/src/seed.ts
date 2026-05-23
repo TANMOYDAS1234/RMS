@@ -330,6 +330,36 @@ async function seed() {
     }
   }
 
+  // ── 7. BRANCH (default) ──────────────────────────────────────────────────
+  console.log('\n🏢 Seeding branch...');
+  const BranchSchema = new mongoose.Schema({
+    name: String, address: String, slug: { type: String, unique: true },
+    isActive: { type: Boolean, default: true },
+    features: {
+      qrOrdering: { type: Boolean, default: true },
+      onlinePayment: { type: Boolean, default: true },
+      loyaltySystem: { type: Boolean, default: true },
+      qrOrderingActiveFrom: { type: String, default: null },
+      qrOrderingActiveTo: { type: String, default: null },
+    },
+    gstRate: { type: Number, default: 0.18 },
+  }, { timestamps: true });
+
+  const Branch = mongoose.models['Branch'] ?? mongoose.model('Branch', BranchSchema);
+  let branch = await Branch.findOne({ slug: 'main' });
+  if (!branch) {
+    branch = await Branch.create({
+      name: 'DINE OPS — Main Branch',
+      address: '123 Food Street, Gourmet City',
+      slug: 'main',
+    });
+    console.log(`  ✅ Created branch: ${branch.name} (slug: main)`);
+  } else {
+    console.log(`  ℹ️  Exists: ${branch.name}`);
+  }
+  const branchId = branch._id.toString();
+  console.log(`  🔗 QR URL format: https://yourdomain.com/t/{tableId}?branch=${branchId}`);
+
   await mongoose.disconnect();
 
   console.log('\n' + '═'.repeat(55));

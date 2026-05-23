@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:dio/dio.dart';
 import '../../core/network/dio_client.dart';
 import '../state/auth_provider.dart';
 
@@ -34,6 +33,7 @@ class MenuItemModel {
 }
 
 final menuProvider = FutureProvider.autoDispose<List<MenuItemModel>>((ref) async {
+  // Works with or without auth (menu is public for QR customers)
   final token = ref.watch(authProvider).token;
   final dio = createDioClient(token);
   final res = await dio.get('/menu');

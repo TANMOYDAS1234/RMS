@@ -18,16 +18,14 @@ class CreateMenuItemDto {
 }
 
 @Controller('menu')
-@UseGuards(JwtAuthGuard, RolesGuard)
 export class MenuController {
   constructor(private readonly menuService: MenuService) {}
 
+  // Public — QR customers browse menu without auth
   @Get()
-  @Roles('admin', 'manager', 'waiter', 'chef', 'cashier', 'customer')
   findAll(@Query('category') category?: string) { return this.menuService.findAll(category); }
 
   @Get(':id')
-  @Roles('admin', 'manager', 'waiter', 'chef', 'cashier', 'customer')
   findOne(@Param('id') id: string) { return this.menuService.findById(id); }
 
   @Post()

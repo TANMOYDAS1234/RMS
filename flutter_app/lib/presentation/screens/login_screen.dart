@@ -123,9 +123,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               .animate()
               .fadeIn(delay: 600.ms),
           const SizedBox(height: 20),
-          Text(
+          const Text(
             'Demo: admin@dineops.com / Admin@123',
-            style: const TextStyle(color: textSecondary, fontSize: 11),
+            style: TextStyle(color: textSecondary, fontSize: 11),
             textAlign: TextAlign.center,
           ),
         ],

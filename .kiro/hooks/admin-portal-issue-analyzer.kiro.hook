@@ -1,0 +1,18 @@
+{
+  "enabled": true,
+  "name": "Admin Portal Issue Analyzer",
+  "description": "Analyzes admin portal files for known issues and bugs whenever they are saved, including audit log query bugs, force-close logic errors, missing validation, and refund safety gaps.",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "**/admin/**/*.ts",
+      "**/billing/**/*.ts",
+      "**/orders/**/*.ts"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A file in the admin portal was just edited. Analyze it for the following known issues and check if they are present, fixed, or introduced:\n\n1. **Audit Log double-filter bug** (admin.service.ts `getAuditLog`): The outer `$match` filters by `createdAt` but the audit entries use `auditLog.at`. These ranges may not align — orders created outside the range could have audit entries inside it, and vice versa. The outer match should be removed or broadened.\n\n2. **Force-close audit log race condition** (admin.service.ts `forceCloseOrder`): The `auditLog.push` records `previousStatus` as `order.status` AFTER it has already been set to `CLOSED`, so the meta always logs `closed` instead of the actual previous status. Capture the previous status before overwriting it.\n\n3. **Missing `@ValidationPipe` / `@UsePipes`** (admin.controller.ts): The `ResetPasswordDto` uses `class-validator` decorators but there is no `ValidationPipe` applied at the controller or handler level, so the `@IsString()` and `@MinLength(6)` constraints are never enforced.\n\n4. **`ResetPasswordDto` defined inline in controller** (admin.controller.ts): DTOs should live in a dedicated `dto/` folder, not inline in the controller file.\n\n5. **No audit trail for password resets** (admin.service.ts `resetPassword`): The `adminId` parameter is accepted but never used — there is no log of who performed the reset or when.\n\n6. **Refund does not reverse revenue in financial summary** (admin.service.ts `processRefund`): The refund marks `isRefunded: true` but does not update any revenue counters or emit an event, so `getFinancialSummary` may show stale totals until the next query.\n\n7. **`Bill` schema fields accessed via `(bill as any)`** (admin.service.ts `processRefund`): `isRefunded`, `refundedAt`, and `refundedBy` are properly declared in `bill.schema.ts` but are cast with `as any`, indicating a type mismatch — likely the Mongoose document type is not picking up those fields.\n\nReport which issues are still present, which have been fixed, and whether the edit introduced any new problems. Be concise."
+  }
+}

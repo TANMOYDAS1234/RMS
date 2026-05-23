@@ -9,8 +9,8 @@ class AppConfig {
     defaultValue: 'https://rms-1-7hu6.onrender.com',
   );
 
-  static const Duration connectTimeout = Duration(seconds: 10);
-  static const Duration receiveTimeout = Duration(seconds: 30);
+  static const Duration connectTimeout = Duration(seconds: 60);
+  static const Duration receiveTimeout = Duration(seconds: 60);
   static const Duration pollInterval   = Duration(seconds: 8);
   static const int maxRetries          = 3;
   static const Duration retryBaseDelay = Duration(seconds: 2);
