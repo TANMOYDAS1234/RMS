@@ -25,14 +25,29 @@ export class BranchesService {
     return this.branchModel.create(dto);
   }
 
-  async updateFeatures(id: string, features: Partial<Branch['features']>) {
+  async update(id: string, dto: Partial<{ name: string; address: string; slug: string; gstRate: number; isActive: boolean }>) {
+    const b = await this.branchModel.findByIdAndUpdate(id, dto, { new: true }).lean();
+    if (!b) throw new NotFoundException('Branch not found');
+    return b;
+  }
+
+  async updateFeatures(id: string, features: Record<string, any>) {
+    const setPayload: Record<string, any> = {};
+    for (const key of Object.keys(features)) {
+      setPayload[`features.${key}`] = features[key];
+    }
     const b = await this.branchModel.findByIdAndUpdate(
       id,
-      { $set: { features } },
+      { $set: setPayload },
       { new: true },
     ).lean();
     if (!b) throw new NotFoundException('Branch not found');
     return b;
+  }
+
+  async delete(id: string) {
+    await this.branchModel.findByIdAndDelete(id);
+    return { deleted: true };
   }
 
   async isQrOrderingEnabled(branchId: string): Promise<boolean> {
