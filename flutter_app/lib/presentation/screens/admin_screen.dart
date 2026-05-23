@@ -7,6 +7,10 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:file_picker/file_picker.dart';
+import '../../core/config/app_config.dart';
 import '../../core/config/app_theme.dart';
 import '../../core/network/dio_client.dart';
 import '../state/auth_provider.dart';
@@ -112,11 +116,11 @@ final _allOrdersProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>
   return List<Map<String, dynamic>>.from(res.data);
 });
 
-final _menuProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+final _menuProvider = FutureProvider.autoDispose.family<List<Map<String, dynamic>>, String>((ref, branchId) async {
   final token = ref.watch(authProvider).token;
   if (token == null) throw Exception('Not authenticated');
   final dio = createDioClient(token);
-  final res = await dio.get('/menu');
+  final res = await dio.get('/menu/branch/$branchId/admin');
   return List<Map<String, dynamic>>.from(res.data);
 });
 
@@ -275,7 +279,7 @@ class _OrderPipeline extends StatelessWidget {
     final stages = ['created', 'confirmed', 'preparing', 'ready', 'served'];
     return Row(
       children: stages.map((stage) {
-        final count = orders.where((o) => o.status.name == stage).length;
+        final count = orders.where((o) => o.status.statusName == stage).length;
         return Expanded(
           child: Container(
             margin: const EdgeInsets.symmetric(horizontal: 3),
@@ -668,12 +672,7 @@ class _StaffCard extends ConsumerWidget {
         border: Border.all(color: dividerColor),
       ),
       child: Row(children: [
-        CircleAvatar(
-          radius: 20,
-          backgroundColor: color.withValues(alpha: 0.15),
-          child: Text((user['name'] as String? ?? 'U').substring(0, 1).toUpperCase(),
-              style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.w700)),
-        ),
+        _StaffAvatar(user: user, color: color, id: id),
         const SizedBox(width: 12),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(user['name'] ?? '', style: const TextStyle(color: textPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
@@ -687,6 +686,7 @@ class _StaffCard extends ConsumerWidget {
           ),
           const SizedBox(height: 6),
           Row(mainAxisSize: MainAxisSize.min, children: [
+            // Active toggle dot
             GestureDetector(
               onTap: () async {
                 try {
@@ -704,6 +704,62 @@ class _StaffCard extends ConsumerWidget {
               ),
             ),
             const SizedBox(width: 8),
+            // Edit details
+            GestureDetector(
+              onTap: () {
+                final nameCtrl = TextEditingController(text: user['name'] as String? ?? '');
+                String editRole = user['role'] as String? ?? 'waiter';
+                showModalBottomSheet(
+                  context: context,
+                  backgroundColor: slateCard,
+                  isScrollControlled: true,
+                  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+                  builder: (ctx) => StatefulBuilder(
+                    builder: (ctx, setState) => Padding(
+                      padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
+                      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text('Edit — ${user['name'] ?? ''}',
+                            style: const TextStyle(color: textPrimary, fontSize: 15, fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 16),
+                        _InputField(ctrl: nameCtrl, label: 'Full Name'),
+                        const SizedBox(height: 10),
+                        DropdownButtonFormField<String>(
+                          value: editRole,
+                          dropdownColor: slateSurface,
+                          style: const TextStyle(color: textPrimary),
+                          decoration: _inputDec('Role'),
+                          items: ['manager', 'waiter', 'chef', 'cashier']
+                              .map((r) => DropdownMenuItem(value: r, child: Text(r.toUpperCase())))
+                              .toList(),
+                          onChanged: (v) => setState(() => editRole = v ?? editRole),
+                        ),
+                        const SizedBox(height: 16),
+                        _PrimaryButton(
+                          label: 'Save Changes',
+                          onTap: () async {
+                            if (nameCtrl.text.trim().isEmpty) return;
+                            Navigator.pop(ctx);
+                            try {
+                              final dio = createDioClient(ref.read(authProvider).token);
+                              await dio.patch('/users/$id',
+                                  data: {'name': nameCtrl.text.trim(), 'role': editRole},
+                                  options: Options(headers: {'Idempotency-Key': 'edit-user-$id-${DateTime.now().millisecondsSinceEpoch}'}));
+                              ref.invalidate(_staffProvider);
+                              if (context.mounted) _showSuccess(context, 'Staff updated');
+                            } catch (e) {
+                              if (context.mounted) _showError(context, '$e');
+                            }
+                          },
+                        ),
+                      ]),
+                    ),
+                  ),
+                );
+              },
+              child: const Icon(Icons.edit_outlined, color: textSecondary, size: 16),
+            ),
+            const SizedBox(width: 8),
+            // Reset password
             GestureDetector(
               onTap: () {
                 final ctrl = TextEditingController();
@@ -740,10 +796,137 @@ class _StaffCard extends ConsumerWidget {
               },
               child: const Icon(Icons.lock_reset_outlined, color: textSecondary, size: 16),
             ),
+            const SizedBox(width: 8),
+            // Delete staff
+            GestureDetector(
+              onTap: () => showDialog(
+                context: context,
+                builder: (_) => AlertDialog(
+                  backgroundColor: slateCard,
+                  title: const Text('Remove Staff?', style: TextStyle(color: textPrimary)),
+                  content: Text('This will permanently delete ${user['name'] ?? 'this user'}. This cannot be undone.',
+                      style: const TextStyle(color: textSecondary)),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel', style: TextStyle(color: textSecondary))),
+                    TextButton(
+                      onPressed: () async {
+                        Navigator.pop(context);
+                        try {
+                          final dio = createDioClient(ref.read(authProvider).token);
+                          await dio.delete('/users/$id');
+                          ref.invalidate(_staffProvider);
+                          if (context.mounted) _showSuccess(context, 'Staff removed');
+                        } catch (e) {
+                          if (context.mounted) _showError(context, '$e');
+                        }
+                      },
+                      child: const Text('Remove', style: TextStyle(color: crimson, fontWeight: FontWeight.w700)),
+                    ),
+                  ],
+                ),
+              ),
+              child: const Icon(Icons.delete_outline, color: crimson, size: 16),
+            ),
           ]),
         ]),
       ]),
     ).animate().fadeIn(duration: 250.ms);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// STAFF AVATAR — tappable, shows real photo or fallback letter
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class _StaffAvatar extends ConsumerWidget {
+  final Map<String, dynamic> user;
+  final Color color;
+  final String id;
+  const _StaffAvatar({required this.user, required this.color, required this.id});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final photoUrl = user['photoUrl'] as String?;
+    final fullUrl = photoUrl != null ? '${AppConfig.baseUrl}$photoUrl' : null;
+    final initials = (user['name'] as String? ?? 'U').substring(0, 1).toUpperCase();
+
+    return GestureDetector(
+      onTap: () => _pickAndUpload(context, ref),
+      child: Stack(
+        children: [
+          CircleAvatar(
+            radius: 20,
+            backgroundColor: color.withValues(alpha: 0.15),
+            child: fullUrl != null
+                ? ClipOval(
+                    child: CachedNetworkImage(
+                      imageUrl: fullUrl,
+                      width: 40,
+                      height: 40,
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) => Text(initials,
+                          style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.w700)),
+                      errorWidget: (_, __, ___) => Text(initials,
+                          style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.w700)),
+                    ),
+                  )
+                : Text(initials, style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.w700)),
+          ),
+          Positioned(
+            bottom: 0, right: 0,
+            child: Container(
+              width: 14, height: 14,
+              decoration: BoxDecoration(
+                color: copperAccent, shape: BoxShape.circle,
+                border: Border.all(color: slateCard, width: 1.5),
+              ),
+              child: const Icon(Icons.camera_alt, size: 8, color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pickAndUpload(BuildContext context, WidgetRef ref) async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: slateCard,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const SizedBox(height: 12),
+          ListTile(
+            leading: const Icon(Icons.camera_alt_outlined, color: copperAccent),
+            title: const Text('Camera', style: TextStyle(color: textPrimary)),
+            onTap: () => Navigator.pop(context, ImageSource.camera),
+          ),
+          ListTile(
+            leading: const Icon(Icons.photo_library_outlined, color: copperAccent),
+            title: const Text('Gallery', style: TextStyle(color: textPrimary)),
+            onTap: () => Navigator.pop(context, ImageSource.gallery),
+          ),
+          const SizedBox(height: 8),
+        ]),
+      ),
+    );
+    if (source == null) return;
+
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: source, imageQuality: 80, maxWidth: 512);
+    if (picked == null) return;
+
+    try {
+      final dio = createDioClient(ref.read(authProvider).token);
+      final formData = FormData.fromMap({
+        'photo': await MultipartFile.fromFile(picked.path, filename: 'photo.jpg'),
+      });
+      await dio.post('/users/$id/photo', data: formData);
+      ref.invalidate(_staffProvider);
+      if (context.mounted) _showSuccess(context, 'Photo updated');
+    } catch (e) {
+      if (context.mounted) _showError(context, '$e');
+    }
   }
 }
 
@@ -1062,46 +1245,118 @@ class AdminInventoryTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final invAsync = ref.watch(_inventoryAdminProvider);
 
-    return invAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator(color: copperAccent)),
-      error: (e, _) => Center(child: _ErrorText('$e')),
-      data: (items) {
-        final lowItems = items.where((i) {
-          final cur = (i['currentStock'] as num?)?.toDouble() ?? 0;
-          final thresh = (i['lowStockThreshold'] as num?)?.toDouble() ?? 0;
-          return cur <= thresh;
-        }).toList();
+    return Stack(
+      children: [
+        invAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator(color: copperAccent)),
+          error: (e, _) => Center(child: _ErrorText('$e')),
+          data: (items) {
+            final lowItems = items.where((i) {
+              final cur = (i['currentStock'] as num?)?.toDouble() ?? 0;
+              final thresh = (i['lowStockThreshold'] as num?)?.toDouble() ?? 0;
+              return cur <= thresh;
+            }).toList();
 
-        return ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            if (lowItems.isNotEmpty)
-              Container(
-                padding: const EdgeInsets.all(12),
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: crimson.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: crimson.withValues(alpha: 0.3)),
-                ),
-                child: Row(children: [
-                  const Icon(Icons.warning_amber_outlined, color: crimson, size: 18),
-                  const SizedBox(width: 8),
-                  Text('${lowItems.length} items low on stock',
-                      style: const TextStyle(color: crimson, fontWeight: FontWeight.w600, fontSize: 13)),
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+              children: [
+                if (lowItems.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: crimson.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: crimson.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(children: [
+                      const Icon(Icons.warning_amber_outlined, color: crimson, size: 18),
+                      const SizedBox(width: 8),
+                      Text('${lowItems.length} items low on stock',
+                          style: const TextStyle(color: crimson, fontWeight: FontWeight.w600, fontSize: 13)),
+                    ]),
+                  ),
+                Row(children: [
+                  _SmallStat('Total Items', '${items.length}', copperAccent),
+                  _SmallStat('Low Stock', '${lowItems.length}', crimson),
+                  _SmallStat('OK', '${items.length - lowItems.length}', emerald),
                 ]),
-              ),
-            // Summary stats
-            Row(children: [
-              _SmallStat('Total Items', '${items.length}', copperAccent),
-              _SmallStat('Low Stock', '${lowItems.length}', crimson),
-              _SmallStat('OK', '${items.length - lowItems.length}', emerald),
-            ]),
-            const SizedBox(height: 16),
-            ...items.map((item) => _AdminInventoryCard(item: item)),
-          ],
-        );
-      },
+                const SizedBox(height: 16),
+                ...items.map((item) => _AdminInventoryCard(item: item)),
+              ],
+            );
+          },
+        ),
+        Positioned(
+          bottom: 16, right: 16,
+          child: FloatingActionButton.extended(
+            backgroundColor: copperAccent,
+            foregroundColor: Colors.white,
+            icon: const Icon(Icons.add_box_outlined),
+            label: const Text('Add Item', style: TextStyle(fontWeight: FontWeight.w700)),
+            onPressed: () => _showAddItemSheet(context, ref),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showAddItemSheet(BuildContext context, WidgetRef ref) {
+    final nameCtrl = TextEditingController();
+    final unitCtrl = TextEditingController();
+    final stockCtrl = TextEditingController();
+    final threshCtrl = TextEditingController();
+    final costCtrl = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: slateCard,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Add Inventory Item', style: TextStyle(color: textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 16),
+          _InputField(ctrl: nameCtrl, label: 'Name (e.g. Tomatoes)'),
+          const SizedBox(height: 10),
+          _InputField(ctrl: unitCtrl, label: 'Unit (e.g. kg, litre, piece)'),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(child: _InputField(ctrl: stockCtrl, label: 'Current Stock', keyboardType: const TextInputType.numberWithOptions(decimal: true))),
+            const SizedBox(width: 10),
+            Expanded(child: _InputField(ctrl: threshCtrl, label: 'Low Threshold', keyboardType: const TextInputType.numberWithOptions(decimal: true))),
+          ]),
+          const SizedBox(height: 10),
+          _InputField(ctrl: costCtrl, label: 'Cost per Unit (₹)', keyboardType: const TextInputType.numberWithOptions(decimal: true)),
+          const SizedBox(height: 16),
+          _PrimaryButton(
+            label: 'Create Item',
+            onTap: () async {
+              final name = nameCtrl.text.trim();
+              final unit = unitCtrl.text.trim();
+              final stock = double.tryParse(stockCtrl.text);
+              final thresh = double.tryParse(threshCtrl.text);
+              if (name.isEmpty || unit.isEmpty || stock == null || thresh == null) return;
+              Navigator.pop(ctx);
+              try {
+                final dio = createDioClient(ref.read(authProvider).token);
+                await dio.post('/inventory', data: {
+                  'name': name,
+                  'unit': unit,
+                  'currentStock': stock,
+                  'lowStockThreshold': thresh,
+                  'costPerUnit': double.tryParse(costCtrl.text) ?? 0,
+                }, options: Options(headers: {'Idempotency-Key': 'inv-create-$name-${DateTime.now().millisecondsSinceEpoch}'}));
+                ref.invalidate(_inventoryAdminProvider);
+                if (context.mounted) _showSuccess(context, 'Item added');
+              } catch (e) {
+                if (context.mounted) _showError(context, '$e');
+              }
+            },
+          ),
+        ]),
+      ),
     );
   }
 }
@@ -1143,6 +1398,40 @@ class _AdminInventoryCard extends ConsumerWidget {
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(color: slateSurface, borderRadius: BorderRadius.circular(8)),
               child: const Icon(Icons.edit_outlined, color: textSecondary, size: 16),
+            ),
+          ),
+          const SizedBox(width: 4),
+          GestureDetector(
+            onTap: () => showDialog(
+              context: context,
+              builder: (_) => AlertDialog(
+                backgroundColor: slateCard,
+                title: const Text('Delete Item?', style: TextStyle(color: textPrimary)),
+                content: Text('Permanently delete "${item['name'] ?? ''}". This cannot be undone.',
+                    style: const TextStyle(color: textSecondary)),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel', style: TextStyle(color: textSecondary))),
+                  TextButton(
+                    onPressed: () async {
+                      Navigator.pop(context);
+                      try {
+                        final dio = createDioClient(ref.read(authProvider).token);
+                        await dio.delete('/inventory/$id');
+                        ref.invalidate(_inventoryAdminProvider);
+                        if (context.mounted) _showSuccess(context, 'Item deleted');
+                      } catch (e) {
+                        if (context.mounted) _showError(context, '$e');
+                      }
+                    },
+                    child: const Text('Delete', style: TextStyle(color: crimson, fontWeight: FontWeight.w700)),
+                  ),
+                ],
+              ),
+            ),
+            child: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(color: crimson.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(8)),
+              child: const Icon(Icons.delete_outline, color: crimson, size: 16),
             ),
           ),
         ]),
@@ -1296,6 +1585,7 @@ class _BranchCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final features = Map<String, dynamic>.from(branch['features'] ?? {});
     final id = branch['_id'] as String? ?? '';
+    final isActive = branch['isActive'] as bool? ?? true;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1303,9 +1593,10 @@ class _BranchCard extends ConsumerWidget {
       decoration: BoxDecoration(
         color: slateCard,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: dividerColor),
+        border: Border.all(color: isActive ? dividerColor : crimson.withValues(alpha: 0.3)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // Header row: name + slug + edit + delete
         Row(children: [
           Expanded(child: Text(branch['name'] ?? '',
               style: const TextStyle(color: textPrimary, fontSize: 14, fontWeight: FontWeight.w700))),
@@ -1315,9 +1606,67 @@ class _BranchCard extends ConsumerWidget {
             child: Text(branch['slug'] ?? '',
                 style: const TextStyle(color: emerald, fontSize: 10, fontWeight: FontWeight.w600)),
           ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: () => _showEditSheet(context, ref, id),
+            child: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(color: slateSurface, borderRadius: BorderRadius.circular(8)),
+              child: const Icon(Icons.edit_outlined, color: textSecondary, size: 16),
+            ),
+          ),
+          const SizedBox(width: 4),
+          GestureDetector(
+            onTap: () => showDialog(
+              context: context,
+              builder: (_) => AlertDialog(
+                backgroundColor: slateCard,
+                title: const Text('Delete Branch?', style: TextStyle(color: textPrimary)),
+                content: Text('Permanently delete "${branch['name'] ?? ''}". This cannot be undone.',
+                    style: const TextStyle(color: textSecondary)),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel', style: TextStyle(color: textSecondary))),
+                  TextButton(
+                    onPressed: () async {
+                      Navigator.pop(context);
+                      try {
+                        final dio = createDioClient(ref.read(authProvider).token);
+                        await dio.delete('/branches/$id');
+                        ref.invalidate(_branchesProvider);
+                        if (context.mounted) _showSuccess(context, 'Branch deleted');
+                      } catch (e) {
+                        if (context.mounted) _showError(context, '$e');
+                      }
+                    },
+                    child: const Text('Delete', style: TextStyle(color: crimson, fontWeight: FontWeight.w700)),
+                  ),
+                ],
+              ),
+            ),
+            child: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(color: crimson.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(8)),
+              child: const Icon(Icons.delete_outline, color: crimson, size: 16),
+            ),
+          ),
         ]),
         const SizedBox(height: 4),
         Text(branch['address'] ?? '', style: const TextStyle(color: textSecondary, fontSize: 12)),
+        const SizedBox(height: 4),
+        Row(children: [
+          Text('GST: ${((branch['gstRate'] as num? ?? 0.18) * 100).toStringAsFixed(0)}%',
+              style: const TextStyle(color: textSecondary, fontSize: 11)),
+          const SizedBox(width: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: (isActive ? emerald : crimson).withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(isActive ? 'ACTIVE' : 'INACTIVE',
+                style: TextStyle(color: isActive ? emerald : crimson, fontSize: 9, fontWeight: FontWeight.w700)),
+          ),
+        ]),
         const SizedBox(height: 14),
         const Text('Feature Toggles',
             style: TextStyle(color: textSecondary, fontSize: 11, fontWeight: FontWeight.w600)),
@@ -1343,6 +1692,75 @@ class _BranchCard extends ConsumerWidget {
           onChanged: (v) => _toggleFeature(context, ref, id, 'tableReservations', v),
         ),
       ]),
+    );
+  }
+
+  void _showEditSheet(BuildContext context, WidgetRef ref, String id) {
+    final nameCtrl = TextEditingController(text: branch['name'] as String? ?? '');
+    final addrCtrl = TextEditingController(text: branch['address'] as String? ?? '');
+    final slugCtrl = TextEditingController(text: branch['slug'] as String? ?? '');
+    final gstCtrl = TextEditingController(
+        text: (((branch['gstRate'] as num? ?? 0.18) * 100)).toStringAsFixed(0));
+    bool isActive = branch['isActive'] as bool? ?? true;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: slateCard,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => Padding(
+          padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Edit — ${branch['name'] ?? ''}',
+                style: const TextStyle(color: textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 16),
+            _InputField(ctrl: nameCtrl, label: 'Branch Name'),
+            const SizedBox(height: 10),
+            _InputField(ctrl: addrCtrl, label: 'Address'),
+            const SizedBox(height: 10),
+            _InputField(ctrl: slugCtrl, label: 'Slug'),
+            const SizedBox(height: 10),
+            _InputField(ctrl: gstCtrl, label: 'GST Rate (%)',
+                keyboardType: const TextInputType.numberWithOptions(decimal: true)),
+            const SizedBox(height: 10),
+            Row(children: [
+              const Text('Active', style: TextStyle(color: textPrimary, fontSize: 13)),
+              const Spacer(),
+              Switch(
+                value: isActive,
+                onChanged: (v) => setState(() => isActive = v),
+                activeThumbColor: copperAccent,
+                inactiveThumbColor: textSecondary,
+                inactiveTrackColor: slateSurface,
+              ),
+            ]),
+            const SizedBox(height: 16),
+            _PrimaryButton(
+              label: 'Save Changes',
+              onTap: () async {
+                if (nameCtrl.text.trim().isEmpty) return;
+                Navigator.pop(ctx);
+                try {
+                  final dio = createDioClient(ref.read(authProvider).token);
+                  final gstPct = double.tryParse(gstCtrl.text);
+                  await dio.patch('/branches/$id', data: {
+                    'name': nameCtrl.text.trim(),
+                    'address': addrCtrl.text.trim(),
+                    'slug': slugCtrl.text.trim(),
+                    if (gstPct != null) 'gstRate': gstPct / 100,
+                    'isActive': isActive,
+                  }, options: Options(headers: {'Idempotency-Key': 'edit-branch-$id-${DateTime.now().millisecondsSinceEpoch}'}));
+                  ref.invalidate(_branchesProvider);
+                  if (context.mounted) _showSuccess(context, 'Branch updated');
+                } catch (e) {
+                  if (context.mounted) _showError(context, '$e');
+                }
+              },
+            ),
+          ]),
+        ),
+      ),
     );
   }
 
@@ -1424,9 +1842,9 @@ class _AdminSystemTabState extends ConsumerState<AdminSystemTab>
         Expanded(
           child: TabBarView(
             controller: _tc,
-            children: const [
-              _SystemHealthTab(),
-              _AuditLogTab(),
+            children: [
+              const _SystemHealthTab(),
+              const _AuditLogTab(),
               _MenuManagementTab(),
             ],
           ),
@@ -1587,20 +2005,269 @@ class _AuditEntry extends StatelessWidget {
 
 // ── Menu Management ───────────────────────────────────────────────────────────
 
-class _MenuManagementTab extends ConsumerWidget {
+class _MenuManagementTab extends ConsumerStatefulWidget {
   const _MenuManagementTab();
+  @override
+  ConsumerState<_MenuManagementTab> createState() => _MenuManagementTabState();
+}
+
+class _MenuManagementTabState extends ConsumerState<_MenuManagementTab> {
+  String? _selectedBranchId;
+  String? _selectedBranchName;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final menuAsync = ref.watch(_menuProvider);
+  Widget build(BuildContext context) {
+    final branchesAsync = ref.watch(_branchesProvider);
 
-    return menuAsync.when(
+    return branchesAsync.when(
       loading: () => const Center(child: CircularProgressIndicator(color: copperAccent)),
       error: (e, _) => Center(child: _ErrorText('$e')),
-      data: (items) => ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: items.length,
-        itemBuilder: (_, i) => _MenuItemCard(item: items[i]),
+      data: (branches) {
+        if (branches.isEmpty) {
+          return const Center(child: Text('No branches found', style: TextStyle(color: textSecondary)));
+        }
+        // Auto-select first branch
+        _selectedBranchId ??= branches.first['_id'] as String?;
+        _selectedBranchName ??= branches.first['name'] as String?;
+
+        return Stack(
+          children: [
+            Column(children: [
+              // Branch selector
+              Container(
+                color: slateSurface,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                child: DropdownButtonFormField<String>(
+                  value: _selectedBranchId,
+                  dropdownColor: slateSurface,
+                  style: const TextStyle(color: textPrimary, fontSize: 13),
+                  decoration: InputDecoration(
+                    labelText: 'Branch',
+                    labelStyle: const TextStyle(color: textSecondary, fontSize: 12),
+                    filled: true, fillColor: slateCard,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: dividerColor)),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: dividerColor)),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: copperAccent)),
+                  ),
+                  items: branches.map((b) => DropdownMenuItem<String>(
+                    value: b['_id'] as String,
+                    child: Text(b['name'] as String? ?? ''),
+                  )).toList(),
+                  onChanged: (v) => setState(() {
+                    _selectedBranchId = v;
+                    _selectedBranchName = branches.firstWhere((b) => b['_id'] == v)['name'] as String?;
+                  }),
+                ),
+              ),
+              // Menu list
+              Expanded(
+                child: _selectedBranchId == null
+                    ? const SizedBox.shrink()
+                    : Consumer(builder: (ctx, ref, _) {
+                        final menuAsync = ref.watch(_menuProvider(_selectedBranchId!));
+                        return menuAsync.when(
+                          loading: () => const Center(child: CircularProgressIndicator(color: copperAccent)),
+                          error: (e, _) => Center(child: _ErrorText('$e')),
+                          data: (items) => items.isEmpty
+                              ? const Center(child: Text('No items yet. Add one!', style: TextStyle(color: textSecondary)))
+                              : ListView.builder(
+                                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+                                  itemCount: items.length,
+                                  itemBuilder: (_, i) => _MenuItemCard(
+                                    item: items[i],
+                                    branchId: _selectedBranchId!,
+                                  ),
+                                ),
+                        );
+                      }),
+              ),
+            ]),
+            Positioned(
+              bottom: 16, right: 16,
+              child: FloatingActionButton.extended(
+                backgroundColor: copperAccent,
+                foregroundColor: Colors.white,
+                icon: const Icon(Icons.restaurant_menu_outlined),
+                label: const Text('Add Item', style: TextStyle(fontWeight: FontWeight.w700)),
+                onPressed: _selectedBranchId == null
+                    ? null
+                    : () => _showMenuSheet(context, ref, _selectedBranchId!),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showMenuSheet(BuildContext context, WidgetRef ref, String branchId, [Map<String, dynamic>? existing]) {
+    final id = existing?['_id'] as String?;
+    final nameCtrl = TextEditingController(text: existing?['name'] ?? '');
+    final descCtrl = TextEditingController(text: existing?['description'] ?? '');
+    final catCtrl = TextEditingController(text: existing?['category'] ?? '');
+    final priceCtrl = TextEditingController(
+        text: existing != null ? ((existing['basePrice'] as num?)?.toStringAsFixed(0) ?? '') : '');
+    final prepCtrl = TextEditingController(text: '${existing?['prepTimeMinutes'] ?? 0}');
+    final tagsCtrl = TextEditingController(
+        text: (existing?['tags'] as List?)?.join(', ') ?? '');
+    bool isVeg = existing?['isVeg'] as bool? ?? false;
+    String? pickedImagePath;
+    String? pickedGlbPath;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: slateCard,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(id == null ? 'Add Menu Item' : 'Edit — ${existing!['name']}',
+                style: const TextStyle(color: textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 16),
+            _InputField(ctrl: nameCtrl, label: 'Name'),
+            const SizedBox(height: 10),
+            _InputField(ctrl: descCtrl, label: 'Description'),
+            const SizedBox(height: 10),
+            _InputField(ctrl: catCtrl, label: 'Category (e.g. Starters)'),
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(child: _InputField(ctrl: priceCtrl, label: 'Base Price (₹)',
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true))),
+              const SizedBox(width: 10),
+              Expanded(child: _InputField(ctrl: prepCtrl, label: 'Prep Time (min)',
+                  keyboardType: TextInputType.number)),
+            ]),
+            const SizedBox(height: 10),
+            _InputField(ctrl: tagsCtrl, label: 'Tags (comma separated, e.g. spicy,vegan)'),
+            const SizedBox(height: 10),
+            Row(children: [
+              const Text('Vegetarian', style: TextStyle(color: textPrimary, fontSize: 13)),
+              const Spacer(),
+              Switch(
+                value: isVeg,
+                onChanged: (v) => setState(() => isVeg = v),
+                activeThumbColor: emerald,
+                inactiveThumbColor: textSecondary,
+                inactiveTrackColor: slateSurface,
+              ),
+            ]),
+            const SizedBox(height: 10),
+            // Photo picker
+            GestureDetector(
+              onTap: () async {
+                final picked = await ImagePicker().pickImage(
+                    source: ImageSource.gallery, imageQuality: 85, maxWidth: 1024);
+                if (picked != null) setState(() => pickedImagePath = picked.path);
+              },
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+                decoration: BoxDecoration(
+                  color: slateSurface,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: pickedImagePath != null ? copperAccent : dividerColor),
+                ),
+                child: Row(children: [
+                  Icon(Icons.add_photo_alternate_outlined,
+                      color: pickedImagePath != null ? copperAccent : textSecondary, size: 18),
+                  const SizedBox(width: 10),
+                  Text(
+                    pickedImagePath != null ? 'Photo selected ✓' : 'Add Dish Photo (optional)',
+                    style: TextStyle(
+                        color: pickedImagePath != null ? copperAccent : textSecondary, fontSize: 13),
+                  ),
+                ]),
+              ),
+            ),
+            const SizedBox(height: 10),
+            // GLB picker
+            GestureDetector(
+              onTap: () async {
+                final result = await FilePicker.platform.pickFiles(
+                  type: FileType.custom,
+                  allowedExtensions: ['glb'],
+                );
+                final path = result?.files.single.path;
+                if (path != null) setState(() => pickedGlbPath = path);
+              },
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+                decoration: BoxDecoration(
+                  color: slateSurface,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: pickedGlbPath != null ? copperAccent : dividerColor),
+                ),
+                child: Row(children: [
+                  Icon(Icons.view_in_ar_outlined,
+                      color: pickedGlbPath != null ? copperAccent : textSecondary, size: 18),
+                  const SizedBox(width: 10),
+                  Text(
+                    pickedGlbPath != null ? '3D Model selected ✓' : 'Add 3D Model (.glb) (optional)',
+                    style: TextStyle(
+                        color: pickedGlbPath != null ? copperAccent : textSecondary, fontSize: 13),
+                  ),
+                ]),
+              ),
+            ),
+            const SizedBox(height: 16),
+            _PrimaryButton(
+              label: id == null ? 'Create Item' : 'Save Changes',
+              onTap: () async {
+                if (nameCtrl.text.trim().isEmpty || catCtrl.text.trim().isEmpty) return;
+                final price = double.tryParse(priceCtrl.text);
+                if (price == null) return;
+                Navigator.pop(ctx);
+                try {
+                  final dio = createDioClient(ref.read(authProvider).token);
+                  final tags = tagsCtrl.text.trim().isEmpty
+                      ? <String>[]
+                      : tagsCtrl.text.split(',').map((t) => t.trim()).where((t) => t.isNotEmpty).toList();
+                  final data = {
+                    'branchId': branchId,
+                    'name': nameCtrl.text.trim(),
+                    'description': descCtrl.text.trim(),
+                    'category': catCtrl.text.trim(),
+                    'basePrice': price,
+                    'prepTimeMinutes': int.tryParse(prepCtrl.text) ?? 0,
+                    'tags': tags,
+                    'isVeg': isVeg,
+                  };
+                  String? savedId = id;
+                  if (id == null) {
+                    final res = await dio.post('/menu', data: data,
+                        options: Options(headers: {'Idempotency-Key': 'menu-create-${nameCtrl.text.trim()}-${DateTime.now().millisecondsSinceEpoch}'}));
+                    savedId = res.data['_id'] as String?;
+                  } else {
+                    await dio.patch('/menu/$id', data: data,
+                        options: Options(headers: {'Idempotency-Key': 'menu-edit-$id-${DateTime.now().millisecondsSinceEpoch}'}));
+                  }
+                  // Upload photo if picked
+                  if (pickedImagePath != null && savedId != null) {
+                    final formData = FormData.fromMap({
+                      'image': await MultipartFile.fromFile(pickedImagePath!, filename: 'dish.jpg'),
+                    });
+                    await dio.post('/menu/$savedId/image', data: formData);
+                  }
+                  // Upload GLB if picked
+                  if (pickedGlbPath != null && savedId != null) {
+                    final formData = FormData.fromMap({
+                      'glb': await MultipartFile.fromFile(pickedGlbPath!, filename: 'model.glb'),
+                    });
+                    await dio.post('/menu/$savedId/glb', data: formData);
+                  }
+                  ref.invalidate(_menuProvider(branchId));
+                  if (context.mounted) _showSuccess(context, id == null ? 'Item created' : 'Item updated');
+                } catch (e) {
+                  if (context.mounted) _showError(context, '$e');
+                }
+              },
+            ),
+          ]),
+        ),
       ),
     );
   }
@@ -1608,49 +2275,276 @@ class _MenuManagementTab extends ConsumerWidget {
 
 class _MenuItemCard extends ConsumerWidget {
   final Map<String, dynamic> item;
-  const _MenuItemCard({required this.item});
+  final String branchId;
+  const _MenuItemCard({required this.item, required this.branchId});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isAvailable = item['isAvailable'] as bool? ?? true;
+    final isVeg = item['isVeg'] as bool? ?? false;
     final price = (item['basePrice'] as num?)?.toDouble() ?? 0;
     final id = item['_id'] as String? ?? '';
+    final prep = item['prepTimeMinutes'] as int? ?? 0;
+    final rating = (item['rating'] as num?)?.toDouble() ?? 0;
+    final ratingCount = item['ratingCount'] as int? ?? 0;
+    final tags = List<String>.from(item['tags'] ?? []);
+    final imageUrl = item['imageUrl'] as String?;
+    final glbUrl = item['glbUrl'] as String?;
+    final fullImageUrl = imageUrl != null ? '${AppConfig.baseUrl}$imageUrl' : null;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(14),
+      margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         color: slateCard,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: isAvailable ? dividerColor : crimson.withValues(alpha: 0.3)),
       ),
-      child: Row(children: [
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(item['name'] ?? '', style: const TextStyle(color: textPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
-          Text(item['category'] ?? '', style: const TextStyle(color: textSecondary, fontSize: 11)),
-        ])),
-        Text('₹${price.toStringAsFixed(0)}',
-            style: const TextStyle(color: copperAccent, fontSize: 14, fontWeight: FontWeight.w800)),
-        const SizedBox(width: 10),
-        Switch(
-          value: isAvailable,
-          onChanged: (v) async {
-            try {
-              final dio = createDioClient(ref.read(authProvider).token);
-              await dio.patch('/menu/$id', data: {'isAvailable': v},
-                  options: Options(headers: {'Idempotency-Key': 'menu-toggle-$id-${DateTime.now().millisecondsSinceEpoch}'}));
-              ref.invalidate(_menuProvider);
-            } catch (e) {
-              if (context.mounted) _showError(context, '$e');
-            }
-          },
-          activeThumbColor: emerald,
-          inactiveThumbColor: crimson,
-          inactiveTrackColor: crimson.withValues(alpha: 0.2),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // Image
+        ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+          child: Stack(
+            children: [
+              fullImageUrl != null
+                  ? CachedNetworkImage(
+                      imageUrl: fullImageUrl, height: 130, width: double.infinity, fit: BoxFit.cover,
+                      placeholder: (_, __) => Container(height: 130, color: slateSurface),
+                      errorWidget: (_, __, ___) => _placeholder(),
+                    )
+                  : _placeholder(),
+              Positioned(
+                bottom: 8, right: 8,
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  _MediaBtn(icon: Icons.add_photo_alternate_outlined, label: 'Photo',
+                      onTap: () => _uploadImage(context, ref, id)),
+                  const SizedBox(width: 6),
+                  _MediaBtn(icon: Icons.view_in_ar_outlined, label: glbUrl != null ? '3D ✓' : '3D',
+                      active: glbUrl != null,
+                      onTap: () => _uploadGlb(context, ref, id)),
+                ]),
+              ),
+              Positioned(
+                top: 8, left: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: (isVeg ? emerald : crimson).withValues(alpha: 0.9),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(isVeg ? '🟢 VEG' : '🔴 NON-VEG',
+                      style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Expanded(child: Text(item['name'] ?? '',
+                  style: const TextStyle(color: textPrimary, fontSize: 13, fontWeight: FontWeight.w700))),
+              Text('₹${price.toStringAsFixed(0)}',
+                  style: const TextStyle(color: copperAccent, fontSize: 14, fontWeight: FontWeight.w800)),
+            ]),
+            if ((item['description'] as String? ?? '').isNotEmpty) ...[
+              const SizedBox(height: 3),
+              Text(item['description'] ?? '',
+                  style: const TextStyle(color: textSecondary, fontSize: 11),
+                  maxLines: 2, overflow: TextOverflow.ellipsis),
+            ],
+            if (tags.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Wrap(spacing: 4, runSpacing: 4,
+                children: tags.map((t) => Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: copperAccent.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: copperAccent.withValues(alpha: 0.2)),
+                  ),
+                  child: Text(t, style: const TextStyle(color: copperAccent, fontSize: 9, fontWeight: FontWeight.w600)),
+                )).toList()),
+            ],
+            const SizedBox(height: 8),
+            Row(children: [
+              const Icon(Icons.star_rounded, color: amber, size: 13),
+              const SizedBox(width: 3),
+              Text('${rating.toStringAsFixed(1)} ($ratingCount)',
+                  style: const TextStyle(color: textSecondary, fontSize: 11)),
+              if (prep > 0) ...[
+                const SizedBox(width: 10),
+                const Icon(Icons.timer_outlined, color: textSecondary, size: 12),
+                const SizedBox(width: 3),
+                Text('${prep}m', style: const TextStyle(color: textSecondary, fontSize: 11)),
+              ],
+              const Spacer(),
+              // Availability
+              GestureDetector(
+                onTap: () async {
+                  try {
+                    final dio = createDioClient(ref.read(authProvider).token);
+                    await dio.patch('/menu/$id', data: {'isAvailable': !isAvailable},
+                        options: Options(headers: {'Idempotency-Key': 'menu-toggle-$id-${DateTime.now().millisecondsSinceEpoch}'}));
+                    ref.invalidate(_menuProvider(branchId));
+                  } catch (e) {
+                    if (context.mounted) _showError(context, '$e');
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: (isAvailable ? emerald : crimson).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: (isAvailable ? emerald : crimson).withValues(alpha: 0.3)),
+                  ),
+                  child: Text(isAvailable ? 'AVAILABLE' : 'UNAVAILABLE',
+                      style: TextStyle(color: isAvailable ? emerald : crimson, fontSize: 9, fontWeight: FontWeight.w700)),
+                ),
+              ),
+              const SizedBox(width: 6),
+              // Edit
+              GestureDetector(
+                onTap: () {
+                  final state = context.findAncestorStateOfType<_MenuManagementTabState>();
+                  state?._showMenuSheet(context, ref, branchId, item);
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(color: slateSurface, borderRadius: BorderRadius.circular(8)),
+                  child: const Icon(Icons.edit_outlined, color: textSecondary, size: 15),
+                ),
+              ),
+              const SizedBox(width: 4),
+              // Delete
+              GestureDetector(
+                onTap: () => showDialog(
+                  context: context,
+                  builder: (_) => AlertDialog(
+                    backgroundColor: slateCard,
+                    title: const Text('Delete Item?', style: TextStyle(color: textPrimary)),
+                    content: Text('Permanently delete "${item['name'] ?? ''}". This cannot be undone.',
+                        style: const TextStyle(color: textSecondary)),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(context),
+                          child: const Text('Cancel', style: TextStyle(color: textSecondary))),
+                      TextButton(
+                        onPressed: () async {
+                          Navigator.pop(context);
+                          try {
+                            final dio = createDioClient(ref.read(authProvider).token);
+                            await dio.delete('/menu/$id');
+                            ref.invalidate(_menuProvider(branchId));
+                            if (context.mounted) _showSuccess(context, 'Item deleted');
+                          } catch (e) {
+                            if (context.mounted) _showError(context, '$e');
+                          }
+                        },
+                        child: const Text('Delete', style: TextStyle(color: crimson, fontWeight: FontWeight.w700)),
+                      ),
+                    ],
+                  ),
+                ),
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(color: crimson.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(8)),
+                  child: const Icon(Icons.delete_outline, color: crimson, size: 15),
+                ),
+              ),
+            ]),
+          ]),
         ),
       ]),
     );
   }
+
+  Widget _placeholder() => Container(
+        height: 130, width: double.infinity, color: slateSurface,
+        child: const Icon(Icons.restaurant_outlined, color: textSecondary, size: 36),
+      );
+
+  Future<void> _uploadGlb(BuildContext context, WidgetRef ref, String id) async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['glb'],
+    );
+    final path = result?.files.single.path;
+    if (path == null) return;
+    try {
+      final dio = createDioClient(ref.read(authProvider).token);
+      final formData = FormData.fromMap({
+        'glb': await MultipartFile.fromFile(path, filename: 'model.glb'),
+      });
+      await dio.post('/menu/$id/glb', data: formData);
+      ref.invalidate(_menuProvider(branchId));
+      if (context.mounted) _showSuccess(context, '3D model uploaded');
+    } catch (e) {
+      if (context.mounted) _showError(context, '$e');
+    }
+  }
+
+  Future<void> _uploadImage(BuildContext context, WidgetRef ref, String id) async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: slateCard,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const SizedBox(height: 12),
+          ListTile(
+            leading: const Icon(Icons.camera_alt_outlined, color: copperAccent),
+            title: const Text('Camera', style: TextStyle(color: textPrimary)),
+            onTap: () => Navigator.pop(context, ImageSource.camera),
+          ),
+          ListTile(
+            leading: const Icon(Icons.photo_library_outlined, color: copperAccent),
+            title: const Text('Gallery', style: TextStyle(color: textPrimary)),
+            onTap: () => Navigator.pop(context, ImageSource.gallery),
+          ),
+          const SizedBox(height: 8),
+        ]),
+      ),
+    );
+    if (source == null) return;
+    final picked = await ImagePicker().pickImage(source: source, imageQuality: 85, maxWidth: 1024);
+    if (picked == null) return;
+    try {
+      final dio = createDioClient(ref.read(authProvider).token);
+      final formData = FormData.fromMap({
+        'image': await MultipartFile.fromFile(picked.path, filename: 'dish.jpg'),
+      });
+      await dio.post('/menu/$id/image', data: formData);
+      ref.invalidate(_menuProvider(branchId));
+      if (context.mounted) _showSuccess(context, 'Photo updated');
+    } catch (e) {
+      if (context.mounted) _showError(context, '$e');
+    }
+  }
+}
+
+class _MediaBtn extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool active;
+  const _MediaBtn({required this.icon, required this.label, required this.onTap, this.active = false});
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          decoration: BoxDecoration(
+            color: active ? copperAccent.withValues(alpha: 0.9) : Colors.black54,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, color: Colors.white, size: 13),
+            const SizedBox(width: 4),
+            Text(label, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600)),
+          ]),
+        ),
+      );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

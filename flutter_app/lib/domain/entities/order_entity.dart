@@ -10,7 +10,8 @@ enum OrderStatus {
   paid,
   closed;
 
-  String get label => name[0].toUpperCase() + name.substring(1);
+  String get statusName => toString().split('.').last;
+  String get label => statusName[0].toUpperCase() + statusName.substring(1);
 
   bool canTransitionTo(OrderStatus next) {
     const transitions = {
@@ -26,7 +27,13 @@ enum OrderStatus {
   }
 }
 
-enum SyncStatus { synced, pending, conflict }
+enum SyncStatus {
+  synced,
+  pending,
+  conflict;
+
+  String get statusName => toString().split('.').last;
+}
 
 class OrderItemEntity {
   final String id;

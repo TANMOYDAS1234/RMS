@@ -25,9 +25,9 @@ dependencies:
   hive_flutter: ^1.1.0
   hive: ^2.2.3
 
-  # Firebase (configure google-services.json to enable)
-  # firebase_core: ^2.24.2
-  # firebase_messaging: ^14.7.10
+  # Firebase
+  firebase_core: ^2.24.2
+  firebase_messaging: ^14.7.10
 
   # Utilities
   uuid: ^4.3.3
@@ -40,6 +40,9 @@ dependencies:
   flutter_animate: ^4.5.0
   shimmer: ^3.0.0
   fl_chart: ^0.66.2
+  image_picker: ^1.0.7
+  cached_network_image: ^3.3.1
+  file_picker: ^8.0.0
 
 dev_dependencies:
   flutter_test:

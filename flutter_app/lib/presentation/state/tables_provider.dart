@@ -30,6 +30,7 @@ class TableModel {
 
 final tablesProvider = FutureProvider.autoDispose<List<TableModel>>((ref) async {
   final token = ref.watch(authProvider).token;
+  if (token == null) throw Exception('Not authenticated');
   final dio = createDioClient(token);
   final res = await dio.get('/tables');
   return (res.data as List).map((j) => TableModel.fromJson(j)).toList();

@@ -95,12 +95,12 @@ class OrderModel {
         tableLabel: tableLabel,
         items: items.map((i) => i.toEntity()).toList(),
         status: OrderStatus.values.firstWhere(
-          (s) => s.name == status,
+          (s) => s.statusName == status,
           orElse: () => OrderStatus.created,
         ),
         version: version,
         syncStatus: SyncStatus.values.firstWhere(
-          (s) => s.name.toUpperCase() == syncStatus,
+          (s) => s.statusName.toUpperCase() == syncStatus,
           orElse: () => SyncStatus.synced,
         ),
         updatedAt: updatedAt,

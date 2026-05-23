@@ -43,6 +43,7 @@ class BillModel {
 
 final billingProvider = FutureProvider.autoDispose<List<BillModel>>((ref) async {
   final token = ref.watch(authProvider).token;
+  if (token == null) throw Exception('Not authenticated');
   final dio = createDioClient(token);
   final res = await dio.get('/billing');
   return (res.data as List).map((j) => BillModel.fromJson(j)).toList();
@@ -50,6 +51,7 @@ final billingProvider = FutureProvider.autoDispose<List<BillModel>>((ref) async 
 
 final dailyRevenueProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
   final token = ref.watch(authProvider).token;
+  if (token == null) throw Exception('Not authenticated');
   final dio = createDioClient(token);
   final res = await dio.get('/billing/revenue/daily');
   return Map<String, dynamic>.from(res.data);

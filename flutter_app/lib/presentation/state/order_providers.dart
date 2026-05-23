@@ -26,6 +26,7 @@ class DashboardMetrics {
 
 final dashboardMetricsProvider = Provider<DashboardMetrics>((ref) {
   final orders = ref.watch(liveOrdersProvider);
+  final tablesAsync = ref.watch(tablesCountProvider);
   final active = orders
       .where((o) => o.status != OrderStatus.closed && o.status != OrderStatus.paid)
       .length;
@@ -35,9 +36,17 @@ final dashboardMetricsProvider = Provider<DashboardMetrics>((ref) {
   return DashboardMetrics(
     activeOrders: active,
     occupiedTables: active,
-    totalTables: 15,
+    totalTables: tablesAsync.value ?? 0,
     revenue: revenue,
   );
+});
+
+final tablesCountProvider = FutureProvider.autoDispose<int>((ref) async {
+  final token = ref.watch(authProvider).token;
+  if (token == null) return 0;
+  final dio = createDioClient(token);
+  final res = await dio.get('/tables');
+  return (res.data as List).length;
 });
 
 // ── Live orders state ─────────────────────────────────────────────────────────
@@ -140,7 +149,7 @@ class LiveOrdersNotifier extends StateNotifier<List<OrderEntity>> {
       final dio = createDioClient(token);
       final res = await dio.patch(
         '/orders/$orderId/status',
-        data: {'status': newStatus.name, 'version': order.version},
+        data: {'status': newStatus.statusName, 'version': order.version},
         options: _opts({'Idempotency-Key': idempotencyKey}),
       );
       final updated = OrderModel.fromJson(res.data).toEntity();
@@ -150,7 +159,7 @@ class LiveOrdersNotifier extends StateNotifier<List<OrderEntity>> {
       await _ref.read(syncEngineProvider).enqueue(
         endpoint: '/orders/$orderId/status',
         method: 'PATCH',
-        payload: {'status': newStatus.name, 'version': order.version},
+        payload: {'status': newStatus.statusName, 'version': order.version},
         idempotencyKey: idempotencyKey,
       );
     }

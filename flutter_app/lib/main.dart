@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'core/config/app_theme.dart';
 import 'core/services/sync_engine.dart';
 import 'core/services/websocket_service.dart';
+import 'core/services/fcm_service.dart';
 import 'domain/entities/user_entity.dart';
 import 'presentation/screens/login_screen.dart';
 import 'presentation/screens/dashboard_screen.dart';
@@ -12,11 +15,17 @@ import 'presentation/screens/billing_screen.dart';
 import 'presentation/screens/inventory_screen.dart';
 import 'presentation/screens/admin_screen.dart';
 import 'presentation/screens/qr_ordering_screen.dart';
+import 'presentation/screens/admin_profile_screen.dart';
 import 'presentation/state/auth_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
+  try {
+    await Firebase.initializeApp();
+  } catch (_) {}
+  // Must be registered before runApp()
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   runApp(const ProviderScope(child: RmsApp()));
 }
 
@@ -32,6 +41,7 @@ class RmsApp extends ConsumerWidget {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: buildAppTheme(),
+        scaffoldMessengerKey: FcmService.messengerKey,
         home: const _SplashScreen(),
       );
     }
@@ -45,6 +55,7 @@ class RmsApp extends ConsumerWidget {
         title: 'DINE OPS',
         debugShowCheckedModeBanner: false,
         theme: buildAppTheme(),
+        scaffoldMessengerKey: FcmService.messengerKey,
         home: QrOrderingScreen(tableId: tableId, branchId: branchId),
       );
     }
@@ -53,6 +64,7 @@ class RmsApp extends ConsumerWidget {
       title: 'DINE OPS',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
+      scaffoldMessengerKey: FcmService.messengerKey,
       home: auth.isAuthenticated
           ? MainShell(role: auth.user!.role)
           : const LoginScreen(),
@@ -137,7 +149,10 @@ class _MainShellState extends ConsumerState<MainShell> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final token = ref.read(authProvider).token;
-      if (token != null) ref.read(webSocketServiceProvider).connect(token);
+      if (token != null) {
+        ref.read(webSocketServiceProvider).connect(token);
+        FcmService.instance.init(token);
+      }
     });
   }
 
@@ -280,6 +295,18 @@ class _MainShellState extends ConsumerState<MainShell> {
                         const Divider(color: dividerColor, height: 16),
                       ],
                     ),
+                  ),
+                  PopupMenuItem(
+                    value: 'profile',
+                    child: const Row(children: [
+                      Icon(Icons.account_circle_outlined, color: copperAccent, size: 16),
+                      SizedBox(width: 10),
+                      Text('My Profile', style: TextStyle(color: textPrimary, fontWeight: FontWeight.w600)),
+                    ]),
+                    onTap: () => Future.microtask(() => Navigator.push(
+                      ctx,
+                      MaterialPageRoute(builder: (_) => const AdminProfileScreen()),
+                    )),
                   ),
                   PopupMenuItem(
                     value: 'logout',
