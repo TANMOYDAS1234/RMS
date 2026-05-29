@@ -1,5 +1,4 @@
 // ─── Manager: Discounts Tab ───────────────────────────────────────────────────
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,9 +7,12 @@ import '../../core/config/app_theme.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/utils/api_error.dart';
 import '../../core/utils/idempotency.dart';
+import '../../data/api/manager_api.dart';
 import '../state/auth_provider.dart';
 
-// ── Providers ─────────────────────────────────────────────────────────────────
+// `/billing` and `/orders/active` live outside ManagerController so they
+// stay as direct dio reads — both still go through the token-aware
+// createDioClient. The discount mutations go through ManagerApi.
 final _pendingBillsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   final token = ref.watch(authProvider).token;
@@ -148,14 +150,12 @@ class _PendingBillsTab extends ConsumerWidget {
     final orderId = bill['orderId']?.toString() ?? '';
     if (orderId.isEmpty) return;
     try {
-      final dio = createDioClient(ref.read(authProvider).token);
-      await dio.patch(
-        '/manager/order-action/discount/$orderId',
-        data: {'discountPercent': pct, 'reason': reason},
-        options: Options(headers: {
-          'Idempotency-Key': newIdempotencyKey('discount-bill-$orderId'),
-        }),
-      );
+      await ref.read(managerApiProvider).applyDiscount(
+            orderId,
+            pct,
+            reason,
+            idempotencyKey: newIdempotencyKey('discount-bill-$orderId'),
+          );
       ref.invalidate(_pendingBillsProvider);
       if (context.mounted) _snack(context, 'Discount applied: ${pct.toInt()}%', emerald);
     } catch (e) {
@@ -219,18 +219,13 @@ class _ActiveOrdersTab extends ConsumerWidget {
     final id = order['_id']?.toString() ?? '';
     final version = (order['version'] as num?)?.toInt();
     try {
-      final dio = createDioClient(ref.read(authProvider).token);
-      await dio.patch(
-        '/manager/order-action/discount/$id',
-        data: {
-          'discountPercent': pct,
-          'reason': reason,
-          if (version != null) 'expectedVersion': version,
-        },
-        options: Options(headers: {
-          'Idempotency-Key': newIdempotencyKey('discount-order-$id'),
-        }),
-      );
+      await ref.read(managerApiProvider).applyDiscount(
+            id,
+            pct,
+            reason,
+            idempotencyKey: newIdempotencyKey('discount-order-$id'),
+            expectedVersion: version,
+          );
       ref.invalidate(_allOrdersProvider);
       if (context.mounted) _snack(context, 'Discount applied: ${pct.toInt()}%', emerald);
     } catch (e) {
@@ -558,8 +553,7 @@ class _DiscountSheetState extends State<_DiscountSheet> {
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                        colors: [copperAccent, Color(0xFFE8722A)]),
+                    gradient: copperGradient,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Center(

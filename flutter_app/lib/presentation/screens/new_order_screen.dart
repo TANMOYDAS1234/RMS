@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/config/app_theme.dart';
+import '../state/auth_provider.dart';
 import '../state/menu_provider.dart';
 import '../state/tables_provider.dart';
 import '../state/order_providers.dart';
@@ -20,7 +21,8 @@ class _NewOrderScreenState extends ConsumerState<NewOrderScreen> {
   @override
   Widget build(BuildContext context) {
     final tablesAsync = ref.watch(tablesProvider);
-    final menuAsync = ref.watch(menuProvider);
+    final branchId = ref.watch(authProvider).user?.branchId;
+    final menuAsync = ref.watch(menuProvider(branchId));
 
     return Scaffold(
       backgroundColor: slateBg,
@@ -172,7 +174,8 @@ class _NewOrderScreenState extends ConsumerState<NewOrderScreen> {
     if (_selectedTable == null || _cart.isEmpty) return;
     setState(() => _submitting = true);
 
-    final menuItems = ref.read(menuProvider).value ?? [];
+    final branchId = ref.read(authProvider).user?.branchId;
+    final menuItems = ref.read(menuProvider(branchId)).value ?? [];
     final items = _cart.entries.map((e) {
       final item = menuItems.firstWhere((m) => m.id == e.key);
       return {

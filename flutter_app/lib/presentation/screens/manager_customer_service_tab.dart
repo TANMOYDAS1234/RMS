@@ -1,23 +1,16 @@
 // ─── Manager: Customer Service Tab ───────────────────────────────────────────
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../core/config/app_theme.dart';
-import '../../core/network/dio_client.dart';
 import '../../core/utils/api_error.dart';
 import '../../core/utils/idempotency.dart';
-import '../state/auth_provider.dart';
+import '../../data/api/manager_api.dart';
 
-// ── Providers ─────────────────────────────────────────────────────────────────
 final _complaintsProvider =
-    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  final token = ref.watch(authProvider).token;
-  final dio = createDioClient(token);
-  final res = await dio.get('/manager/complaints');
-  return List<Map<String, dynamic>>.from(res.data);
-});
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+        (ref) => ref.watch(managerApiProvider).complaints());
 
 // ── Issue categories ──────────────────────────────────────────────────────────
 const _categories = [
@@ -262,8 +255,7 @@ class _LogComplaintTabState extends ConsumerState<_LogComplaintTab> {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 14),
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                  colors: [copperAccent, Color(0xFFE8722A)]),
+              gradient: copperGradient,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Center(
@@ -294,19 +286,13 @@ class _LogComplaintTabState extends ConsumerState<_LogComplaintTab> {
     }
     setState(() => _submitting = true);
     try {
-      final dio = createDioClient(ref.read(authProvider).token);
-      await dio.post(
-        '/manager/complaints',
-        data: {
-          'tableLabel': table,
-          'issue': detail,
-          'category': _selectedCategory,
-          'severity': _severity,
-        },
-        options: Options(headers: {
-          'Idempotency-Key': newIdempotencyKey('complaint-$table'),
-        }),
-      );
+      await ref.read(managerApiProvider).logComplaint(
+            tableLabel: table,
+            issue: detail,
+            category: _selectedCategory,
+            severity: _severity,
+            idempotencyKey: newIdempotencyKey('complaint-$table'),
+          );
       ref.invalidate(_complaintsProvider);
       _tableLabelCtrl.clear();
       _detailCtrl.clear();
@@ -677,16 +663,12 @@ class _ResolveComplaintSheetState
     if (resolution.isEmpty) return;
     setState(() => _submitting = true);
     try {
-      final dio = createDioClient(ref.read(authProvider).token);
-      await dio.patch(
-        '/manager/complaints/resolve',
-        data: {
-          'orderId': widget.orderId,
-          'complaintId': widget.complaintId,
-          'resolution': resolution,
-        },
-        options: Options(headers: {'Idempotency-Key': _idempotencyKey}),
-      );
+      await ref.read(managerApiProvider).resolveComplaint(
+            orderId: widget.orderId,
+            complaintId: widget.complaintId,
+            resolution: resolution,
+            idempotencyKey: _idempotencyKey,
+          );
       ref.invalidate(_complaintsProvider);
       if (mounted) {
         Navigator.pop(context);
@@ -741,8 +723,7 @@ class _ResolveComplaintSheetState
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                        colors: [emerald, Color(0xFF26997C)]),
+                    gradient: emeraldGradient,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Center(

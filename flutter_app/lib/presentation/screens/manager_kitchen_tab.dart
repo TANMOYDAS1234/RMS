@@ -1,24 +1,17 @@
 // ─── Manager: Kitchen Tab ─────────────────────────────────────────────────────
 import 'dart:async';
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/config/app_theme.dart';
-import '../../core/network/dio_client.dart';
 import '../../core/services/websocket_service.dart';
 import '../../core/utils/api_error.dart';
 import '../../core/utils/idempotency.dart';
-import '../state/auth_provider.dart';
+import '../../data/api/manager_api.dart';
 
-// ── Provider ──────────────────────────────────────────────────────────────────
 final _kitchenWorkloadProvider =
-    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  final token = ref.watch(authProvider).token;
-  final dio = createDioClient(token);
-  final res = await dio.get('/manager/kitchen');
-  return List<Map<String, dynamic>>.from(res.data);
-});
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+        (ref) => ref.watch(managerApiProvider).kitchen());
 
 // ── Status colors ─────────────────────────────────────────────────────────────
 const _statusColors = {
@@ -134,13 +127,10 @@ class _KitchenBody extends ConsumerWidget {
   Future<void> _prioritize(
       BuildContext context, WidgetRef ref, String orderId) async {
     try {
-      final dio = createDioClient(ref.read(authProvider).token);
-      await dio.patch(
-        '/manager/order-action/prioritize/$orderId',
-        options: Options(headers: {
-          'Idempotency-Key': newIdempotencyKey('prioritize-$orderId'),
-        }),
-      );
+      await ref.read(managerApiProvider).prioritizeOrder(
+            orderId,
+            idempotencyKey: newIdempotencyKey('prioritize-$orderId'),
+          );
       ref.invalidate(_kitchenWorkloadProvider);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(

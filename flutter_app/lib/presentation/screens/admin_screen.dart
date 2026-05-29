@@ -17,6 +17,7 @@ import '../../core/network/dio_client.dart';
 import '../../core/services/websocket_service.dart';
 import '../../core/utils/api_error.dart';
 import '../../core/utils/idempotency.dart';
+import '../../data/api/admin_api.dart';
 import '../state/auth_provider.dart';
 import '../state/order_providers.dart';
 
@@ -24,114 +25,89 @@ import '../state/order_providers.dart';
 // PROVIDERS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-final _salesProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  final token = ref.watch(authProvider).token;
-  if (token == null) throw Exception('Not authenticated');
-  final dio = createDioClient(token);
-  final res = await dio.get('/analytics/sales');
-  return List<Map<String, dynamic>>.from(res.data);
+// Each provider is now a 2-line wrapper around an AdminApi method.
+// adminApiProvider rebuilds the Dio client when the token changes, so
+// these never serve stale auth.
+
+/// Date range used by the analytics tab. Default: last 7 days.
+class AnalyticsRange {
+  final DateTime from;
+  final DateTime to;
+  const AnalyticsRange(this.from, this.to);
+}
+
+AnalyticsRange _defaultAnalyticsRange() {
+  final now = DateTime.now();
+  return AnalyticsRange(now.subtract(const Duration(days: 7)), now);
+}
+
+final analyticsRangeProvider =
+    StateProvider<AnalyticsRange>((_) => _defaultAnalyticsRange());
+
+final _salesProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+    (ref) {
+  final r = ref.watch(analyticsRangeProvider);
+  return ref.watch(adminApiProvider).sales(from: r.from, to: r.to);
 });
 
-final _topItemsProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  final token = ref.watch(authProvider).token;
-  if (token == null) throw Exception('Not authenticated');
-  final dio = createDioClient(token);
-  final res = await dio.get('/analytics/top-items');
-  return List<Map<String, dynamic>>.from(res.data);
+final _topItemsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+  final r = ref.watch(analyticsRangeProvider);
+  return ref.watch(adminApiProvider).topItems(from: r.from, to: r.to);
 });
 
-final _peakHoursProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  final token = ref.watch(authProvider).token;
-  if (token == null) throw Exception('Not authenticated');
-  final dio = createDioClient(token);
-  final res = await dio.get('/analytics/peak-hours');
-  return List<Map<String, dynamic>>.from(res.data);
+final _peakHoursProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+  final r = ref.watch(analyticsRangeProvider);
+  return ref.watch(adminApiProvider).peakHours(from: r.from, to: r.to);
 });
 
-final _staffProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  final token = ref.watch(authProvider).token;
-  if (token == null) throw Exception('Not authenticated');
-  final dio = createDioClient(token);
-  final res = await dio.get('/users');
-  return List<Map<String, dynamic>>.from(res.data);
+final _staffProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+    (ref) => ref.watch(adminApiProvider).users());
+
+final _branchesProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+        (ref) => ref.watch(adminApiProvider).branches());
+
+final _systemHealthProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>(
+        (ref) => ref.watch(adminApiProvider).systemHealth());
+
+final _financialSummaryProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>(
+        (ref) => ref.watch(adminApiProvider).financialSummary());
+
+final _transactionsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+        (ref) => ref.watch(adminApiProvider).transactions());
+
+final _profitMarginProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>(
+        (ref) => ref.watch(adminApiProvider).profitMargin());
+
+final _auditLogProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+        (ref) async {
+  final page = await ref.watch(adminApiProvider).auditLog();
+  return List<Map<String, dynamic>>.from(page['items'] ?? []);
 });
 
-final _branchesProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  final token = ref.watch(authProvider).token;
-  if (token == null) throw Exception('Not authenticated');
-  final dio = createDioClient(token);
-  final res = await dio.get('/branches');
-  return List<Map<String, dynamic>>.from(res.data);
-});
+final _inventoryAdminProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+        (ref) => ref.watch(adminApiProvider).inventory());
 
-final _systemHealthProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
-  final token = ref.watch(authProvider).token;
-  if (token == null) throw Exception('Not authenticated');
-  final dio = createDioClient(token);
-  final res = await dio.get('/admin/system-health');
-  return Map<String, dynamic>.from(res.data);
-});
+final _allOrdersProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+        (ref) => ref.watch(adminApiProvider).activeOrders());
 
-final _financialSummaryProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
-  final token = ref.watch(authProvider).token;
-  if (token == null) throw Exception('Not authenticated');
-  final dio = createDioClient(token);
-  final res = await dio.get('/admin/financial-summary');
-  return Map<String, dynamic>.from(res.data);
-});
+final _menuProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+        (ref, branchId) => ref.watch(adminApiProvider).menuForBranch(branchId));
 
-final _transactionsProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  final token = ref.watch(authProvider).token;
-  if (token == null) throw Exception('Not authenticated');
-  final dio = createDioClient(token);
-  final res = await dio.get('/admin/transactions');
-  return List<Map<String, dynamic>>.from(res.data);
-});
-
-final _profitMarginProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
-  final token = ref.watch(authProvider).token;
-  if (token == null) throw Exception('Not authenticated');
-  final dio = createDioClient(token);
-  final res = await dio.get('/admin/profit-margin');
-  return Map<String, dynamic>.from(res.data);
-});
-
-final _auditLogProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  final token = ref.watch(authProvider).token;
-  if (token == null) throw Exception('Not authenticated');
-  final dio = createDioClient(token);
-  final res = await dio.get('/admin/audit-log');
-  return List<Map<String, dynamic>>.from(res.data);
-});
-
-final _inventoryAdminProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  final token = ref.watch(authProvider).token;
-  if (token == null) throw Exception('Not authenticated');
-  final dio = createDioClient(token);
-  final res = await dio.get('/inventory');
-  return List<Map<String, dynamic>>.from(res.data);
-});
-
-final _allOrdersProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  final token = ref.watch(authProvider).token;
-  if (token == null) throw Exception('Not authenticated');
-  final dio = createDioClient(token);
-  final res = await dio.get('/orders/active');
-  return List<Map<String, dynamic>>.from(res.data);
-});
-
-final _menuProvider = FutureProvider.autoDispose.family<List<Map<String, dynamic>>, String>((ref, branchId) async {
-  final token = ref.watch(authProvider).token;
-  if (token == null) throw Exception('Not authenticated');
-  final dio = createDioClient(token);
-  final res = await dio.get('/menu/branch/$branchId/admin');
-  return List<Map<String, dynamic>>.from(res.data);
-});
-
-final _staffAnalyticsProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  final dio = createDioClient(ref.watch(authProvider).token);
-  final res = await dio.get('/analytics/staff-performance');
-  return List<Map<String, dynamic>>.from(res.data);
+final _staffAnalyticsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+  final r = ref.watch(analyticsRangeProvider);
+  return ref.watch(adminApiProvider).staffPerformance(from: r.from, to: r.to);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -335,7 +311,9 @@ class AdminAnalyticsTab extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        const _SectionTitle('Revenue — Last 7 Days'),
+        const _AnalyticsRangePicker(),
+        const SizedBox(height: 20),
+        const _SectionTitle('Revenue'),
         const SizedBox(height: 12),
         salesAsync.when(
           loading: () => const _ChartSkeleton(),
@@ -380,6 +358,138 @@ class AdminAnalyticsTab extends ConsumerWidget {
       ],
     );
   }
+}
+
+class _AnalyticsRangePicker extends ConsumerWidget {
+  const _AnalyticsRangePicker();
+
+  static const _presets = <_Preset>[
+    _Preset('Today', 0),
+    _Preset('7d', 7),
+    _Preset('30d', 30),
+    _Preset('90d', 90),
+  ];
+
+  bool _matches(_Preset p, AnalyticsRange r) {
+    final now = DateTime.now();
+    final expected = now.subtract(Duration(days: p.days));
+    return r.from.year == expected.year &&
+        r.from.month == expected.month &&
+        r.from.day == expected.day;
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final range = ref.watch(analyticsRangeProvider);
+    final label =
+        '${DateFormat('dd MMM').format(range.from)} – ${DateFormat('dd MMM').format(range.to)}';
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: slateCard,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: dividerColor),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.calendar_today_outlined,
+              color: copperAccent, size: 14),
+          const SizedBox(width: 8),
+          Text(label,
+              style: const TextStyle(
+                  color: textPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700)),
+          const Spacer(),
+          GestureDetector(
+            onTap: () async {
+              final now = DateTime.now();
+              final picked = await showDateRangePicker(
+                context: context,
+                firstDate: DateTime(now.year - 2),
+                lastDate: now,
+                initialDateRange:
+                    DateTimeRange(start: range.from, end: range.to),
+                builder: (ctx, child) => Theme(
+                  data: Theme.of(ctx).copyWith(
+                    colorScheme: const ColorScheme.dark(
+                      primary: copperAccent,
+                      onPrimary: Colors.white,
+                      surface: slateCard,
+                      onSurface: textPrimary,
+                    ),
+                  ),
+                  child: child!,
+                ),
+              );
+              if (picked != null) {
+                ref.read(analyticsRangeProvider.notifier).state =
+                    AnalyticsRange(picked.start, picked.end);
+              }
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: copperAccent.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.date_range, color: copperAccent, size: 12),
+                SizedBox(width: 4),
+                Text('Custom',
+                    style: TextStyle(
+                        color: copperAccent,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700)),
+              ]),
+            ),
+          ),
+        ]),
+        const SizedBox(height: 10),
+        Row(
+          children: _presets.map((p) {
+            final selected = _matches(p, range);
+            return Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  final now = DateTime.now();
+                  ref.read(analyticsRangeProvider.notifier).state =
+                      AnalyticsRange(
+                          now.subtract(Duration(days: p.days)), now);
+                },
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    color: selected
+                        ? copperAccent.withValues(alpha: 0.18)
+                        : slateSurface,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: selected ? copperAccent : dividerColor,
+                    ),
+                  ),
+                  child: Center(
+                    child: Text(p.label,
+                        style: TextStyle(
+                            color: selected ? copperAccent : textPrimary,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ]),
+    );
+  }
+}
+
+class _Preset {
+  final String label;
+  final int days;
+  const _Preset(this.label, this.days);
 }
 
 class _ProfitCard extends StatelessWidget {
@@ -767,7 +877,10 @@ class _StaffCard extends ConsumerWidget {
                 shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
                 builder: (_) => _EditUserSheet(user: user),
               ),
-              child: const Icon(Icons.edit_outlined, color: textSecondary, size: 16),
+              child: const Tooltip(
+                message: 'Edit user',
+                child: Icon(Icons.edit_outlined, color: textSecondary, size: 16),
+              ),
             ),
             const SizedBox(width: 8),
             // Reset password
@@ -779,7 +892,10 @@ class _StaffCard extends ConsumerWidget {
                 shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
                 builder: (_) => _ResetPasswordSheet(userId: id, userName: user['name'] as String? ?? ''),
               ),
-              child: const Icon(Icons.lock_reset_outlined, color: textSecondary, size: 16),
+              child: const Tooltip(
+                message: 'Reset password',
+                child: Icon(Icons.lock_reset_outlined, color: textSecondary, size: 16),
+              ),
             ),
             const SizedBox(width: 8),
             // Delete staff
@@ -813,7 +929,10 @@ class _StaffCard extends ConsumerWidget {
                   ],
                 ),
               ),
-              child: const Icon(Icons.delete_outline, color: crimson, size: 16),
+              child: const Tooltip(
+                message: 'Delete',
+                child: Icon(Icons.delete_outline, color: crimson, size: 16),
+              ),
             ),
           ]),
         ]),
@@ -1379,7 +1498,10 @@ class _TransactionCard extends ConsumerWidget {
           const SizedBox(width: 8),
           GestureDetector(
             onTap: () => _confirmRefund(context, ref, id),
-            child: const Icon(Icons.undo_outlined, color: crimson, size: 18),
+            child: const Tooltip(
+              message: 'Refund bill',
+              child: Icon(Icons.undo_outlined, color: crimson, size: 18),
+            ),
           ),
         ],
       ]),
@@ -1583,7 +1705,10 @@ class _AdminInventoryCard extends ConsumerWidget {
             child: Container(
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(color: slateSurface, borderRadius: BorderRadius.circular(8)),
-              child: const Icon(Icons.edit_outlined, color: textSecondary, size: 16),
+              child: const Tooltip(
+                message: 'Edit',
+                child: Icon(Icons.edit_outlined, color: textSecondary, size: 16),
+              ),
             ),
           ),
           const SizedBox(width: 4),
@@ -1620,7 +1745,10 @@ class _AdminInventoryCard extends ConsumerWidget {
             child: Container(
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(color: crimson.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(8)),
-              child: const Icon(Icons.delete_outline, color: crimson, size: 16),
+              child: const Tooltip(
+                message: 'Delete',
+                child: Icon(Icons.delete_outline, color: crimson, size: 16),
+              ),
             ),
           ),
         ]),
@@ -1842,7 +1970,10 @@ class _BranchCard extends ConsumerWidget {
             child: Container(
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(color: slateSurface, borderRadius: BorderRadius.circular(8)),
-              child: const Icon(Icons.edit_outlined, color: textSecondary, size: 16),
+              child: const Tooltip(
+                message: 'Edit',
+                child: Icon(Icons.edit_outlined, color: textSecondary, size: 16),
+              ),
             ),
           ),
           const SizedBox(width: 4),
@@ -1879,7 +2010,10 @@ class _BranchCard extends ConsumerWidget {
             child: Container(
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(color: crimson.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(8)),
-              child: const Icon(Icons.delete_outline, color: crimson, size: 16),
+              child: const Tooltip(
+                message: 'Delete',
+                child: Icon(Icons.delete_outline, color: crimson, size: 16),
+              ),
             ),
           ),
         ]),
@@ -2962,7 +3096,7 @@ class _PrimaryButton extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.symmetric(vertical: 14),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(colors: [copperAccent, Color(0xFFE8722A)]),
+            gradient: copperGradient,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Center(child: Text(label,

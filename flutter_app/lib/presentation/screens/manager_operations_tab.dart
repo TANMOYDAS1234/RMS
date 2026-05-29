@@ -2,15 +2,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/config/app_theme.dart';
-import '../../core/network/dio_client.dart';
 import '../../core/services/websocket_service.dart';
 import '../../core/utils/api_error.dart';
 import '../../core/utils/idempotency.dart';
+import '../../data/api/manager_api.dart';
 import '../../domain/entities/order_entity.dart';
-import '../state/auth_provider.dart';
 import '../state/order_providers.dart';
 import '../widgets/status_chip.dart';
 
@@ -24,12 +22,8 @@ final _nowTickerProvider = StreamProvider<DateTime>((ref) async* {
 });
 
 // ── Provider ──────────────────────────────────────────────────────────────────
-final _operationsProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
-  final token = ref.watch(authProvider).token;
-  final dio = createDioClient(token);
-  final res = await dio.get('/manager/operations');
-  return Map<String, dynamic>.from(res.data);
-});
+final _operationsProvider = FutureProvider.autoDispose<Map<String, dynamic>>(
+    (ref) => ref.watch(managerApiProvider).operations());
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 class ManagerOperationsTab extends ConsumerWidget {
@@ -155,13 +149,10 @@ class ManagerOperationsTab extends ConsumerWidget {
     );
     if (confirm != true) return;
     try {
-      final dio = createDioClient(ref.read(authProvider).token);
-      await dio.patch(
-        '/manager/order-action/force-close/$orderId',
-        options: Options(headers: {
-          'Idempotency-Key': newIdempotencyKey('force-close-$orderId'),
-        }),
-      );
+      await ref.read(managerApiProvider).forceCloseOrder(
+            orderId,
+            idempotencyKey: newIdempotencyKey('force-close-$orderId'),
+          );
       ref.invalidate(_operationsProvider);
       ref.read(liveOrdersProvider.notifier).refresh();
       if (context.mounted) _snack(context, 'Order force-closed', crimson);
@@ -173,14 +164,13 @@ class ManagerOperationsTab extends ConsumerWidget {
   Future<void> _overrideStatus(
       BuildContext context, WidgetRef ref, OrderEntity order, OrderStatus status) async {
     try {
-      final dio = createDioClient(ref.read(authProvider).token);
-      await dio.patch(
-        '/manager/order-action/override-status/${order.id}',
-        data: {'status': status.statusName, 'expectedVersion': order.version},
-        options: Options(headers: {
-          'Idempotency-Key': newIdempotencyKey('override-${order.id}-${status.statusName}'),
-        }),
-      );
+      await ref.read(managerApiProvider).overrideOrderStatus(
+            order.id,
+            status.statusName,
+            idempotencyKey:
+                newIdempotencyKey('override-${order.id}-${status.statusName}'),
+            expectedVersion: order.version,
+          );
       ref.read(liveOrdersProvider.notifier).refresh();
       ref.invalidate(_operationsProvider);
       if (context.mounted) _snack(context, 'Status overridden → ${status.label}', emerald);

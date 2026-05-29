@@ -283,7 +283,7 @@ class _PrimaryBtn extends StatelessWidget {
           decoration: BoxDecoration(
             gradient: secondary
                 ? null
-                : const LinearGradient(colors: [copperAccent, Color(0xFFE8722A)]),
+                : copperGradient,
             color: secondary ? slateSurface : null,
             borderRadius: BorderRadius.circular(12),
             border: secondary ? Border.all(color: dividerColor) : null,

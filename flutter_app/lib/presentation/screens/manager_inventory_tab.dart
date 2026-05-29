@@ -1,22 +1,15 @@
 // ─── Manager: Inventory Tab ───────────────────────────────────────────────────
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/config/app_theme.dart';
-import '../../core/network/dio_client.dart';
 import '../../core/utils/api_error.dart';
 import '../../core/utils/idempotency.dart';
-import '../state/auth_provider.dart';
+import '../../data/api/manager_api.dart';
 
-// ── Provider ──────────────────────────────────────────────────────────────────
 final _managerInventoryProvider =
-    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
-  final token = ref.watch(authProvider).token;
-  final dio = createDioClient(token);
-  final res = await dio.get('/manager/inventory');
-  return Map<String, dynamic>.from(res.data);
-});
+    FutureProvider.autoDispose<Map<String, dynamic>>(
+        (ref) => ref.watch(managerApiProvider).inventoryStatus());
 
 // ── Tab ───────────────────────────────────────────────────────────────────────
 class ManagerInventoryTab extends ConsumerStatefulWidget {
@@ -156,12 +149,11 @@ class _ShortageSheetState extends ConsumerState<_ShortageSheet> {
     if (note.isEmpty) return;
     setState(() => _submitting = true);
     try {
-      final dio = createDioClient(ref.read(authProvider).token);
-      await dio.post(
-        '/manager/inventory/${widget.item['_id']}/report-shortage',
-        data: {'note': note},
-        options: Options(headers: {'Idempotency-Key': _idempotencyKey}),
-      );
+      await ref.read(managerApiProvider).reportShortage(
+            widget.item['_id'].toString(),
+            note,
+            idempotencyKey: _idempotencyKey,
+          );
       ref.invalidate(_managerInventoryProvider);
       if (mounted) {
         Navigator.pop(context);
@@ -224,8 +216,7 @@ class _ShortageSheetState extends ConsumerState<_ShortageSheet> {
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                        colors: [crimson, Color(0xFFE8722A)]),
+                    gradient: dangerGradient,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Center(

@@ -9,16 +9,13 @@ import '../../core/config/app_theme.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/utils/api_error.dart';
 import '../../core/utils/idempotency.dart';
+import '../../data/api/manager_api.dart';
 import '../state/auth_provider.dart';
 
-// ── Provider ──────────────────────────────────────────────────────────────────
 final _managerStaffProvider =
-    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  final token = ref.watch(authProvider).token;
-  final dio = createDioClient(token);
-  final res = await dio.get('/manager/staff');
-  return List<Map<String, dynamic>>.from(res.data);
-});
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+        (ref) => ref.watch(managerApiProvider).staff());
+
 
 // ── Role colors ───────────────────────────────────────────────────────────────
 const _roleColors = {
@@ -467,8 +464,7 @@ class _StaffNoteSheetState extends ConsumerState<_StaffNoteSheet> {
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                        colors: [copperAccent, Color(0xFFE8722A)]),
+                    gradient: copperGradient,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Center(

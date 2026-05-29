@@ -4,6 +4,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'core/config/app_theme.dart';
+import 'core/observability/sentry_bootstrap.dart';
 import 'core/services/sync_engine.dart';
 import 'core/services/websocket_service.dart';
 import 'core/services/fcm_service.dart';
@@ -27,7 +28,13 @@ void main() async {
   } catch (_) {}
   // Must be registered before runApp()
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-  runApp(const ProviderScope(child: RmsApp()));
+
+  // runWithSentry is a no-op when SENTRY_DSN dart-define is unset, so
+  // local dev doesn't need credentials. Set --dart-define SENTRY_DSN=...
+  // on release builds.
+  await runWithSentry(() async {
+    runApp(const ProviderScope(child: RmsApp()));
+  });
 }
 
 class RmsApp extends ConsumerStatefulWidget {

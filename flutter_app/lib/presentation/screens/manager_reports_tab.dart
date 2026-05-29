@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../../core/config/app_theme.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/utils/api_error.dart';
+import '../../data/api/manager_api.dart';
 import '../state/auth_provider.dart';
 
 /// Date range selected via the picker. Drives all analytics providers.
@@ -30,12 +31,8 @@ DateRange _defaultRange() {
 final reportsDateRangeProvider = StateProvider<DateRange>((_) => _defaultRange());
 
 final _operationalReportProvider =
-    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
-  final token = ref.watch(authProvider).token;
-  final dio = createDioClient(token);
-  final res = await dio.get('/manager/report');
-  return Map<String, dynamic>.from(res.data);
-});
+    FutureProvider.autoDispose<Map<String, dynamic>>(
+        (ref) => ref.watch(managerApiProvider).report());
 
 final _salesProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {

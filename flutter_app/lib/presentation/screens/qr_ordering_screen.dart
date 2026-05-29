@@ -227,7 +227,7 @@ class _MenuTabState extends ConsumerState<_MenuTab> {
 
   @override
   Widget build(BuildContext context) {
-    final menuAsync = ref.watch(menuProvider);
+    final menuAsync = ref.watch(menuProvider(widget.branchId));
 
     return menuAsync.when(
       loading: () => const Center(child: CircularProgressIndicator(color: copperAccent)),
