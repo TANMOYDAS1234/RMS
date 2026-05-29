@@ -78,13 +78,13 @@ class LiveOrdersNotifier extends StateNotifier<List<OrderEntity>> {
   void _listenToWebSocket() {
     final ws = _ref.read(webSocketServiceProvider);
     _wsSub = ws.eventStream.listen((event) {
-      switch (event['event']) {
+      switch (event.event) {
         case 'order:updated':
-          _handleOrderUpdate(event['data']);
+          _handleOrderUpdate(event.data);
         case 'order:created':
-          _handleOrderCreated(event['data']);
+          _handleOrderCreated(event.data);
         case 'kitchen:progress':
-          _handleKitchenProgress(event['data']);
+          _handleKitchenProgress(event.data);
       }
     });
   }

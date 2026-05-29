@@ -1,0 +1,138 @@
+import {
+  Controller, Get, Post, Patch, Body, Param, Request,
+  UseGuards, NotFoundException, BadRequestException,
+} from '@nestjs/common';
+import { IsEnum, IsString, IsNumber, IsOptional, IsInt, Min, Max } from 'class-validator';
+import { Type } from 'class-transformer';
+import { ManagerService } from './manager.service';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { TableStatus } from '../tables/table.schema';
+import { OrderStatus } from '../orders/order.schema';
+
+class UpdateTableStatusDto {
+  @IsEnum(TableStatus) status: TableStatus;
+}
+
+class ComplaintDto {
+  @IsString() tableLabel: string;
+  @IsString() issue: string;
+  @IsOptional() @IsString() category?: string;
+  @IsOptional() @IsString() severity?: string;
+}
+
+class ResolveComplaintDto {
+  @IsString() orderId: string;
+  @IsString() complaintId: string;
+  @IsString() resolution: string;
+}
+
+class ShortageDto {
+  @IsString() note: string;
+}
+
+class OrderActionDto {
+  @IsOptional() @IsEnum(OrderStatus) status?: OrderStatus;
+  @IsOptional() @Type(() => Number) @IsNumber() @Min(0) @Max(100) discountPercent?: number;
+  @IsOptional() @IsString() reason?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) expectedVersion?: number;
+}
+
+@Controller('manager')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('admin', 'manager')
+export class ManagerController {
+  constructor(private readonly managerService: ManagerService) {}
+
+  // ── Operations ─────────────────────────────────────────────────────────────
+  @Get('operations')
+  getOperations() { return this.managerService.getOperationsSummary(); }
+
+  // ── Single order-action endpoint — avoids :id/:suffix param collision ──────
+  // Handles: force-close | override-status | discount | prioritize
+  @Patch('order-action/:action/:id')
+  orderAction(
+    @Param('action') action: string,
+    @Param('id') id: string,
+    @Body() body: OrderActionDto,
+    @Request() req: any,
+  ) {
+    switch (action) {
+      case 'force-close':
+        return this.managerService.forceCloseOrder(id, req.user._id, body.expectedVersion);
+      case 'override-status':
+        if (!body.status) throw new BadRequestException('status is required for override-status');
+        return this.managerService.overrideStatus(id, body.status, req.user._id, body.expectedVersion);
+      case 'discount':
+        if (body.discountPercent === undefined) {
+          throw new BadRequestException('discountPercent is required for discount');
+        }
+        return this.managerService.applyDiscount(
+          id,
+          body.discountPercent,
+          req.user._id,
+          body.reason ?? 'Manager discount',
+          body.expectedVersion,
+        );
+      case 'prioritize':
+        return this.managerService.prioritizeOrder(id, req.user._id, body.expectedVersion);
+      default:
+        throw new NotFoundException(`Unknown action: ${action}`);
+    }
+  }
+
+  // ── Tables ─────────────────────────────────────────────────────────────────
+  @Get('tables')
+  getTables() { return this.managerService.getTablesWithOccupancy(); }
+
+  @Patch('tables/:id/status')
+  updateTableStatus(@Param('id') id: string, @Body() dto: UpdateTableStatusDto) {
+    return this.managerService.updateTableStatus(id, dto.status);
+  }
+
+  // ── Staff ──────────────────────────────────────────────────────────────────
+  @Get('staff')
+  getStaff() { return this.managerService.getStaffWithActivity(); }
+
+  // ── Discounts ──────────────────────────────────────────────────────────────
+  @Get('discount-requests')
+  getDiscountRequests() { return this.managerService.getPendingDiscountRequests(); }
+
+  // ── Kitchen ────────────────────────────────────────────────────────────────
+  @Get('kitchen')
+  getKitchen() { return this.managerService.getKitchenWorkload(); }
+
+  // ── Inventory ──────────────────────────────────────────────────────────────
+  @Get('inventory')
+  getInventory() { return this.managerService.getInventoryStatus(); }
+
+  @Post('inventory/:id/report-shortage')
+  reportShortage(@Param('id') id: string, @Body() dto: ShortageDto, @Request() req: any) {
+    return this.managerService.reportShortage(id, req.user._id, dto.note);
+  }
+
+  // ── Reports ────────────────────────────────────────────────────────────────
+  @Get('report')
+  getReport() { return this.managerService.getOperationalReport(); }
+
+  // ── Customer Service ───────────────────────────────────────────────────────
+  @Get('complaints')
+  getComplaints() { return this.managerService.getComplaints(); }
+
+  @Post('complaints')
+  logComplaint(@Body() dto: ComplaintDto, @Request() req: any) {
+    return this.managerService.logComplaint(
+      dto.tableLabel,
+      dto.issue,
+      req.user._id,
+      dto.category,
+      dto.severity,
+    );
+  }
+
+  @Patch('complaints/resolve')
+  resolveComplaint(@Body() dto: ResolveComplaintDto, @Request() req: any) {
+    return this.managerService.resolveComplaint(dto.orderId, dto.complaintId, req.user._id, dto.resolution);
+  }
+}
