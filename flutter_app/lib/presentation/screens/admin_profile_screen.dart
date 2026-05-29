@@ -6,6 +6,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/config/app_config.dart';
 import '../../core/config/app_theme.dart';
 import '../../core/network/dio_client.dart';
+import '../../core/utils/api_error.dart';
+import '../../core/utils/idempotency.dart';
 import '../state/auth_provider.dart';
 
 final _profileProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
@@ -36,7 +38,7 @@ class AdminProfileScreen extends ConsumerWidget {
       ),
       body: profileAsync.when(
         loading: () => const Center(child: CircularProgressIndicator(color: copperAccent)),
-        error: (e, _) => Center(child: Text('$e', style: const TextStyle(color: crimson))),
+        error: (e, _) => Center(child: Text(describeApiError(e), style: const TextStyle(color: crimson))),
         data: (profile) => _ProfileBody(profile: profile),
       ),
     );
@@ -178,90 +180,35 @@ class _ProfileBody extends ConsumerWidget {
       final formData = FormData.fromMap({
         'photo': await MultipartFile.fromFile(picked.path, filename: 'photo.jpg'),
       });
-      await dio.post('/users/$id/photo', data: formData);
+      await dio.post(
+        '/users/$id/photo',
+        data: formData,
+        options: Options(headers: {'Idempotency-Key': newIdempotencyKey('profile-photo-$id')}),
+      );
       ref.invalidate(_profileProvider);
       if (context.mounted) _snack(context, 'Photo updated', emerald);
     } catch (e) {
-      if (context.mounted) _snack(context, '$e', crimson);
+      if (context.mounted) _snack(context, describeApiError(e), crimson);
     }
   }
 
   void _showEditSheet(BuildContext context, WidgetRef ref, Map<String, dynamic> profile) {
-    final nameCtrl = TextEditingController(text: profile['name'] ?? '');
-    final emailCtrl = TextEditingController(text: profile['email'] ?? '');
-
     showModalBottomSheet(
       context: context,
       backgroundColor: slateCard,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Edit Profile',
-              style: TextStyle(color: textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 16),
-          _Field(ctrl: nameCtrl, label: 'Full Name'),
-          const SizedBox(height: 10),
-          _Field(ctrl: emailCtrl, label: 'Email', keyboardType: TextInputType.emailAddress),
-          const SizedBox(height: 16),
-          _PrimaryBtn(
-            label: 'Save Changes',
-            onTap: () async {
-              if (nameCtrl.text.trim().isEmpty) return;
-              Navigator.pop(ctx);
-              try {
-                final dio = createDioClient(ref.read(authProvider).token);
-                await dio.patch('/auth/me', data: {
-                  'name': nameCtrl.text.trim(),
-                  'email': emailCtrl.text.trim(),
-                }, options: Options(headers: {'Idempotency-Key': 'profile-edit-${DateTime.now().millisecondsSinceEpoch}'}));
-                ref.invalidate(_profileProvider);
-                if (context.mounted) _snack(context, 'Profile updated', emerald);
-              } catch (e) {
-                if (context.mounted) _snack(context, '$e', crimson);
-              }
-            },
-          ),
-        ]),
-      ),
+      builder: (_) => _EditProfileSheet(profile: profile),
     );
   }
 
   void _showPasswordSheet(BuildContext context, WidgetRef ref) {
-    final ctrl = TextEditingController();
-
     showModalBottomSheet(
       context: context,
       backgroundColor: slateCard,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Change Password',
-              style: TextStyle(color: textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 16),
-          _Field(ctrl: ctrl, label: 'New Password (min 6 chars)', obscure: true),
-          const SizedBox(height: 16),
-          _PrimaryBtn(
-            label: 'Update Password',
-            onTap: () async {
-              if (ctrl.text.length < 6) return;
-              Navigator.pop(ctx);
-              try {
-                final dio = createDioClient(ref.read(authProvider).token);
-                await dio.patch('/auth/me',
-                    data: {'password': ctrl.text},
-                    options: Options(headers: {'Idempotency-Key': 'pwd-change-${DateTime.now().millisecondsSinceEpoch}'}));
-                if (context.mounted) _snack(context, 'Password updated', emerald);
-              } catch (e) {
-                if (context.mounted) _snack(context, '$e', crimson);
-              }
-            },
-          ),
-        ]),
-      ),
+      builder: (_) => const _ChangePasswordSheet(),
     );
   }
 
@@ -349,5 +296,163 @@ class _PrimaryBtn extends StatelessWidget {
                     fontSize: 14)),
           ),
         ),
+      );
+}
+
+// ── Edit profile sheet ───────────────────────────────────────────────────────
+class _EditProfileSheet extends ConsumerStatefulWidget {
+  final Map<String, dynamic> profile;
+  const _EditProfileSheet({required this.profile});
+  @override
+  ConsumerState<_EditProfileSheet> createState() => _EditProfileSheetState();
+}
+
+class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _emailCtrl;
+  late final String _idempotencyKey;
+  bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameCtrl = TextEditingController(text: widget.profile['name'] as String? ?? '');
+    _emailCtrl = TextEditingController(text: widget.profile['email'] as String? ?? '');
+    _idempotencyKey = newIdempotencyKey('profile-edit');
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _emailCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_submitting) return;
+    if (_nameCtrl.text.trim().isEmpty) return;
+    setState(() => _submitting = true);
+    try {
+      final dio = createDioClient(ref.read(authProvider).token);
+      await dio.patch(
+        '/auth/me',
+        data: {
+          'name': _nameCtrl.text.trim(),
+          'email': _emailCtrl.text.trim(),
+        },
+        options: Options(headers: {'Idempotency-Key': _idempotencyKey}),
+      );
+      ref.invalidate(_profileProvider);
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: const Text('Profile updated'),
+          backgroundColor: emerald,
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(describeApiError(e)),
+          backgroundColor: crimson,
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 24),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Edit Profile',
+              style: TextStyle(color: textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 16),
+          _Field(ctrl: _nameCtrl, label: 'Full Name'),
+          const SizedBox(height: 10),
+          _Field(ctrl: _emailCtrl, label: 'Email', keyboardType: TextInputType.emailAddress),
+          const SizedBox(height: 16),
+          _PrimaryBtn(
+            label: _submitting ? 'Saving…' : 'Save Changes',
+            onTap: _submitting ? () {} : _save,
+          ),
+        ]),
+      );
+}
+
+// ── Change password sheet ────────────────────────────────────────────────────
+class _ChangePasswordSheet extends ConsumerStatefulWidget {
+  const _ChangePasswordSheet();
+  @override
+  ConsumerState<_ChangePasswordSheet> createState() => _ChangePasswordSheetState();
+}
+
+class _ChangePasswordSheetState extends ConsumerState<_ChangePasswordSheet> {
+  late final TextEditingController _ctrl;
+  late final String _idempotencyKey;
+  bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController();
+    _idempotencyKey = newIdempotencyKey('pwd-change');
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_submitting) return;
+    if (_ctrl.text.length < 6) return;
+    setState(() => _submitting = true);
+    try {
+      final dio = createDioClient(ref.read(authProvider).token);
+      await dio.patch(
+        '/auth/me',
+        data: {'password': _ctrl.text},
+        options: Options(headers: {'Idempotency-Key': _idempotencyKey}),
+      );
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: const Text('Password updated'),
+          backgroundColor: emerald,
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(describeApiError(e)),
+          backgroundColor: crimson,
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 24),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Change Password',
+              style: TextStyle(color: textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 16),
+          _Field(ctrl: _ctrl, label: 'New Password (min 6 chars)', obscure: true),
+          const SizedBox(height: 16),
+          _PrimaryBtn(
+            label: _submitting ? 'Updating…' : 'Update Password',
+            onTap: _submitting ? () {} : _save,
+          ),
+        ]),
       );
 }

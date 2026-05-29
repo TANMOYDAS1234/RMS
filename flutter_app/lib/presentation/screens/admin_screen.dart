@@ -760,121 +760,25 @@ class _StaffCard extends ConsumerWidget {
             const SizedBox(width: 8),
             // Edit details
             GestureDetector(
-              onTap: () {
-                final nameCtrl = TextEditingController(text: user['name'] as String? ?? '');
-                String editRole = user['role'] as String? ?? 'waiter';
-                String? editBranchId = user['branchId'] as String?;
-                showModalBottomSheet(
-                  context: context,
-                  backgroundColor: slateCard,
-                  isScrollControlled: true,
-                  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-                  builder: (ctx) => StatefulBuilder(
-                    builder: (ctx, setState) {
-                      final branchesAsync = ref.watch(_branchesProvider);
-                      return Padding(
-                      padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
-                      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text('Edit — ${user['name'] ?? ''}',
-                            style: const TextStyle(color: textPrimary, fontSize: 15, fontWeight: FontWeight.w700)),
-                        const SizedBox(height: 16),
-                        _InputField(ctrl: nameCtrl, label: 'Full Name'),
-                        const SizedBox(height: 10),
-                        DropdownButtonFormField<String>(
-                          value: editRole,
-                          dropdownColor: slateSurface,
-                          style: const TextStyle(color: textPrimary),
-                          decoration: _inputDec('Role'),
-                          items: ['manager', 'waiter', 'chef', 'cashier']
-                              .map((r) => DropdownMenuItem(value: r, child: Text(r.toUpperCase())))
-                              .toList(),
-                          onChanged: (v) => setState(() => editRole = v ?? editRole),
-                        ),
-                        const SizedBox(height: 10),
-                        branchesAsync.when(
-                          loading: () => const SizedBox.shrink(),
-                          error: (_, __) => const SizedBox.shrink(),
-                          data: (branches) => DropdownButtonFormField<String>(
-                            value: editBranchId,
-                            dropdownColor: slateSurface,
-                            style: const TextStyle(color: textPrimary),
-                            decoration: _inputDec('Branch'),
-                            items: [
-                              const DropdownMenuItem(value: null, child: Text('No Branch')),
-                              ...branches.map((b) => DropdownMenuItem(
-                                value: b['_id'] as String,
-                                child: Text(b['name'] as String? ?? ''),
-                              )),
-                            ],
-                            onChanged: (v) => setState(() => editBranchId = v),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        _PrimaryButton(
-                          label: 'Save Changes',
-                          onTap: () async {
-                            if (nameCtrl.text.trim().isEmpty) return;
-                            Navigator.pop(ctx);
-                            try {
-                              final dio = createDioClient(ref.read(authProvider).token);
-                              await dio.patch('/users/$id',
-                                  data: {'name': nameCtrl.text.trim(), 'role': editRole, 'branchId': editBranchId},
-                                  options: Options(headers: {'Idempotency-Key': newIdempotencyKey('edit-user-$id')}));
-                              ref.invalidate(_staffProvider);
-                              if (context.mounted) _showSuccess(context, 'Staff updated');
-                            } catch (e) {
-                              if (context.mounted) _showError(context, describeApiError(e));
-                            }
-                          },
-                        ),
-                      ]),
-                    );
-                    },
-                  ),
-                );
-              },
+              onTap: () => showModalBottomSheet(
+                context: context,
+                backgroundColor: slateCard,
+                isScrollControlled: true,
+                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+                builder: (_) => _EditUserSheet(user: user),
+              ),
               child: const Icon(Icons.edit_outlined, color: textSecondary, size: 16),
             ),
             const SizedBox(width: 8),
             // Reset password
             GestureDetector(
-              onTap: () {
-                final ctrl = TextEditingController();
-                showModalBottomSheet(
-                  context: context,
-                  backgroundColor: slateCard,
-                  isScrollControlled: true,
-                  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-                  builder: (ctx) => Padding(
-                    padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
-                    child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('Reset Password — ${user['name'] ?? ''}',
-                          style: const TextStyle(color: textPrimary, fontSize: 15, fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 16),
-                      _InputField(ctrl: ctrl, label: 'New Password (min 6 chars)', obscure: true),
-                      const SizedBox(height: 16),
-                      _PrimaryButton(
-                        label: 'Reset Password',
-                        onTap: () async {
-                          if (ctrl.text.length < 6) return;
-                          Navigator.pop(ctx);
-                          try {
-                            final dio = createDioClient(ref.read(authProvider).token);
-                            await dio.post(
-                              '/admin/users/$id/reset-password',
-                              data: {'newPassword': ctrl.text},
-                              options: Options(headers: {'Idempotency-Key': newIdempotencyKey('reset-pwd-$id')}),
-                            );
-                            if (context.mounted) _showSuccess(context, 'Password reset successfully');
-                          } catch (e) {
-                            if (context.mounted) _showError(context, describeApiError(e));
-                          }
-                        },
-                      ),
-                    ]),
-                  ),
-                );
-              },
+              onTap: () => showModalBottomSheet(
+                context: context,
+                backgroundColor: slateCard,
+                isScrollControlled: true,
+                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+                builder: (_) => _ResetPasswordSheet(userId: id, userName: user['name'] as String? ?? ''),
+              ),
               child: const Icon(Icons.lock_reset_outlined, color: textSecondary, size: 16),
             ),
             const SizedBox(width: 8),
@@ -916,6 +820,177 @@ class _StaffCard extends ConsumerWidget {
       ]),
     ).animate().fadeIn(duration: 250.ms);
   }
+}
+
+// ── Edit user sheet (was inline StatefulBuilder with leaking controllers) ────
+class _EditUserSheet extends ConsumerStatefulWidget {
+  final Map<String, dynamic> user;
+  const _EditUserSheet({required this.user});
+  @override
+  ConsumerState<_EditUserSheet> createState() => _EditUserSheetState();
+}
+
+class _EditUserSheetState extends ConsumerState<_EditUserSheet> {
+  late final TextEditingController _nameCtrl;
+  late final String _userId;
+  late final String _idempotencyKey;
+  late String _role;
+  String? _branchId;
+  bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _userId = (widget.user['_id'] as String?) ?? '';
+    _nameCtrl = TextEditingController(text: widget.user['name'] as String? ?? '');
+    _role = widget.user['role'] as String? ?? 'waiter';
+    _branchId = widget.user['branchId'] as String?;
+    _idempotencyKey = newIdempotencyKey('edit-user-$_userId');
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_submitting) return;
+    if (_nameCtrl.text.trim().isEmpty) return;
+    setState(() => _submitting = true);
+    try {
+      final dio = createDioClient(ref.read(authProvider).token);
+      await dio.patch(
+        '/users/$_userId',
+        data: {'name': _nameCtrl.text.trim(), 'role': _role, 'branchId': _branchId},
+        options: Options(headers: {'Idempotency-Key': _idempotencyKey}),
+      );
+      ref.invalidate(_staffProvider);
+      if (mounted) {
+        Navigator.pop(context);
+        _showSuccess(context, 'Staff updated');
+      }
+    } catch (e) {
+      if (mounted) _showError(context, describeApiError(e));
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final branchesAsync = ref.watch(_branchesProvider);
+    return Padding(
+      padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 24),
+      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('Edit — ${widget.user['name'] ?? ''}',
+            style: const TextStyle(color: textPrimary, fontSize: 15, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 16),
+        _InputField(ctrl: _nameCtrl, label: 'Full Name'),
+        const SizedBox(height: 10),
+        DropdownButtonFormField<String>(
+          value: _role,
+          dropdownColor: slateSurface,
+          style: const TextStyle(color: textPrimary),
+          decoration: _inputDec('Role'),
+          items: ['manager', 'waiter', 'chef', 'cashier']
+              .map((r) => DropdownMenuItem(value: r, child: Text(r.toUpperCase())))
+              .toList(),
+          onChanged: (v) => setState(() => _role = v ?? _role),
+        ),
+        const SizedBox(height: 10),
+        branchesAsync.when(
+          loading: () => const SizedBox.shrink(),
+          error: (_, __) => const SizedBox.shrink(),
+          data: (branches) => DropdownButtonFormField<String>(
+            value: _branchId,
+            dropdownColor: slateSurface,
+            style: const TextStyle(color: textPrimary),
+            decoration: _inputDec('Branch'),
+            items: [
+              const DropdownMenuItem(value: null, child: Text('No Branch')),
+              ...branches.map((b) => DropdownMenuItem(
+                value: b['_id'] as String,
+                child: Text(b['name'] as String? ?? ''),
+              )),
+            ],
+            onChanged: (v) => setState(() => _branchId = v),
+          ),
+        ),
+        const SizedBox(height: 16),
+        _PrimaryButton(
+          label: _submitting ? 'Saving…' : 'Save Changes',
+          onTap: _submitting ? () {} : _save,
+        ),
+      ]),
+    );
+  }
+}
+
+// ── Reset password sheet ─────────────────────────────────────────────────────
+class _ResetPasswordSheet extends ConsumerStatefulWidget {
+  final String userId;
+  final String userName;
+  const _ResetPasswordSheet({required this.userId, required this.userName});
+  @override
+  ConsumerState<_ResetPasswordSheet> createState() => _ResetPasswordSheetState();
+}
+
+class _ResetPasswordSheetState extends ConsumerState<_ResetPasswordSheet> {
+  late final TextEditingController _ctrl;
+  late final String _idempotencyKey;
+  bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController();
+    _idempotencyKey = newIdempotencyKey('reset-pwd-${widget.userId}');
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_submitting) return;
+    if (_ctrl.text.length < 6) return;
+    setState(() => _submitting = true);
+    try {
+      final dio = createDioClient(ref.read(authProvider).token);
+      await dio.post(
+        '/admin/users/${widget.userId}/reset-password',
+        data: {'newPassword': _ctrl.text},
+        options: Options(headers: {'Idempotency-Key': _idempotencyKey}),
+      );
+      if (mounted) {
+        Navigator.pop(context);
+        _showSuccess(context, 'Password reset successfully');
+      }
+    } catch (e) {
+      if (mounted) _showError(context, describeApiError(e));
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 24),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Reset Password — ${widget.userName}',
+              style: const TextStyle(color: textPrimary, fontSize: 15, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 16),
+          _InputField(ctrl: _ctrl, label: 'New Password (min 6 chars)', obscure: true),
+          const SizedBox(height: 16),
+          _PrimaryButton(
+            label: _submitting ? 'Resetting…' : 'Reset Password',
+            onTap: _submitting ? () {} : _submit,
+          ),
+        ]),
+      );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1854,71 +1929,12 @@ class _BranchCard extends ConsumerWidget {
   }
 
   void _showEditSheet(BuildContext context, WidgetRef ref, String id) {
-    final nameCtrl = TextEditingController(text: branch['name'] as String? ?? '');
-    final addrCtrl = TextEditingController(text: branch['address'] as String? ?? '');
-    final slugCtrl = TextEditingController(text: branch['slug'] as String? ?? '');
-    final gstCtrl = TextEditingController(
-        text: (((branch['gstRate'] as num? ?? 0.18) * 100)).toStringAsFixed(0));
-    bool isActive = branch['isActive'] as bool? ?? true;
-
     showModalBottomSheet(
       context: context,
       backgroundColor: slateCard,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) => Padding(
-          padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Edit — ${branch['name'] ?? ''}',
-                style: const TextStyle(color: textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 16),
-            _InputField(ctrl: nameCtrl, label: 'Branch Name'),
-            const SizedBox(height: 10),
-            _InputField(ctrl: addrCtrl, label: 'Address'),
-            const SizedBox(height: 10),
-            _InputField(ctrl: slugCtrl, label: 'Slug'),
-            const SizedBox(height: 10),
-            _InputField(ctrl: gstCtrl, label: 'GST Rate (%)',
-                keyboardType: const TextInputType.numberWithOptions(decimal: true)),
-            const SizedBox(height: 10),
-            Row(children: [
-              const Text('Active', style: TextStyle(color: textPrimary, fontSize: 13)),
-              const Spacer(),
-              Switch(
-                value: isActive,
-                onChanged: (v) => setState(() => isActive = v),
-                activeThumbColor: copperAccent,
-                inactiveThumbColor: textSecondary,
-                inactiveTrackColor: slateSurface,
-              ),
-            ]),
-            const SizedBox(height: 16),
-            _PrimaryButton(
-              label: 'Save Changes',
-              onTap: () async {
-                if (nameCtrl.text.trim().isEmpty) return;
-                Navigator.pop(ctx);
-                try {
-                  final dio = createDioClient(ref.read(authProvider).token);
-                  final gstPct = double.tryParse(gstCtrl.text);
-                  await dio.patch('/branches/$id', data: {
-                    'name': nameCtrl.text.trim(),
-                    'address': addrCtrl.text.trim(),
-                    'slug': slugCtrl.text.trim(),
-                    if (gstPct != null) 'gstRate': gstPct / 100,
-                    'isActive': isActive,
-                  }, options: Options(headers: {'Idempotency-Key': newIdempotencyKey('edit-branch-$id')}));
-                  ref.invalidate(_branchesProvider);
-                  if (context.mounted) _showSuccess(context, 'Branch updated');
-                } catch (e) {
-                  if (context.mounted) _showError(context, describeApiError(e));
-                }
-              },
-            ),
-          ]),
-        ),
-      ),
+      builder: (_) => _EditBranchSheet(branchId: id, branch: branch),
     );
   }
 
@@ -1932,6 +1948,111 @@ class _BranchCard extends ConsumerWidget {
       if (context.mounted) _showError(context, describeApiError(e));
     }
   }
+}
+
+// ── Edit branch sheet ────────────────────────────────────────────────────────
+class _EditBranchSheet extends ConsumerStatefulWidget {
+  final String branchId;
+  final Map<String, dynamic> branch;
+  const _EditBranchSheet({required this.branchId, required this.branch});
+  @override
+  ConsumerState<_EditBranchSheet> createState() => _EditBranchSheetState();
+}
+
+class _EditBranchSheetState extends ConsumerState<_EditBranchSheet> {
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _addrCtrl;
+  late final TextEditingController _slugCtrl;
+  late final TextEditingController _gstCtrl;
+  late final String _idempotencyKey;
+  late bool _isActive;
+  bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameCtrl = TextEditingController(text: widget.branch['name'] as String? ?? '');
+    _addrCtrl = TextEditingController(text: widget.branch['address'] as String? ?? '');
+    _slugCtrl = TextEditingController(text: widget.branch['slug'] as String? ?? '');
+    _gstCtrl = TextEditingController(
+        text: (((widget.branch['gstRate'] as num? ?? 0.18) * 100)).toStringAsFixed(0));
+    _isActive = widget.branch['isActive'] as bool? ?? true;
+    _idempotencyKey = newIdempotencyKey('edit-branch-${widget.branchId}');
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _addrCtrl.dispose();
+    _slugCtrl.dispose();
+    _gstCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_submitting) return;
+    if (_nameCtrl.text.trim().isEmpty) return;
+    setState(() => _submitting = true);
+    try {
+      final dio = createDioClient(ref.read(authProvider).token);
+      final gstPct = double.tryParse(_gstCtrl.text);
+      await dio.patch(
+        '/branches/${widget.branchId}',
+        data: {
+          'name': _nameCtrl.text.trim(),
+          'address': _addrCtrl.text.trim(),
+          'slug': _slugCtrl.text.trim(),
+          if (gstPct != null) 'gstRate': gstPct / 100,
+          'isActive': _isActive,
+        },
+        options: Options(headers: {'Idempotency-Key': _idempotencyKey}),
+      );
+      ref.invalidate(_branchesProvider);
+      if (mounted) {
+        Navigator.pop(context);
+        _showSuccess(context, 'Branch updated');
+      }
+    } catch (e) {
+      if (mounted) _showError(context, describeApiError(e));
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 24),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Edit — ${widget.branch['name'] ?? ''}',
+              style: const TextStyle(color: textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 16),
+          _InputField(ctrl: _nameCtrl, label: 'Branch Name'),
+          const SizedBox(height: 10),
+          _InputField(ctrl: _addrCtrl, label: 'Address'),
+          const SizedBox(height: 10),
+          _InputField(ctrl: _slugCtrl, label: 'Slug'),
+          const SizedBox(height: 10),
+          _InputField(ctrl: _gstCtrl, label: 'GST Rate (%)',
+              keyboardType: const TextInputType.numberWithOptions(decimal: true)),
+          const SizedBox(height: 10),
+          Row(children: [
+            const Text('Active', style: TextStyle(color: textPrimary, fontSize: 13)),
+            const Spacer(),
+            Switch(
+              value: _isActive,
+              onChanged: (v) => setState(() => _isActive = v),
+              activeThumbColor: copperAccent,
+              inactiveThumbColor: textSecondary,
+              inactiveTrackColor: slateSurface,
+            ),
+          ]),
+          const SizedBox(height: 16),
+          _PrimaryButton(
+            label: _submitting ? 'Saving…' : 'Save Changes',
+            onTap: _submitting ? () {} : _save,
+          ),
+        ]),
+      );
 }
 
 class _FeatureToggleRow extends StatelessWidget {

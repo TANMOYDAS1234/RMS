@@ -58,8 +58,24 @@ class SyncEngine {
   final _uuid = const Uuid();
   StreamSubscription? _connectivitySub;
   bool _isSyncing = false;
+  bool _initialized = false;
+
+  /// Callback supplying the current auth token. Wired once by main.dart
+  /// after the auth provider is ready. Returning null means "skip the
+  /// flush, we'll come back once the user is signed in" — that prevents
+  /// queued mutations from replaying unauthenticated and dead-lettering.
+  String? Function()? _tokenProvider;
+
+  void setTokenProvider(String? Function() provider) {
+    _tokenProvider = provider;
+  }
 
   Future<void> init() async {
+    // Guard against double-init from rebuilds — previously every widget
+    // rebuild re-opened the Hive box and stacked connectivity listeners.
+    if (_initialized) return;
+    _initialized = true;
+
     _box = await Hive.openBox<String>(_boxName);
     _connectivitySub = Connectivity()
         .onConnectivityChanged
@@ -88,10 +104,16 @@ class SyncEngine {
   }
 
   Future<void> flushQueue() async {
-    if (_isSyncing || _box.isEmpty) return;
-    _isSyncing = true;
+    if (_isSyncing || !_initialized || _box.isEmpty) return;
 
-    final dio = createDioClient(null); // inject token in real impl
+    // Without a token, every queued mutation would 401 on replay and
+    // dead-letter after maxRetries. Bail and wait for sign-in — the auth
+    // notifier triggers flush() once login succeeds.
+    final token = _tokenProvider?.call();
+    if (token == null) return;
+
+    _isSyncing = true;
+    final dio = createDioClient(token);
     final keys = _box.keys.toList();
 
     for (final key in keys) {

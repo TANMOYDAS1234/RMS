@@ -1,9 +1,19 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../core/network/dio_client.dart';
+import '../../core/utils/idempotency.dart';
+
+/// Keychain (iOS) / Keystore (Android) / OS-encrypted credential vault (Win/macOS/Linux).
+/// Replaces the previous plaintext Hive box. The first run after upgrade migrates
+/// any token sitting in the old Hive box and then deletes it.
+const _secureStorage = FlutterSecureStorage();
+const _kTokenKey = 'auth_token';
+const _kUserKey = 'auth_user';
 
 class AuthState {
   final UserEntity? user;
@@ -39,16 +49,43 @@ class AuthState {
 
 class AuthNotifier extends StateNotifier<AuthState> {
   static const _boxName = 'auth';
+  StreamSubscription<void>? _unauthorizedSub;
 
   AuthNotifier() : super(const AuthState()) {
     _restoreSession();
+    // Any request that returns 401 logs the user out automatically so the
+    // UI stops sitting in a half-authenticated zombie state.
+    _unauthorizedSub = unauthorizedEvents.stream.listen((_) {
+      if (state.isAuthenticated) logout();
+    });
+  }
+
+  @override
+  void dispose() {
+    _unauthorizedSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _restoreSession() async {
     try {
-      final box = await Hive.openBox<String>(_boxName);
-      final token = box.get('token');
-      final userJson = box.get('user');
+      // 1. Try secure storage first.
+      var token = await _secureStorage.read(key: _kTokenKey);
+      var userJson = await _secureStorage.read(key: _kUserKey);
+
+      // 2. Fall back to the legacy plaintext Hive box and migrate.
+      if (token == null || userJson == null) {
+        final box = await Hive.openBox<String>(_boxName);
+        final legacyToken = box.get('token');
+        final legacyUser = box.get('user');
+        if (legacyToken != null && legacyUser != null) {
+          await _secureStorage.write(key: _kTokenKey, value: legacyToken);
+          await _secureStorage.write(key: _kUserKey, value: legacyUser);
+          await box.deleteAll(['token', 'user']);
+          token = legacyToken;
+          userJson = legacyUser;
+        }
+      }
+
       if (token != null && userJson != null) {
         final user = _parseUser(jsonDecode(userJson));
         state = AuthState(user: user, token: token, isRestoring: false);
@@ -65,14 +102,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final res = await dio.post(
         '/auth/login',
         data: {'email': email.trim().toLowerCase(), 'password': password},
-        options: Options(headers: {'Idempotency-Key': 'login-${email.hashCode}'}),
+        options: Options(headers: {
+          'Idempotency-Key': newIdempotencyKey('login'),
+        }),
       );
       final token = res.data['accessToken'] as String;
       final user = _parseUser(res.data['user']);
 
-      final box = await Hive.openBox<String>(_boxName);
-      await box.put('token', token);
-      await box.put('user', jsonEncode(res.data['user']));
+      await _secureStorage.write(key: _kTokenKey, value: token);
+      await _secureStorage.write(
+          key: _kUserKey, value: jsonEncode(res.data['user']));
 
       state = AuthState(user: user, token: token, isRestoring: false);
       return true;
@@ -90,8 +129,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> logout() async {
-    final box = await Hive.openBox<String>(_boxName);
-    await box.deleteAll(['token', 'user']);
+    await _secureStorage.delete(key: _kTokenKey);
+    await _secureStorage.delete(key: _kUserKey);
+    // Also clear the legacy Hive box in case a migration was pending.
+    try {
+      final box = await Hive.openBox<String>(_boxName);
+      await box.deleteAll(['token', 'user']);
+    } catch (_) {}
     state = const AuthState(isRestoring: false);
   }
 
@@ -103,6 +147,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           (r) => r.name == data['role'],
           orElse: () => UserRole.waiter,
         ),
+        branchId: data['branchId'] as String?,
       );
 }
 

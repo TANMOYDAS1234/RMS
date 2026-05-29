@@ -1,7 +1,14 @@
 // ─── Dio HTTP Client ─────────────────────────────────────────────────────────
 
+import 'dart:async';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../config/app_config.dart';
+
+/// Fires when any request returns 401. Subscribers (auth provider) should
+/// clear local session state and route to login.
+final StreamController<void> unauthorizedEvents =
+    StreamController<void>.broadcast();
 
 Dio createDioClient(String? authToken) {
   final dio = Dio(
@@ -16,10 +23,13 @@ Dio createDioClient(String? authToken) {
     ),
   );
 
-  dio.interceptors.addAll([
-    _RetryInterceptor(dio),
-    LogInterceptor(requestBody: true, responseBody: true),
-  ]);
+  dio.interceptors.add(_RetryInterceptor(dio));
+  dio.interceptors.add(_UnauthorizedInterceptor());
+  // Only log request/response bodies in debug builds — release builds would
+  // otherwise spill passwords, JWTs, and Bearer tokens into device logs.
+  if (kDebugMode) {
+    dio.interceptors.add(LogInterceptor(requestBody: true, responseBody: true));
+  }
 
   return dio;
 }
@@ -48,10 +58,26 @@ class _RetryInterceptor extends Interceptor {
     return handler.next(err);
   }
 
-  bool _shouldRetry(DioException err) =>
-      err.type == DioExceptionType.connectionTimeout ||
-      err.type == DioExceptionType.receiveTimeout ||
-      err.type == DioExceptionType.connectionError ||
-      (err.response?.statusCode != null &&
-          err.response!.statusCode! >= 500);
+  bool _shouldRetry(DioException err) {
+    // Never retry 4xx — those are deterministic client errors.
+    final status = err.response?.statusCode;
+    if (status != null && status >= 400 && status < 500) return false;
+    return err.type == DioExceptionType.connectionTimeout ||
+        err.type == DioExceptionType.receiveTimeout ||
+        err.type == DioExceptionType.connectionError ||
+        (status != null && status >= 500);
+  }
+}
+
+/// Surfaces 401s to a global stream so auth providers can react (clear
+/// session, route to /login). Without this, an expired token silently
+/// failed every request and the UI looked logged-in-but-broken.
+class _UnauthorizedInterceptor extends Interceptor {
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) {
+    if (err.response?.statusCode == 401) {
+      if (!unauthorizedEvents.isClosed) unauthorizedEvents.add(null);
+    }
+    handler.next(err);
+  }
 }

@@ -14,6 +14,7 @@ import 'presentation/screens/kitchen_screen.dart';
 import 'presentation/screens/billing_screen.dart';
 import 'presentation/screens/inventory_screen.dart';
 import 'presentation/screens/admin_screen.dart';
+import 'presentation/screens/manager_shell.dart';
 import 'presentation/screens/qr_ordering_screen.dart';
 import 'presentation/screens/admin_profile_screen.dart';
 import 'presentation/state/auth_provider.dart';
@@ -29,12 +30,30 @@ void main() async {
   runApp(const ProviderScope(child: RmsApp()));
 }
 
-class RmsApp extends ConsumerWidget {
+class RmsApp extends ConsumerStatefulWidget {
   const RmsApp({super.key});
+  @override
+  ConsumerState<RmsApp> createState() => _RmsAppState();
+}
+
+class _RmsAppState extends ConsumerState<RmsApp> {
+  @override
+  void initState() {
+    super.initState();
+    final engine = ref.read(syncEngineProvider);
+    // Token provider is read on each flush — picks up the current value.
+    engine.setTokenProvider(() => ref.read(authProvider).token);
+    engine.init();
+    // Flush any queued offline mutations once the user signs in.
+    ref.listenManual(authProvider, (prev, next) {
+      if (next.isAuthenticated && prev?.isAuthenticated != true) {
+        engine.flushQueue();
+      }
+    });
+  }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    ref.read(syncEngineProvider).init();
+  Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
 
     if (auth.isRestoring) {
@@ -121,11 +140,8 @@ class _MainShellState extends ConsumerState<MainShell> {
             const _TabDef('Branches',  Icons.store_outlined,        Icons.store,        AdminBranchesTab()),
             const _TabDef('System',    Icons.settings_outlined,     Icons.settings,     AdminSystemTab()),
           ],
-        UserRole.manager => [
-            const _TabDef('Dashboard', Icons.dashboard_outlined,            Icons.dashboard,            DashboardScreen()),
-            const _TabDef('Kitchen',   Icons.restaurant_outlined,           Icons.restaurant,           KitchenScreen()),
-            const _TabDef('Billing',   Icons.receipt_long_outlined,         Icons.receipt_long,         BillingScreen()),
-            const _TabDef('Inventory', Icons.inventory_2_outlined,          Icons.inventory_2,          InventoryScreen()),
+        UserRole.manager => const [
+            _TabDef('Manager', Icons.manage_accounts_outlined, Icons.manage_accounts, ManagerShell()),
           ],
         UserRole.waiter => [
             const _TabDef('Orders',  Icons.receipt_outlined,      Icons.receipt,      DashboardScreen()),

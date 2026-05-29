@@ -444,33 +444,54 @@ class _ComplaintSummary extends StatelessWidget {
 }
 
 // ── Complaint card ────────────────────────────────────────────────────────────
-class _ComplaintCard extends StatelessWidget {
+class _ComplaintCard extends ConsumerWidget {
   final Map<String, dynamic> complaint;
   const _ComplaintCard({required this.complaint});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final tableLabel = complaint['tableLabel'] as String? ?? '';
     final issue      = complaint['issue'] as String? ?? '';
     final at         = complaint['at'] != null
         ? DateTime.tryParse(complaint['at'].toString())
         : null;
+    final orderId     = complaint['orderId']?.toString();
+    final complaintId = complaint['complaintId']?.toString();
+    final resolved    = complaint['resolved'] as bool? ?? false;
 
-    // Parse category from issue string
-    String category = 'Other';
-    Color catColor  = textSecondary;
-    for (final cat in _categories) {
-      if (issue.contains(cat)) {
-        category = cat;
-        catColor = _categoryColors[cat] ?? textSecondary;
-        break;
+    // Prefer the structured fields from the new backend; fall back to
+    // string-prefix parsing for entries logged before the schema change.
+    String category;
+    Color catColor;
+    String severity;
+    Color sevColor;
+    String cleanIssue = issue;
+
+    final structuredCat = complaint['category'] as String?;
+    if (structuredCat != null && structuredCat.isNotEmpty && structuredCat != 'general') {
+      category = structuredCat;
+      catColor = _categoryColors[structuredCat] ?? textSecondary;
+    } else {
+      category = 'Other';
+      catColor = textSecondary;
+      for (final cat in _categories) {
+        if (issue.contains(cat)) {
+          category = cat;
+          catColor = _categoryColors[cat] ?? textSecondary;
+          break;
+        }
       }
     }
 
-    // Parse severity
-    String severity = 'medium';
-    Color sevColor  = amber;
-    if (issue.contains('HIGH')) {
+    final structuredSev = complaint['severity'] as String?;
+    if (structuredSev != null && structuredSev.isNotEmpty) {
+      severity = structuredSev.toUpperCase();
+      sevColor = switch (structuredSev.toLowerCase()) {
+        'high' => crimson,
+        'low'  => emerald,
+        _      => amber,
+      };
+    } else if (issue.contains('HIGH')) {
       severity = 'HIGH';
       sevColor = crimson;
     } else if (issue.contains('LOW')) {
@@ -481,9 +502,9 @@ class _ComplaintCard extends StatelessWidget {
       sevColor = amber;
     }
 
-    // Clean issue text (remove prefix)
-    final cleanIssue = issue.replaceAll(
-        RegExp(r'\[.*?\]\s*'), '');
+    if (structuredCat == null) {
+      cleanIssue = issue.replaceAll(RegExp(r'\[.*?\]\s*'), '');
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -491,7 +512,10 @@ class _ComplaintCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: slateCard,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: catColor.withValues(alpha: 0.2)),
+        border: Border.all(
+            color: resolved
+                ? emerald.withValues(alpha: 0.3)
+                : catColor.withValues(alpha: 0.2)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
@@ -507,34 +531,48 @@ class _ComplaintCard extends StatelessWidget {
                 overflow: TextOverflow.ellipsis),
           ),
           const SizedBox(width: 6),
-          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          if (resolved)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
               decoration: BoxDecoration(
-                color: sevColor.withValues(alpha: 0.12),
+                color: emerald.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(6),
               ),
-              child: Text(severity,
+              child: const Text('RESOLVED',
                   style: TextStyle(
-                      color: sevColor,
+                      color: emerald,
                       fontSize: 9,
                       fontWeight: FontWeight.w700)),
-            ),
-            const SizedBox(height: 3),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-              decoration: BoxDecoration(
-                color: catColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(6),
+            )
+          else
+            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: sevColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(severity,
+                    style: TextStyle(
+                        color: sevColor,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700)),
               ),
-              child: Text(category,
-                  style: TextStyle(
-                      color: catColor,
-                      fontSize: 9,
-                      fontWeight: FontWeight.w600),
-                  overflow: TextOverflow.ellipsis),
-            ),
-          ]),
+              const SizedBox(height: 3),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: catColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(category,
+                    style: TextStyle(
+                        color: catColor,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w600),
+                    overflow: TextOverflow.ellipsis),
+              ),
+            ]),
         ]),
         const SizedBox(height: 8),
         Text(cleanIssue.isEmpty ? issue : cleanIssue,
@@ -550,9 +588,175 @@ class _ComplaintCard extends StatelessWidget {
                     color: textSecondary, fontSize: 10)),
           ]),
         ],
+        if (!resolved && orderId != null && complaintId != null) ...[
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerRight,
+            child: GestureDetector(
+              onTap: () =>
+                  _openResolveSheet(context, ref, orderId, complaintId, tableLabel),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: emerald.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: emerald.withValues(alpha: 0.3)),
+                ),
+                child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.check_circle_outline, color: emerald, size: 13),
+                  SizedBox(width: 5),
+                  Text('Mark Resolved',
+                      style: TextStyle(
+                          color: emerald,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700)),
+                ]),
+              ),
+            ),
+          ),
+        ],
       ]),
     ).animate().fadeIn(duration: 250.ms);
   }
+
+  void _openResolveSheet(BuildContext context, WidgetRef ref, String orderId,
+      String complaintId, String tableLabel) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: slateCard,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (_) => _ResolveComplaintSheet(
+        orderId: orderId,
+        complaintId: complaintId,
+        tableLabel: tableLabel,
+      ),
+    );
+  }
+}
+
+class _ResolveComplaintSheet extends ConsumerStatefulWidget {
+  final String orderId;
+  final String complaintId;
+  final String tableLabel;
+  const _ResolveComplaintSheet({
+    required this.orderId,
+    required this.complaintId,
+    required this.tableLabel,
+  });
+
+  @override
+  ConsumerState<_ResolveComplaintSheet> createState() =>
+      _ResolveComplaintSheetState();
+}
+
+class _ResolveComplaintSheetState
+    extends ConsumerState<_ResolveComplaintSheet> {
+  late final TextEditingController _ctrl;
+  late final String _idempotencyKey;
+  bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController();
+    _idempotencyKey =
+        newIdempotencyKey('resolve-complaint-${widget.complaintId}');
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_submitting) return;
+    final resolution = _ctrl.text.trim();
+    if (resolution.isEmpty) return;
+    setState(() => _submitting = true);
+    try {
+      final dio = createDioClient(ref.read(authProvider).token);
+      await dio.patch(
+        '/manager/complaints/resolve',
+        data: {
+          'orderId': widget.orderId,
+          'complaintId': widget.complaintId,
+          'resolution': resolution,
+        },
+        options: Options(headers: {'Idempotency-Key': _idempotencyKey}),
+      );
+      ref.invalidate(_complaintsProvider);
+      if (mounted) {
+        Navigator.pop(context);
+        _snack(context, 'Complaint resolved', emerald);
+      }
+    } catch (e) {
+      if (mounted) _snack(context, describeApiError(e), crimson);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: EdgeInsets.fromLTRB(
+            24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 24),
+        child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Resolve Complaint — ${widget.tableLabel}',
+                  style: const TextStyle(
+                      color: textPrimary,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700)),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _ctrl,
+                maxLines: 3,
+                style: const TextStyle(color: textPrimary),
+                decoration: InputDecoration(
+                  hintText: 'How was this resolved? (e.g. comped meal, replaced dish)',
+                  hintStyle:
+                      const TextStyle(color: textSecondary, fontSize: 12),
+                  filled: true,
+                  fillColor: slateSurface,
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: dividerColor)),
+                  enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: dividerColor)),
+                  focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: emerald)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              GestureDetector(
+                onTap: _submitting ? null : _submit,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                        colors: [emerald, Color(0xFF26997C)]),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Center(
+                    child: Text(
+                        _submitting ? 'Saving…' : 'Mark Resolved',
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14)),
+                  ),
+                ),
+              ),
+            ]),
+      );
 }
 
 // ── Severity chip ─────────────────────────────────────────────────────────────

@@ -3,11 +3,32 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../../core/config/app_theme.dart';
 import '../../core/network/dio_client.dart';
+import '../../core/utils/api_error.dart';
 import '../state/auth_provider.dart';
 
-// ── Providers ─────────────────────────────────────────────────────────────────
+/// Date range selected via the picker. Drives all analytics providers.
+/// Default: last 7 days.
+class DateRange {
+  final DateTime from;
+  final DateTime to;
+  const DateRange(this.from, this.to);
+
+  String get fromIso => from.toIso8601String();
+  String get toIso => to.toIso8601String();
+  String get label =>
+      '${DateFormat('dd MMM').format(from)} – ${DateFormat('dd MMM').format(to)}';
+}
+
+DateRange _defaultRange() {
+  final now = DateTime.now();
+  return DateRange(now.subtract(const Duration(days: 7)), now);
+}
+
+final reportsDateRangeProvider = StateProvider<DateRange>((_) => _defaultRange());
+
 final _operationalReportProvider =
     FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
   final token = ref.watch(authProvider).token;
@@ -19,24 +40,33 @@ final _operationalReportProvider =
 final _salesProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   final token = ref.watch(authProvider).token;
+  final range = ref.watch(reportsDateRangeProvider);
   final dio = createDioClient(token);
-  final res = await dio.get('/analytics/sales');
+  final res = await dio.get('/analytics/sales',
+      queryParameters: {'from': range.fromIso, 'to': range.toIso});
   return List<Map<String, dynamic>>.from(res.data);
 });
 
 final _peakHoursProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   final token = ref.watch(authProvider).token;
+  final range = ref.watch(reportsDateRangeProvider);
   final dio = createDioClient(token);
-  final res = await dio.get('/analytics/peak-hours');
+  final res = await dio.get('/analytics/peak-hours',
+      queryParameters: {'from': range.fromIso, 'to': range.toIso});
   return List<Map<String, dynamic>>.from(res.data);
 });
 
 final _topItemsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   final token = ref.watch(authProvider).token;
+  final range = ref.watch(reportsDateRangeProvider);
   final dio = createDioClient(token);
-  final res = await dio.get('/analytics/top-items?limit=5');
+  final res = await dio.get('/analytics/top-items', queryParameters: {
+    'limit': '5',
+    'from': range.fromIso,
+    'to': range.toIso,
+  });
   return List<Map<String, dynamic>>.from(res.data);
 });
 
@@ -50,6 +80,7 @@ class ManagerReportsTab extends ConsumerWidget {
     final salesAsync    = ref.watch(_salesProvider);
     final peakAsync     = ref.watch(_peakHoursProvider);
     final topAsync      = ref.watch(_topItemsProvider);
+    final range         = ref.watch(reportsDateRangeProvider);
 
     return RefreshIndicator(
       color: copperAccent,
@@ -63,12 +94,13 @@ class ManagerReportsTab extends ConsumerWidget {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
         children: [
-          // ── Today's operational summary ──────────────────────────────
+          _DateRangePicker(range: range),
+          const SizedBox(height: 20),
           _SectionTitle("Today's Summary"),
           const SizedBox(height: 10),
           reportAsync.when(
             loading: () => const _Skeleton(height: 160),
-            error: (e, _) => _ErrorBanner('$e'),
+            error: (e, _) => _ErrorBanner(describeApiError(e)),
             data: (r) => _TodaySummary(report: r),
           ),
           const SizedBox(height: 20),
@@ -91,11 +123,11 @@ class ManagerReportsTab extends ConsumerWidget {
           ),
 
           // ── Revenue chart (7 days) ───────────────────────────────────
-          const _SectionTitle('Revenue — Last 7 Days'),
+          const _SectionTitle('Revenue'),
           const SizedBox(height: 10),
           salesAsync.when(
             loading: () => const _Skeleton(),
-            error: (e, _) => _ErrorBanner('$e'),
+            error: (e, _) => _ErrorBanner(describeApiError(e)),
             data: (data) => _RevenueChart(data: data),
           ),
           const SizedBox(height: 20),
@@ -105,7 +137,7 @@ class ManagerReportsTab extends ConsumerWidget {
           const SizedBox(height: 10),
           peakAsync.when(
             loading: () => const _Skeleton(height: 120),
-            error: (e, _) => _ErrorBanner('$e'),
+            error: (e, _) => _ErrorBanner(describeApiError(e)),
             data: (data) => _PeakHoursChart(data: data),
           ),
           const SizedBox(height: 20),
@@ -115,7 +147,7 @@ class ManagerReportsTab extends ConsumerWidget {
           const SizedBox(height: 10),
           topAsync.when(
             loading: () => const _Skeleton(height: 120),
-            error: (e, _) => _ErrorBanner('$e'),
+            error: (e, _) => _ErrorBanner(describeApiError(e)),
             data: (items) => _TopItemsList(items: items),
           ),
           const SizedBox(height: 20),
@@ -142,6 +174,137 @@ class ManagerReportsTab extends ConsumerWidget {
       ),
     );
   }
+}
+
+// ── Date-range picker bar ─────────────────────────────────────────────────────
+class _DateRangePicker extends ConsumerWidget {
+  final DateRange range;
+  const _DateRangePicker({required this.range});
+
+  static const _presets = <_RangePreset>[
+    _RangePreset('Today', 0),
+    _RangePreset('7d', 7),
+    _RangePreset('30d', 30),
+    _RangePreset('90d', 90),
+  ];
+
+  bool _matchesPreset(_RangePreset preset, DateRange r) {
+    final now = DateTime.now();
+    final expectedFrom = now.subtract(Duration(days: preset.days));
+    return r.from.year == expectedFrom.year &&
+        r.from.month == expectedFrom.month &&
+        r.from.day == expectedFrom.day;
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: slateCard,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: dividerColor),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.calendar_today_outlined,
+              color: copperAccent, size: 14),
+          const SizedBox(width: 8),
+          Text(range.label,
+              style: const TextStyle(
+                  color: textPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700)),
+          const Spacer(),
+          GestureDetector(
+            onTap: () => _pickCustom(context, ref),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: copperAccent.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.date_range, color: copperAccent, size: 12),
+                SizedBox(width: 4),
+                Text('Custom',
+                    style: TextStyle(
+                        color: copperAccent,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700)),
+              ]),
+            ),
+          ),
+        ]),
+        const SizedBox(height: 10),
+        Row(
+          children: _presets.map((p) {
+            final selected = _matchesPreset(p, range);
+            return Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  final now = DateTime.now();
+                  ref.read(reportsDateRangeProvider.notifier).state =
+                      DateRange(now.subtract(Duration(days: p.days)), now);
+                },
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    color: selected
+                        ? copperAccent.withValues(alpha: 0.18)
+                        : slateSurface,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: selected ? copperAccent : dividerColor,
+                    ),
+                  ),
+                  child: Center(
+                    child: Text(p.label,
+                        style: TextStyle(
+                            color: selected ? copperAccent : textPrimary,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ]),
+    );
+  }
+
+  Future<void> _pickCustom(BuildContext context, WidgetRef ref) async {
+    final now = DateTime.now();
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(now.year - 2),
+      lastDate: now,
+      initialDateRange: DateTimeRange(start: range.from, end: range.to),
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx).copyWith(
+          colorScheme: const ColorScheme.dark(
+            primary: copperAccent,
+            onPrimary: Colors.white,
+            surface: slateCard,
+            onSurface: textPrimary,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked != null) {
+      ref.read(reportsDateRangeProvider.notifier).state =
+          DateRange(picked.start, picked.end);
+    }
+  }
+}
+
+class _RangePreset {
+  final String label;
+  final int days;
+  const _RangePreset(this.label, this.days);
 }
 
 // ── Today's summary card ──────────────────────────────────────────────────────
