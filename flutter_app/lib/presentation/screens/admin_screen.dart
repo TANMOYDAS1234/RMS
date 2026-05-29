@@ -1,6 +1,7 @@
 // ─── Admin Portal — Complete Production-Grade Screen ─────────────────────────
 // Tabs: Overview · Analytics · Staff · Orders · Billing · Inventory · System
 
+import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -13,6 +14,9 @@ import 'package:file_picker/file_picker.dart';
 import '../../core/config/app_config.dart';
 import '../../core/config/app_theme.dart';
 import '../../core/network/dio_client.dart';
+import '../../core/services/websocket_service.dart';
+import '../../core/utils/api_error.dart';
+import '../../core/utils/idempotency.dart';
 import '../state/auth_provider.dart';
 import '../state/order_providers.dart';
 
@@ -143,6 +147,18 @@ class AdminOverviewTab extends ConsumerWidget {
     final orders = ref.watch(liveOrdersProvider);
     final healthAsync = ref.watch(_systemHealthProvider);
     final finAsync = ref.watch(_financialSummaryProvider);
+
+    // Live data — refresh on relevant server pushes.
+    ref.listen(wsEventsProvider, (_, next) {
+      next.whenData((evt) {
+        if (evt.event == 'order:updated' ||
+            evt.event == 'order:created' ||
+            evt.event == 'table:updated') {
+          ref.invalidate(_systemHealthProvider);
+          ref.invalidate(_financialSummaryProvider);
+        }
+      });
+    });
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -589,62 +605,100 @@ class AdminStaffTab extends ConsumerWidget {
   }
 
   void _showAddStaffSheet(BuildContext context, WidgetRef ref) {
-    final nameCtrl = TextEditingController();
-    final emailCtrl = TextEditingController();
-    final passCtrl = TextEditingController();
-    String selectedRole = 'waiter';
-
     showModalBottomSheet(
       context: context,
       backgroundColor: slateCard,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) => Padding(
-          padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Add Staff Member', style: TextStyle(color: textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 16),
-            _InputField(ctrl: nameCtrl, label: 'Full Name'),
-            const SizedBox(height: 10),
-            _InputField(ctrl: emailCtrl, label: 'Email', keyboardType: TextInputType.emailAddress),
-            const SizedBox(height: 10),
-            _InputField(ctrl: passCtrl, label: 'Password', obscure: true),
-            const SizedBox(height: 10),
-            DropdownButtonFormField<String>(
-              value: selectedRole,
-              dropdownColor: slateSurface,
-              style: const TextStyle(color: textPrimary),
-              decoration: _inputDec('Role'),
-              items: ['manager', 'waiter', 'chef', 'cashier']
-                  .map((r) => DropdownMenuItem(value: r, child: Text(r.toUpperCase())))
-                  .toList(),
-              onChanged: (v) => setState(() => selectedRole = v ?? 'waiter'),
-            ),
-            const SizedBox(height: 16),
-            _PrimaryButton(
-              label: 'Create Account',
-              onTap: () async {
-                Navigator.pop(ctx);
-                try {
-                  final dio = createDioClient(ref.read(authProvider).token);
-                  await dio.post('/users', data: {
-                    'name': nameCtrl.text.trim(),
-                    'email': emailCtrl.text.trim().toLowerCase(),
-                    'password': passCtrl.text,
-                    'role': selectedRole,
-                  }, options: Options(headers: {'Idempotency-Key': 'create-user-${nameCtrl.text.trim()}-${DateTime.now().millisecondsSinceEpoch}'}));
-                  ref.invalidate(_staffProvider);
-                } catch (e) {
-                  if (context.mounted) _showError(context, '$e');
-                }
-              },
-            ),
-          ]),
-        ),
-      ),
+      builder: (_) => const _AddStaffSheet(),
     );
   }
+}
+
+class _AddStaffSheet extends ConsumerStatefulWidget {
+  const _AddStaffSheet();
+  @override
+  ConsumerState<_AddStaffSheet> createState() => _AddStaffSheetState();
+}
+
+class _AddStaffSheetState extends ConsumerState<_AddStaffSheet> {
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _emailCtrl;
+  late final TextEditingController _passCtrl;
+  late final String _idempotencyKey;
+  String _selectedRole = 'waiter';
+  bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameCtrl = TextEditingController();
+    _emailCtrl = TextEditingController();
+    _passCtrl = TextEditingController();
+    _idempotencyKey = newIdempotencyKey('create-user');
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _emailCtrl.dispose();
+    _passCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_submitting) return;
+    setState(() => _submitting = true);
+    try {
+      final dio = createDioClient(ref.read(authProvider).token);
+      await dio.post(
+        '/users',
+        data: {
+          'name': _nameCtrl.text.trim(),
+          'email': _emailCtrl.text.trim().toLowerCase(),
+          'password': _passCtrl.text,
+          'role': _selectedRole,
+        },
+        options: Options(headers: {'Idempotency-Key': _idempotencyKey}),
+      );
+      ref.invalidate(_staffProvider);
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) _showError(context, describeApiError(e));
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 24),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Add Staff Member', style: TextStyle(color: textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 16),
+          _InputField(ctrl: _nameCtrl, label: 'Full Name'),
+          const SizedBox(height: 10),
+          _InputField(ctrl: _emailCtrl, label: 'Email', keyboardType: TextInputType.emailAddress),
+          const SizedBox(height: 10),
+          _InputField(ctrl: _passCtrl, label: 'Password', obscure: true),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            value: _selectedRole,
+            dropdownColor: slateSurface,
+            style: const TextStyle(color: textPrimary),
+            decoration: _inputDec('Role'),
+            items: ['manager', 'waiter', 'chef', 'cashier']
+                .map((r) => DropdownMenuItem(value: r, child: Text(r.toUpperCase())))
+                .toList(),
+            onChanged: (v) => setState(() => _selectedRole = v ?? 'waiter'),
+          ),
+          const SizedBox(height: 16),
+          _PrimaryButton(
+            label: _submitting ? 'Creating…' : 'Create Account',
+            onTap: _submitting ? () {} : _submit,
+          ),
+        ]),
+      );
 }
 
 class _StaffCard extends ConsumerWidget {
@@ -692,10 +746,10 @@ class _StaffCard extends ConsumerWidget {
                 try {
                   final dio = createDioClient(ref.read(authProvider).token);
                   await dio.patch('/users/$id', data: {'isActive': !isActive},
-                      options: Options(headers: {'Idempotency-Key': 'toggle-user-$id-${DateTime.now().millisecondsSinceEpoch}'}));
+                      options: Options(headers: {'Idempotency-Key': newIdempotencyKey('toggle-user-$id')}));
                   ref.invalidate(_staffProvider);
                 } catch (e) {
-                  if (context.mounted) _showError(context, '$e');
+                  if (context.mounted) _showError(context, describeApiError(e));
                 }
               },
               child: Container(
@@ -709,13 +763,16 @@ class _StaffCard extends ConsumerWidget {
               onTap: () {
                 final nameCtrl = TextEditingController(text: user['name'] as String? ?? '');
                 String editRole = user['role'] as String? ?? 'waiter';
+                String? editBranchId = user['branchId'] as String?;
                 showModalBottomSheet(
                   context: context,
                   backgroundColor: slateCard,
                   isScrollControlled: true,
                   shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
                   builder: (ctx) => StatefulBuilder(
-                    builder: (ctx, setState) => Padding(
+                    builder: (ctx, setState) {
+                      final branchesAsync = ref.watch(_branchesProvider);
+                      return Padding(
                       padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
                       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
                         Text('Edit — ${user['name'] ?? ''}',
@@ -733,6 +790,25 @@ class _StaffCard extends ConsumerWidget {
                               .toList(),
                           onChanged: (v) => setState(() => editRole = v ?? editRole),
                         ),
+                        const SizedBox(height: 10),
+                        branchesAsync.when(
+                          loading: () => const SizedBox.shrink(),
+                          error: (_, __) => const SizedBox.shrink(),
+                          data: (branches) => DropdownButtonFormField<String>(
+                            value: editBranchId,
+                            dropdownColor: slateSurface,
+                            style: const TextStyle(color: textPrimary),
+                            decoration: _inputDec('Branch'),
+                            items: [
+                              const DropdownMenuItem(value: null, child: Text('No Branch')),
+                              ...branches.map((b) => DropdownMenuItem(
+                                value: b['_id'] as String,
+                                child: Text(b['name'] as String? ?? ''),
+                              )),
+                            ],
+                            onChanged: (v) => setState(() => editBranchId = v),
+                          ),
+                        ),
                         const SizedBox(height: 16),
                         _PrimaryButton(
                           label: 'Save Changes',
@@ -742,17 +818,18 @@ class _StaffCard extends ConsumerWidget {
                             try {
                               final dio = createDioClient(ref.read(authProvider).token);
                               await dio.patch('/users/$id',
-                                  data: {'name': nameCtrl.text.trim(), 'role': editRole},
-                                  options: Options(headers: {'Idempotency-Key': 'edit-user-$id-${DateTime.now().millisecondsSinceEpoch}'}));
+                                  data: {'name': nameCtrl.text.trim(), 'role': editRole, 'branchId': editBranchId},
+                                  options: Options(headers: {'Idempotency-Key': newIdempotencyKey('edit-user-$id')}));
                               ref.invalidate(_staffProvider);
                               if (context.mounted) _showSuccess(context, 'Staff updated');
                             } catch (e) {
-                              if (context.mounted) _showError(context, '$e');
+                              if (context.mounted) _showError(context, describeApiError(e));
                             }
                           },
                         ),
                       ]),
-                    ),
+                    );
+                    },
                   ),
                 );
               },
@@ -783,10 +860,14 @@ class _StaffCard extends ConsumerWidget {
                           Navigator.pop(ctx);
                           try {
                             final dio = createDioClient(ref.read(authProvider).token);
-                            await dio.post('/admin/users/$id/reset-password', data: {'newPassword': ctrl.text});
+                            await dio.post(
+                              '/admin/users/$id/reset-password',
+                              data: {'newPassword': ctrl.text},
+                              options: Options(headers: {'Idempotency-Key': newIdempotencyKey('reset-pwd-$id')}),
+                            );
                             if (context.mounted) _showSuccess(context, 'Password reset successfully');
                           } catch (e) {
-                            if (context.mounted) _showError(context, '$e');
+                            if (context.mounted) _showError(context, describeApiError(e));
                           }
                         },
                       ),
@@ -813,11 +894,14 @@ class _StaffCard extends ConsumerWidget {
                         Navigator.pop(context);
                         try {
                           final dio = createDioClient(ref.read(authProvider).token);
-                          await dio.delete('/users/$id');
+                          await dio.delete(
+                            '/users/$id',
+                            options: Options(headers: {'Idempotency-Key': newIdempotencyKey('del-user-$id')}),
+                          );
                           ref.invalidate(_staffProvider);
                           if (context.mounted) _showSuccess(context, 'Staff removed');
                         } catch (e) {
-                          if (context.mounted) _showError(context, '$e');
+                          if (context.mounted) _showError(context, describeApiError(e));
                         }
                       },
                       child: const Text('Remove', style: TextStyle(color: crimson, fontWeight: FontWeight.w700)),
@@ -921,11 +1005,15 @@ class _StaffAvatar extends ConsumerWidget {
       final formData = FormData.fromMap({
         'photo': await MultipartFile.fromFile(picked.path, filename: 'photo.jpg'),
       });
-      await dio.post('/users/$id/photo', data: formData);
+      await dio.post(
+        '/users/$id/photo',
+        data: formData,
+        options: Options(headers: {'Idempotency-Key': newIdempotencyKey('user-photo-$id')}),
+      );
       ref.invalidate(_staffProvider);
       if (context.mounted) _showSuccess(context, 'Photo updated');
     } catch (e) {
-      if (context.mounted) _showError(context, '$e');
+      if (context.mounted) _showError(context, describeApiError(e));
     }
   }
 }
@@ -940,6 +1028,14 @@ class AdminOrdersTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ordersAsync = ref.watch(_allOrdersProvider);
+
+    ref.listen(wsEventsProvider, (_, next) {
+      next.whenData((evt) {
+        if (evt.event == 'order:updated' || evt.event == 'order:created') {
+          ref.invalidate(_allOrdersProvider);
+        }
+      });
+    });
 
     return ordersAsync.when(
       loading: () => const Center(child: CircularProgressIndicator(color: copperAccent)),
@@ -1045,11 +1141,14 @@ class _AdminOrderCard extends ConsumerWidget {
               Navigator.pop(context);
               try {
                 final dio = createDioClient(ref.read(authProvider).token);
-                await dio.patch('/admin/orders/$id/force-close');
+                await dio.patch(
+                  '/admin/orders/$id/force-close',
+                  options: Options(headers: {'Idempotency-Key': newIdempotencyKey('force-close-$id')}),
+                );
                 ref.invalidate(_allOrdersProvider);
                 if (context.mounted) _showSuccess(context, 'Order force-closed');
               } catch (e) {
-                if (context.mounted) _showError(context, '$e');
+                if (context.mounted) _showError(context, describeApiError(e));
               }
             },
             child: const Text('Force Close', style: TextStyle(color: crimson, fontWeight: FontWeight.w700)),
@@ -1071,6 +1170,15 @@ class AdminBillingTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final txAsync = ref.watch(_transactionsProvider);
     final finAsync = ref.watch(_financialSummaryProvider);
+
+    ref.listen(wsEventsProvider, (_, next) {
+      next.whenData((evt) {
+        if (evt.event == 'order:updated') {
+          ref.invalidate(_transactionsProvider);
+          ref.invalidate(_financialSummaryProvider);
+        }
+      });
+    });
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -1218,12 +1326,15 @@ class _TransactionCard extends ConsumerWidget {
               Navigator.pop(context);
               try {
                 final dio = createDioClient(ref.read(authProvider).token);
-                await dio.patch('/admin/billing/$id/refund');
+                await dio.patch(
+                  '/admin/billing/$id/refund',
+                  options: Options(headers: {'Idempotency-Key': newIdempotencyKey('refund-$id')}),
+                );
                 ref.invalidate(_transactionsProvider);
                 ref.invalidate(_financialSummaryProvider);
                 if (context.mounted) _showSuccess(context, 'Refund processed');
               } catch (e) {
-                if (context.mounted) _showError(context, '$e');
+                if (context.mounted) _showError(context, describeApiError(e));
               }
             },
             child: const Text('Refund', style: TextStyle(color: crimson, fontWeight: FontWeight.w700)),
@@ -1347,11 +1458,11 @@ class AdminInventoryTab extends ConsumerWidget {
                   'currentStock': stock,
                   'lowStockThreshold': thresh,
                   'costPerUnit': double.tryParse(costCtrl.text) ?? 0,
-                }, options: Options(headers: {'Idempotency-Key': 'inv-create-$name-${DateTime.now().millisecondsSinceEpoch}'}));
+                }, options: Options(headers: {'Idempotency-Key': newIdempotencyKey('inv-create')}));
                 ref.invalidate(_inventoryAdminProvider);
                 if (context.mounted) _showSuccess(context, 'Item added');
               } catch (e) {
-                if (context.mounted) _showError(context, '$e');
+                if (context.mounted) _showError(context, describeApiError(e));
               }
             },
           ),
@@ -1416,11 +1527,14 @@ class _AdminInventoryCard extends ConsumerWidget {
                       Navigator.pop(context);
                       try {
                         final dio = createDioClient(ref.read(authProvider).token);
-                        await dio.delete('/inventory/$id');
+                        await dio.delete(
+                          '/inventory/$id',
+                          options: Options(headers: {'Idempotency-Key': newIdempotencyKey('del-inv-$id')}),
+                        );
                         ref.invalidate(_inventoryAdminProvider);
                         if (context.mounted) _showSuccess(context, 'Item deleted');
                       } catch (e) {
-                        if (context.mounted) _showError(context, '$e');
+                        if (context.mounted) _showError(context, describeApiError(e));
                       }
                     },
                     child: const Text('Delete', style: TextStyle(color: crimson, fontWeight: FontWeight.w700)),
@@ -1484,10 +1598,10 @@ class _AdminInventoryCard extends ConsumerWidget {
                 await dio.patch('/inventory/$id/adjust', data: {
                   'delta': delta,
                   'reason': reasonCtrl.text.isEmpty ? 'Admin adjustment' : reasonCtrl.text,
-                }, options: Options(headers: {'Idempotency-Key': 'adj-$id-${DateTime.now().millisecondsSinceEpoch}'}));
+                }, options: Options(headers: {'Idempotency-Key': newIdempotencyKey('inv-adj-$id')}));
                 ref.invalidate(_inventoryAdminProvider);
               } catch (e) {
-                if (context.mounted) _showError(context, '$e');
+                if (context.mounted) _showError(context, describeApiError(e));
               }
             },
           ),
@@ -1535,46 +1649,87 @@ class AdminBranchesTab extends ConsumerWidget {
   }
 
   void _showAddBranchSheet(BuildContext context, WidgetRef ref) {
-    final nameCtrl = TextEditingController();
-    final slugCtrl = TextEditingController();
-    final addrCtrl = TextEditingController();
     showModalBottomSheet(
       context: context,
       backgroundColor: slateCard,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
+      builder: (_) => const _AddBranchSheet(),
+    );
+  }
+}
+
+class _AddBranchSheet extends ConsumerStatefulWidget {
+  const _AddBranchSheet();
+  @override
+  ConsumerState<_AddBranchSheet> createState() => _AddBranchSheetState();
+}
+
+class _AddBranchSheetState extends ConsumerState<_AddBranchSheet> {
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _slugCtrl;
+  late final TextEditingController _addrCtrl;
+  late final String _idempotencyKey;
+  bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameCtrl = TextEditingController();
+    _slugCtrl = TextEditingController();
+    _addrCtrl = TextEditingController();
+    _idempotencyKey = newIdempotencyKey('create-branch');
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _slugCtrl.dispose();
+    _addrCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_submitting) return;
+    setState(() => _submitting = true);
+    try {
+      final dio = createDioClient(ref.read(authProvider).token);
+      await dio.post(
+        '/branches',
+        data: {
+          'name': _nameCtrl.text.trim(),
+          'slug': _slugCtrl.text.trim(),
+          'address': _addrCtrl.text.trim(),
+        },
+        options: Options(headers: {'Idempotency-Key': _idempotencyKey}),
+      );
+      ref.invalidate(_branchesProvider);
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) _showError(context, describeApiError(e));
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 24),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Text('Add Branch', style: TextStyle(color: textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
           const SizedBox(height: 16),
-          _InputField(ctrl: nameCtrl, label: 'Branch Name'),
+          _InputField(ctrl: _nameCtrl, label: 'Branch Name'),
           const SizedBox(height: 10),
-          _InputField(ctrl: slugCtrl, label: 'Slug (e.g. main-branch)'),
+          _InputField(ctrl: _slugCtrl, label: 'Slug (e.g. main-branch)'),
           const SizedBox(height: 10),
-          _InputField(ctrl: addrCtrl, label: 'Address'),
+          _InputField(ctrl: _addrCtrl, label: 'Address'),
           const SizedBox(height: 16),
           _PrimaryButton(
-            label: 'Create Branch',
-            onTap: () async {
-              Navigator.pop(ctx);
-              try {
-                final dio = createDioClient(ref.read(authProvider).token);
-                await dio.post('/branches', data: {
-                  'name': nameCtrl.text.trim(),
-                  'slug': slugCtrl.text.trim(),
-                  'address': addrCtrl.text.trim(),
-                }, options: Options(headers: {'Idempotency-Key': 'create-branch-${slugCtrl.text.trim()}-${DateTime.now().millisecondsSinceEpoch}'}));
-                ref.invalidate(_branchesProvider);
-              } catch (e) {
-                if (context.mounted) _showError(context, '$e');
-              }
-            },
+            label: _submitting ? 'Creating…' : 'Create Branch',
+            onTap: _submitting ? () {} : _submit,
           ),
         ]),
-      ),
-    );
-  }
+      );
 }
 
 class _BranchCard extends ConsumerWidget {
@@ -1631,11 +1786,14 @@ class _BranchCard extends ConsumerWidget {
                       Navigator.pop(context);
                       try {
                         final dio = createDioClient(ref.read(authProvider).token);
-                        await dio.delete('/branches/$id');
+                        await dio.delete(
+                          '/branches/$id',
+                          options: Options(headers: {'Idempotency-Key': newIdempotencyKey('del-branch-$id')}),
+                        );
                         ref.invalidate(_branchesProvider);
                         if (context.mounted) _showSuccess(context, 'Branch deleted');
                       } catch (e) {
-                        if (context.mounted) _showError(context, '$e');
+                        if (context.mounted) _showError(context, describeApiError(e));
                       }
                     },
                     child: const Text('Delete', style: TextStyle(color: crimson, fontWeight: FontWeight.w700)),
@@ -1750,11 +1908,11 @@ class _BranchCard extends ConsumerWidget {
                     'slug': slugCtrl.text.trim(),
                     if (gstPct != null) 'gstRate': gstPct / 100,
                     'isActive': isActive,
-                  }, options: Options(headers: {'Idempotency-Key': 'edit-branch-$id-${DateTime.now().millisecondsSinceEpoch}'}));
+                  }, options: Options(headers: {'Idempotency-Key': newIdempotencyKey('edit-branch-$id')}));
                   ref.invalidate(_branchesProvider);
                   if (context.mounted) _showSuccess(context, 'Branch updated');
                 } catch (e) {
-                  if (context.mounted) _showError(context, '$e');
+                  if (context.mounted) _showError(context, describeApiError(e));
                 }
               },
             ),
@@ -1768,10 +1926,10 @@ class _BranchCard extends ConsumerWidget {
     try {
       final dio = createDioClient(ref.read(authProvider).token);
       await dio.patch('/branches/$branchId/features', data: {feature: value},
-          options: Options(headers: {'Idempotency-Key': 'feat-$branchId-$feature-${DateTime.now().millisecondsSinceEpoch}'}));
+          options: Options(headers: {'Idempotency-Key': newIdempotencyKey('feat-$branchId-$feature-$value')}));
       ref.invalidate(_branchesProvider);
     } catch (e) {
-      if (context.mounted) _showError(context, '$e');
+      if (context.mounted) _showError(context, describeApiError(e));
     }
   }
 }
@@ -2113,7 +2271,8 @@ class _MenuManagementTabState extends ConsumerState<_MenuManagementTab> {
         text: (existing?['tags'] as List?)?.join(', ') ?? '');
     bool isVeg = existing?['isVeg'] as bool? ?? false;
     String? pickedImagePath;
-    String? pickedGlbPath;
+    Uint8List? pickedGlbBytes;
+    String? pickedGlbName;
 
     showModalBottomSheet(
       context: context,
@@ -2189,9 +2348,15 @@ class _MenuManagementTabState extends ConsumerState<_MenuManagementTab> {
                 final result = await FilePicker.platform.pickFiles(
                   type: FileType.custom,
                   allowedExtensions: ['glb'],
+                  withData: true,
                 );
-                final path = result?.files.single.path;
-                if (path != null) setState(() => pickedGlbPath = path);
+                final file = result?.files.single;
+                if (file != null && file.bytes != null) {
+                  setState(() {
+                    pickedGlbBytes = file.bytes;
+                    pickedGlbName = file.name;
+                  });
+                }
               },
               child: Container(
                 width: double.infinity,
@@ -2199,16 +2364,16 @@ class _MenuManagementTabState extends ConsumerState<_MenuManagementTab> {
                 decoration: BoxDecoration(
                   color: slateSurface,
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: pickedGlbPath != null ? copperAccent : dividerColor),
+                  border: Border.all(color: pickedGlbBytes != null ? copperAccent : dividerColor),
                 ),
                 child: Row(children: [
                   Icon(Icons.view_in_ar_outlined,
-                      color: pickedGlbPath != null ? copperAccent : textSecondary, size: 18),
+                      color: pickedGlbBytes != null ? copperAccent : textSecondary, size: 18),
                   const SizedBox(width: 10),
                   Text(
-                    pickedGlbPath != null ? '3D Model selected ✓' : 'Add 3D Model (.glb) (optional)',
+                    pickedGlbBytes != null ? '3D Model selected ✓' : 'Add 3D Model (.glb) (optional)',
                     style: TextStyle(
-                        color: pickedGlbPath != null ? copperAccent : textSecondary, fontSize: 13),
+                        color: pickedGlbBytes != null ? copperAccent : textSecondary, fontSize: 13),
                   ),
                 ]),
               ),
@@ -2239,30 +2404,38 @@ class _MenuManagementTabState extends ConsumerState<_MenuManagementTab> {
                   String? savedId = id;
                   if (id == null) {
                     final res = await dio.post('/menu', data: data,
-                        options: Options(headers: {'Idempotency-Key': 'menu-create-${nameCtrl.text.trim()}-${DateTime.now().millisecondsSinceEpoch}'}));
+                        options: Options(headers: {'Idempotency-Key': newIdempotencyKey('menu-create')}));
                     savedId = res.data['_id'] as String?;
                   } else {
                     await dio.patch('/menu/$id', data: data,
-                        options: Options(headers: {'Idempotency-Key': 'menu-edit-$id-${DateTime.now().millisecondsSinceEpoch}'}));
+                        options: Options(headers: {'Idempotency-Key': newIdempotencyKey('menu-edit-$id')}));
                   }
                   // Upload photo if picked
                   if (pickedImagePath != null && savedId != null) {
                     final formData = FormData.fromMap({
                       'image': await MultipartFile.fromFile(pickedImagePath!, filename: 'dish.jpg'),
                     });
-                    await dio.post('/menu/$savedId/image', data: formData);
+                    await dio.post(
+                      '/menu/$savedId/image',
+                      data: formData,
+                      options: Options(headers: {'Idempotency-Key': newIdempotencyKey('menu-image-$savedId')}),
+                    );
                   }
                   // Upload GLB if picked
-                  if (pickedGlbPath != null && savedId != null) {
+                  if (pickedGlbBytes != null && savedId != null) {
                     final formData = FormData.fromMap({
-                      'glb': await MultipartFile.fromFile(pickedGlbPath!, filename: 'model.glb'),
+                      'glb': MultipartFile.fromBytes(pickedGlbBytes!, filename: pickedGlbName ?? 'model.glb'),
                     });
-                    await dio.post('/menu/$savedId/glb', data: formData);
+                    await dio.post(
+                      '/menu/$savedId/glb',
+                      data: formData,
+                      options: Options(headers: {'Idempotency-Key': newIdempotencyKey('menu-glb-$savedId')}),
+                    );
                   }
                   ref.invalidate(_menuProvider(branchId));
                   if (context.mounted) _showSuccess(context, id == null ? 'Item created' : 'Item updated');
                 } catch (e) {
-                  if (context.mounted) _showError(context, '$e');
+                  if (context.mounted) _showError(context, describeApiError(e));
                 }
               },
             ),
@@ -2385,10 +2558,10 @@ class _MenuItemCard extends ConsumerWidget {
                   try {
                     final dio = createDioClient(ref.read(authProvider).token);
                     await dio.patch('/menu/$id', data: {'isAvailable': !isAvailable},
-                        options: Options(headers: {'Idempotency-Key': 'menu-toggle-$id-${DateTime.now().millisecondsSinceEpoch}'}));
+                        options: Options(headers: {'Idempotency-Key': newIdempotencyKey('menu-toggle-$id')}));
                     ref.invalidate(_menuProvider(branchId));
                   } catch (e) {
-                    if (context.mounted) _showError(context, '$e');
+                    if (context.mounted) _showError(context, describeApiError(e));
                   }
                 },
                 child: Container(
@@ -2433,11 +2606,14 @@ class _MenuItemCard extends ConsumerWidget {
                           Navigator.pop(context);
                           try {
                             final dio = createDioClient(ref.read(authProvider).token);
-                            await dio.delete('/menu/$id');
+                            await dio.delete(
+                              '/menu/$id',
+                              options: Options(headers: {'Idempotency-Key': newIdempotencyKey('del-menu-$id')}),
+                            );
                             ref.invalidate(_menuProvider(branchId));
                             if (context.mounted) _showSuccess(context, 'Item deleted');
                           } catch (e) {
-                            if (context.mounted) _showError(context, '$e');
+                            if (context.mounted) _showError(context, describeApiError(e));
                           }
                         },
                         child: const Text('Delete', style: TextStyle(color: crimson, fontWeight: FontWeight.w700)),
@@ -2467,19 +2643,24 @@ class _MenuItemCard extends ConsumerWidget {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['glb'],
+      withData: true,
     );
-    final path = result?.files.single.path;
-    if (path == null) return;
+    final file = result?.files.single;
+    if (file == null || file.bytes == null) return;
     try {
       final dio = createDioClient(ref.read(authProvider).token);
       final formData = FormData.fromMap({
-        'glb': await MultipartFile.fromFile(path, filename: 'model.glb'),
+        'glb': MultipartFile.fromBytes(file.bytes!, filename: file.name),
       });
-      await dio.post('/menu/$id/glb', data: formData);
+      await dio.post(
+        '/menu/$id/glb',
+        data: formData,
+        options: Options(headers: {'Idempotency-Key': newIdempotencyKey('menu-glb-$id')}),
+      );
       ref.invalidate(_menuProvider(branchId));
       if (context.mounted) _showSuccess(context, '3D model uploaded');
     } catch (e) {
-      if (context.mounted) _showError(context, '$e');
+      if (context.mounted) _showError(context, describeApiError(e));
     }
   }
 
@@ -2513,11 +2694,15 @@ class _MenuItemCard extends ConsumerWidget {
       final formData = FormData.fromMap({
         'image': await MultipartFile.fromFile(picked.path, filename: 'dish.jpg'),
       });
-      await dio.post('/menu/$id/image', data: formData);
+      await dio.post(
+        '/menu/$id/image',
+        data: formData,
+        options: Options(headers: {'Idempotency-Key': newIdempotencyKey('menu-image-$id')}),
+      );
       ref.invalidate(_menuProvider(branchId));
       if (context.mounted) _showSuccess(context, 'Photo updated');
     } catch (e) {
-      if (context.mounted) _showError(context, '$e');
+      if (context.mounted) _showError(context, describeApiError(e));
     }
   }
 }
