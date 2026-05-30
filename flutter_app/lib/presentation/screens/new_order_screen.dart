@@ -16,7 +16,14 @@ class NewOrderScreen extends ConsumerStatefulWidget {
 class _NewOrderScreenState extends ConsumerState<NewOrderScreen> {
   TableModel? _selectedTable;
   final Map<String, int> _cart = {}; // itemId → quantity
+  final TextEditingController _notesCtrl = TextEditingController();
   bool _submitting = false;
+
+  @override
+  void dispose() {
+    _notesCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -156,19 +163,81 @@ class _NewOrderScreenState extends ConsumerState<NewOrderScreen> {
           ),
         ],
       ),
-      floatingActionButton: _cart.isNotEmpty && _selectedTable != null
-          ? FloatingActionButton.extended(
-              backgroundColor: copperAccent,
-              foregroundColor: Colors.white,
-              icon: _submitting
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                  : const Icon(Icons.check),
-              label: const Text('Place Order', style: TextStyle(fontWeight: FontWeight.w700)),
-              onPressed: _submitting ? null : _placeOrder,
-            )
-          : null,
+      bottomNavigationBar: _cart.isEmpty
+          ? null
+          : _buildOrderFooter(context),
     );
   }
+
+  /// Footer with notes field + Place Order button. Used to be a FAB which
+  /// hid the notes; this layout keeps both visible while the cart has
+  /// items. Falls back to nothing when the cart is empty.
+  Widget _buildOrderFooter(BuildContext context) => Container(
+        padding: EdgeInsets.fromLTRB(
+            12, 10, 12, MediaQuery.of(context).viewInsets.bottom + 12),
+        decoration: const BoxDecoration(
+          color: slateCard,
+          border: Border(top: BorderSide(color: dividerColor)),
+        ),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(
+            controller: _notesCtrl,
+            style: const TextStyle(color: textPrimary, fontSize: 13),
+            maxLines: 2,
+            minLines: 1,
+            decoration: InputDecoration(
+              hintText: 'Notes (allergies, "no onions", VIP, …)',
+              hintStyle:
+                  const TextStyle(color: textSecondary, fontSize: 12),
+              filled: true,
+              fillColor: slateSurface,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: dividerColor),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: dividerColor),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: copperAccent),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12, vertical: 8),
+              prefixIcon: const Icon(Icons.note_alt_outlined,
+                  color: textSecondary, size: 18),
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              icon: _submitting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 2))
+                  : const Icon(Icons.check, size: 18),
+              label: Text(
+                _selectedTable == null ? 'Pick a table' : 'Place Order',
+                style: const TextStyle(
+                    fontWeight: FontWeight.w800, fontSize: 14),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: copperAccent,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 13),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed:
+                  (_submitting || _selectedTable == null) ? null : _placeOrder,
+            ),
+          ),
+        ]),
+      );
 
   Future<void> _placeOrder() async {
     if (_selectedTable == null || _cart.isEmpty) return;
@@ -186,11 +255,13 @@ class _NewOrderScreenState extends ConsumerState<NewOrderScreen> {
       };
     }).toList();
 
+    final notes = _notesCtrl.text.trim();
     await ref.read(liveOrdersProvider.notifier).createOrder(
-      tableId: _selectedTable!.id,
-      tableLabel: _selectedTable!.label,
-      items: items,
-    );
+          tableId: _selectedTable!.id,
+          tableLabel: _selectedTable!.label,
+          items: items,
+          notes: notes.isEmpty ? null : notes,
+        );
 
     if (mounted) Navigator.pop(context);
   }

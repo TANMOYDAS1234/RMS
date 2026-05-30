@@ -1,8 +1,10 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'core/config/app_config.dart';
 import 'core/config/app_theme.dart';
 import 'core/observability/sentry_bootstrap.dart';
 import 'core/services/sync_engine.dart';
@@ -44,19 +46,59 @@ class RmsApp extends ConsumerStatefulWidget {
 }
 
 class _RmsAppState extends ConsumerState<RmsApp> {
+  /// Most recent notification tap that hasn't been consumed by a screen
+  /// yet. main.dart watches this and routes to the correct tab on the
+  /// next rebuild — necessary because FCM messages can arrive before
+  /// the navigator is ready (cold start) or while the wrong tab is
+  /// mounted (background → foreground).
+  RemoteMessage? _pendingTap;
+
   @override
   void initState() {
     super.initState();
     final engine = ref.read(syncEngineProvider);
-    // Token provider is read on each flush — picks up the current value.
     engine.setTokenProvider(() => ref.read(authProvider).token);
     engine.init();
-    // Flush any queued offline mutations once the user signs in.
     ref.listenManual(authProvider, (prev, next) {
       if (next.isAuthenticated && prev?.isAuthenticated != true) {
         engine.flushQueue();
       }
     });
+
+    // Wire the FCM tap callback. Stash the message and rebuild — the
+    // MainShell will read _pendingTap on its next frame and switch to
+    // the right tab. We can't do navigation directly here because
+    // there's no BuildContext at this point.
+    FcmService.instance.onMessageOpened = (message) {
+      if (mounted) setState(() => _pendingTap = message);
+    };
+  }
+
+  /// Map a notification type to the index of the role's tab that should
+  /// be foregrounded when the user taps the notification.
+  int? _tabForMessage(RemoteMessage m, UserRole role) {
+    final type = m.data['type'];
+    switch (role) {
+      case UserRole.waiter:
+        // Waiter has Orders (0) and Kitchen (1) tabs. ORDER_READY belongs
+        // on the orders list so the waiter sees what's ready to pick up.
+        if (type == 'ORDER_READY' || type == 'ORDER_SERVED') return 0;
+        return 0;
+      case UserRole.chef:
+        // Chef has Kitchen (0) and Inventory (1). All order events route
+        // to Kitchen; LOW_STOCK to Inventory.
+        if (type == 'LOW_STOCK') return 1;
+        return 0;
+      case UserRole.cashier:
+        // Cashier has Orders (0) and Billing (1). SERVED + PAYMENT go
+        // to the billing tab.
+        if (type == 'ORDER_SERVED' || type == 'PAYMENT_RECEIVED') return 1;
+        return 0;
+      case UserRole.manager:
+      case UserRole.admin:
+      case UserRole.customer:
+        return null;
+    }
   }
 
   @override
@@ -86,13 +128,21 @@ class _RmsAppState extends ConsumerState<RmsApp> {
       );
     }
 
+    // Translate the pending FCM tap into a tab index for this user's role.
+    // Cleared on the way down so a stale tap doesn't get re-applied.
+    int? jumpTo;
+    if (_pendingTap != null && auth.user != null) {
+      jumpTo = _tabForMessage(_pendingTap!, auth.user!.role);
+      _pendingTap = null;
+    }
+
     return MaterialApp(
       title: 'DINE OPS',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
       scaffoldMessengerKey: FcmService.messengerKey,
       home: auth.isAuthenticated
-          ? MainShell(role: auth.user!.role)
+          ? MainShell(role: auth.user!.role, jumpToTab: jumpTo)
           : const LoginScreen(),
     );
   }
@@ -127,7 +177,13 @@ class _SplashScreen extends StatelessWidget {
 // ── Main shell with role-based tabs ──────────────────────────────────────────
 class MainShell extends ConsumerStatefulWidget {
   final UserRole role;
-  const MainShell({super.key, required this.role});
+  /// When non-null, the shell jumps to this tab index on mount and on every
+  /// rebuild that carries a new value. Driven by FCM notification taps:
+  /// _RmsAppState resolves the message's type → tab index and passes it
+  /// here. The shell ignores nulls so the user's manual tab selections
+  /// aren't clobbered when no tap is pending.
+  final int? jumpToTab;
+  const MainShell({super.key, required this.role, this.jumpToTab});
 
   @override
   ConsumerState<MainShell> createState() => _MainShellState();
@@ -135,6 +191,18 @@ class MainShell extends ConsumerStatefulWidget {
 
 class _MainShellState extends ConsumerState<MainShell> {
   int _index = 0;
+
+  @override
+  void didUpdateWidget(MainShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A new tap arrived (parent changed jumpToTab). Apply it without
+    // overriding the user's manual selection in the no-new-tap case.
+    if (widget.jumpToTab != null && widget.jumpToTab != oldWidget.jumpToTab) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _index = widget.jumpToTab!);
+      });
+    }
+  }
 
   List<_TabDef> get _tabs => switch (widget.role) {
         UserRole.admin => [
@@ -170,6 +238,7 @@ class _MainShellState extends ConsumerState<MainShell> {
   @override
   void initState() {
     super.initState();
+    if (widget.jumpToTab != null) _index = widget.jumpToTab!;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final token = ref.read(authProvider).token;
       if (token != null) {
@@ -279,6 +348,9 @@ class _MainShellState extends ConsumerState<MainShell> {
               final initial = user?.name.isNotEmpty == true
                   ? user!.name.substring(0, 1).toUpperCase()
                   : 'A';
+              // photoUrlFor appends ?v=<updatedAt> so a fresh upload busts
+              // CachedNetworkImage's cache (backend keeps the same URL path).
+              final fullUrl = user?.photoUrlFor(AppConfig.baseUrl);
               return PopupMenuButton<String>(
                 color: slateSurface,
                 offset: const Offset(0, 48),
@@ -289,11 +361,30 @@ class _MainShellState extends ConsumerState<MainShell> {
                     CircleAvatar(
                       radius: 15,
                       backgroundColor: copperAccent.withValues(alpha: 0.2),
-                      child: Text(initial,
-                          style: const TextStyle(
-                              color: copperAccent,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700)),
+                      child: fullUrl != null
+                          ? ClipOval(
+                              child: CachedNetworkImage(
+                                imageUrl: fullUrl,
+                                width: 30,
+                                height: 30,
+                                fit: BoxFit.cover,
+                                placeholder: (_, __) => Text(initial,
+                                    style: const TextStyle(
+                                        color: copperAccent,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700)),
+                                errorWidget: (_, __, ___) => Text(initial,
+                                    style: const TextStyle(
+                                        color: copperAccent,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700)),
+                              ),
+                            )
+                          : Text(initial,
+                              style: const TextStyle(
+                                  color: copperAccent,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700)),
                     ),
                     const SizedBox(width: 4),
                     const Icon(Icons.keyboard_arrow_down,

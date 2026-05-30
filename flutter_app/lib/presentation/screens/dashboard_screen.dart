@@ -13,6 +13,10 @@ import '../widgets/metrics_ribbon.dart';
 import '../widgets/status_chip.dart';
 import 'new_order_screen.dart';
 
+/// Lifted state for the filter chips so the list actually filters.
+/// 0 = All, 1 = Urgent (READY/SERVED), 2 = Pending (CREATED/CONFIRMED/PREPARING).
+final dashboardFilterProvider = StateProvider<int>((_) => 0);
+
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
@@ -23,6 +27,22 @@ class DashboardScreen extends ConsumerWidget {
     final wsState = ref.watch(
       webSocketServiceProvider.select((s) => s.state),
     );
+    final filter = ref.watch(dashboardFilterProvider);
+
+    final filtered = switch (filter) {
+      1 => orders
+          .where((o) =>
+              o.status == OrderStatus.ready ||
+              o.status == OrderStatus.served)
+          .toList(),
+      2 => orders
+          .where((o) =>
+              o.status == OrderStatus.created ||
+              o.status == OrderStatus.confirmed ||
+              o.status == OrderStatus.preparing)
+          .toList(),
+      _ => orders,
+    };
 
     return Scaffold(
       backgroundColor: slateBg,
@@ -41,19 +61,25 @@ class DashboardScreen extends ConsumerWidget {
                 revenue: metrics.revenue,
               ),
             ),
-            SliverToBoxAdapter(child: _buildSectionHeader(orders)),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (ctx, i) => OrderCard(
-                    order: orders[i],
-                    onStatusTap: () => _showStatusSheet(context, ref, orders[i]),
+            SliverToBoxAdapter(
+              child: _buildSectionHeader(orders, filtered),
+            ),
+            if (filtered.isEmpty)
+              const SliverToBoxAdapter(child: _EmptyFiltered())
+            else
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (ctx, i) => OrderCard(
+                      order: filtered[i],
+                      onStatusTap: () =>
+                          _showStatusSheet(context, ref, filtered[i]),
+                    ),
+                    childCount: filtered.length,
                   ),
-                  childCount: orders.length,
                 ),
               ),
-            ),
           ],
         ),
       ),
@@ -117,7 +143,9 @@ class DashboardScreen extends ConsumerWidget {
         ],
       );
 
-  Widget _buildSectionHeader(List<OrderEntity> orders) => Padding(
+  Widget _buildSectionHeader(
+          List<OrderEntity> allOrders, List<OrderEntity> visible) =>
+      Padding(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
         child: Row(
           children: [
@@ -137,7 +165,9 @@ class DashboardScreen extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
-                '${orders.length}',
+                visible.length == allOrders.length
+                    ? '${allOrders.length}'
+                    : '${visible.length}/${allOrders.length}',
                 style: const TextStyle(
                     color: copperAccent,
                     fontSize: 11,
@@ -145,7 +175,7 @@ class DashboardScreen extends ConsumerWidget {
               ),
             ),
             const Spacer(),
-            _FilterChips(),
+            const _FilterChips(),
           ],
         ),
       );
@@ -209,45 +239,61 @@ class _WsIndicator extends StatelessWidget {
   }
 }
 
-// ── Filter chips ──────────────────────────────────────────────────────────────
-class _FilterChips extends StatefulWidget {
-  @override
-  State<_FilterChips> createState() => _FilterChipsState();
-}
-
-class _FilterChipsState extends State<_FilterChips> {
-  int _selected = 0;
-  final _filters = ['All', 'Urgent', 'Pending'];
+// ── Filter chips (bound to dashboardFilterProvider) ─────────────────────────
+class _FilterChips extends ConsumerWidget {
+  const _FilterChips();
+  static const _filters = ['All', 'Urgent', 'Pending'];
 
   @override
-  Widget build(BuildContext context) => Row(
-        children: List.generate(
-          _filters.length,
-          (i) => GestureDetector(
-            onTap: () => setState(() => _selected = i),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              margin: const EdgeInsets.only(left: 6),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: _selected == i
-                    ? copperAccent.withValues(alpha: 0.2)
-                    : slateSurface,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: _selected == i ? copperAccent : Colors.transparent,
-                ),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selected = ref.watch(dashboardFilterProvider);
+    return Row(
+      children: List.generate(_filters.length, (i) {
+        final active = selected == i;
+        return GestureDetector(
+          onTap: () => ref.read(dashboardFilterProvider.notifier).state = i,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            margin: const EdgeInsets.only(left: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: active
+                  ? copperAccent.withValues(alpha: 0.2)
+                  : slateSurface,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: active ? copperAccent : Colors.transparent,
               ),
-              child: Text(
-                _filters[i],
-                style: TextStyle(
-                  color: _selected == i ? copperAccent : textSecondary,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
+            ),
+            child: Text(
+              _filters[i],
+              style: TextStyle(
+                color: active ? copperAccent : textSecondary,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
+        );
+      }),
+    );
+  }
+}
+
+// ── Empty state when the filter excludes every order ────────────────────────
+class _EmptyFiltered extends StatelessWidget {
+  const _EmptyFiltered();
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 40),
+        child: Center(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.inbox_outlined,
+                size: 36, color: textSecondary.withValues(alpha: 0.5)),
+            const SizedBox(height: 8),
+            const Text('No orders match this filter',
+                style: TextStyle(color: textSecondary, fontSize: 12)),
+          ]),
         ),
       );
 }
