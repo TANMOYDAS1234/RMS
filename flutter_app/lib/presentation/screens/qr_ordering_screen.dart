@@ -7,11 +7,12 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
-import '../../core/config/app_config.dart';
 import '../../core/config/app_theme.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/services/websocket_service.dart';
+import '../../core/utils/api_error.dart';
 import '../state/menu_provider.dart';
 
 // ── Providers ─────────────────────────────────────────────────────────────────
@@ -19,7 +20,20 @@ import '../state/menu_provider.dart';
 final _sessionProvider = StateProvider<Map<String, dynamic>?>((ref) => null);
 final _qrOrdersProvider = StateProvider<List<Map<String, dynamic>>>((ref) => []);
 final _qrEnabledProvider = StateProvider<bool>((ref) => false);
-final _deviceIdProvider = Provider<String>((ref) => const Uuid().v4());
+
+/// Persistent device id keyed in SharedPreferences. Previously this minted
+/// a fresh UUID on every screen build, which meant every reload looked like
+/// a new diner to the backend — sessions kept duplicating, the participants
+/// list ballooned, and 'who's at this table' was unanswerable.
+const _kDeviceIdKey = 'qr_device_id';
+Future<String> _resolveDeviceId() async {
+  final prefs = await SharedPreferences.getInstance();
+  final existing = prefs.getString(_kDeviceIdKey);
+  if (existing != null && existing.isNotEmpty) return existing;
+  final fresh = const Uuid().v4();
+  await prefs.setString(_kDeviceIdKey, fresh);
+  return fresh;
+}
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -39,10 +53,13 @@ class QrOrderingScreen extends ConsumerStatefulWidget {
 
 class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
   final _dio = createDioClient(null);
+  final _uuid = const Uuid();
   bool _loading = true;
   String? _error;
   int _tabIndex = 0;
   Timer? _activityTimer;
+  String? _deviceId;
+  StreamSubscription<WsEvent>? _wsSub;
 
   @override
   void initState() {
@@ -52,62 +69,84 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
 
   Future<void> _init() async {
     try {
-      // 1. Check feature flag
+      // 0. Resolve persistent device id (one-time UUID per browser).
+      _deviceId = await _resolveDeviceId();
+
+      // 1. Check feature flag (also enforced server-side at session creation).
       final flagRes = await _dio.get('/branches/${widget.branchId}/qr-enabled');
       final enabled = flagRes.data['enabled'] as bool;
       ref.read(_qrEnabledProvider.notifier).state = enabled;
 
-      // 2. Get or create session
-      final deviceId = ref.read(_deviceIdProvider);
+      // 2. Get or create session. Idempotency key is stable per device+table
+      //    so a refresh doesn't spawn a parallel session.
       final sessionRes = await _dio.post(
         '/sessions/scan',
         data: {
           'tableId': widget.tableId,
           'branchId': widget.branchId,
-          'deviceId': deviceId,
+          'deviceId': _deviceId,
         },
-        options: Options(headers: {'Idempotency-Key': 'scan-${widget.tableId}-$deviceId'}),
+        options: Options(headers: {
+          'Idempotency-Key': 'scan-${widget.tableId}-$_deviceId',
+        }),
       );
       ref.read(_sessionProvider.notifier).state =
           Map<String, dynamic>.from(sessionRes.data);
 
-      // 3. Load existing orders for this session
-      await _loadSessionOrders(sessionRes.data);
+      // 3. Load existing orders for this session via public bill endpoint.
+      await _loadSessionBill();
 
-      // 4. Connect WebSocket for real-time order tracking
-      ref.read(webSocketServiceProvider).connect('customer-${widget.tableId}');
+      // 4. Connect WS — join the per-table room so we only receive events
+      //    for our own table, no cross-tenant leak.
+      ref.read(webSocketServiceProvider).connect(
+            '',
+            tableId: widget.tableId,
+            branchId: widget.branchId,
+          );
+      _wsSub = ref.read(webSocketServiceProvider).eventStream.listen((evt) {
+        if (evt.event == 'order:updated' || evt.event == 'order:created' ||
+            evt.event == 'kitchen:progress') {
+          _loadSessionBill();
+        }
+      });
 
-      // 5. Refresh session TTL on activity
+      // 5. Refresh session TTL on activity — UUID key per tick so the
+      //    server doesn't dedup against the previous refresh.
       _activityTimer = Timer.periodic(const Duration(minutes: 5), (_) {
         final session = ref.read(_sessionProvider);
         if (session != null) {
           _dio.patch('/sessions/${session['_id']}/refresh',
-              options: Options(headers: {'Idempotency-Key': 'refresh-${session['_id']}-${DateTime.now().minute}'}));
+              options: Options(headers: {
+                'Idempotency-Key': _uuid.v4(),
+              }));
         }
       });
     } catch (e) {
-      setState(() => _error = e.toString());
+      setState(() => _error = describeApiError(e));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  Future<void> _loadSessionOrders(Map<String, dynamic> session) async {
-    final orderIds = List<String>.from(session['orderIds'] ?? []);
-    if (orderIds.isEmpty) return;
-    final orders = <Map<String, dynamic>>[];
-    for (final id in orderIds) {
-      try {
-        final res = await _dio.get('/orders/$id');
-        orders.add(Map<String, dynamic>.from(res.data));
-      } catch (_) {}
+  /// Pulls the running tab from the new public /sessions/:id/bill endpoint,
+  /// which aggregates every order linked to the session. Cheaper than N
+  /// round-trips to /orders/:id and works without staff auth.
+  Future<void> _loadSessionBill() async {
+    final session = ref.read(_sessionProvider);
+    if (session == null) return;
+    try {
+      final res = await _dio.get('/sessions/${session['_id']}/bill');
+      final orders = List<Map<String, dynamic>>.from(res.data['orders'] ?? []);
+      ref.read(_qrOrdersProvider.notifier).state = orders;
+    } catch (_) {
+      // Best-effort; the user will see stale data and the next tick retries.
     }
-    ref.read(_qrOrdersProvider.notifier).state = orders;
   }
 
   @override
   void dispose() {
     _activityTimer?.cancel();
+    _wsSub?.cancel();
     super.dispose();
   }
 
@@ -314,8 +353,11 @@ class _MenuTabState extends ConsumerState<_MenuTab> {
     try {
       final idempotencyKey = const Uuid().v4();
       final dio = createDioClient(null);
+      // Customer flow hits the unauthenticated /orders/public endpoint.
+      // Backend takes branchId and tableId from the session, not the body,
+      // so a tampered request can't post to a different table.
       final res = await dio.post(
-        '/orders',
+        '/orders/public',
         data: {
           'tableId': widget.tableId,
           'tableLabel': session?['tableLabel'] ?? 'Table',
@@ -327,9 +369,10 @@ class _MenuTabState extends ConsumerState<_MenuTab> {
       setState(() => _cart.clear());
       widget.onOrderPlaced(Map<String, dynamic>.from(res.data));
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to place order: $e'),
+          content: Text(describeApiError(e)),
           backgroundColor: crimson,
         ),
       );

@@ -23,8 +23,16 @@ class WebSocketService {
   SocketState _state = SocketState.disconnected;
   SocketState get state => _state;
 
-  void connect(String token) {
-    // Tear down any previous socket — calling connect twice used to leak.
+  /// Connect with either a staff JWT or QR customer routing keys.
+  ///
+  /// Staff: pass [token] only. The gateway joins the socket to a `role:X`
+  /// room based on what's in the JWT.
+  ///
+  /// QR customer: pass an empty token and supply [tableId] + [branchId].
+  /// The gateway joins us to `table:<tableId>` + `branch:<branchId>` so
+  /// the customer only sees events for their own table — no cross-tenant
+  /// leak of strangers' orders.
+  void connect(String token, {String? tableId, String? branchId, String? role}) {
     if (_socket != null) {
       try {
         _socket!.dispose();
@@ -33,11 +41,17 @@ class WebSocketService {
     }
 
     _setState(SocketState.connecting);
+    final auth = <String, dynamic>{
+      if (token.isNotEmpty) 'token': token,
+      if (tableId != null) 'tableId': tableId,
+      if (branchId != null) 'branchId': branchId,
+      if (role != null) 'role': role,
+    };
     final socket = io.io(
       AppConfig.wsUrl,
       io.OptionBuilder()
           .setTransports(['websocket'])
-          .setAuth({'token': token})
+          .setAuth(auth)
           .enableAutoConnect()
           .enableReconnection()
           .setReconnectionDelay(2000)
