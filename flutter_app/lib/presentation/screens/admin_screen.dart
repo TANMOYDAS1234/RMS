@@ -703,6 +703,7 @@ class AdminStaffTab extends ConsumerWidget {
           bottom: 16,
           right: 16,
           child: FloatingActionButton.extended(
+            heroTag: 'admin_staff_fab',
             backgroundColor: copperAccent,
             foregroundColor: Colors.white,
             icon: const Icon(Icons.person_add_outlined),
@@ -737,6 +738,7 @@ class _AddStaffSheetState extends ConsumerState<_AddStaffSheet> {
   late final TextEditingController _passCtrl;
   late final String _idempotencyKey;
   String _selectedRole = 'waiter';
+  String? _selectedBranchId;
   bool _submitting = false;
 
   @override
@@ -768,6 +770,9 @@ class _AddStaffSheetState extends ConsumerState<_AddStaffSheet> {
           'email': _emailCtrl.text.trim().toLowerCase(),
           'password': _passCtrl.text,
           'role': _selectedRole,
+          // Optional for admin (can omit to make a branch-less account).
+          // Backend forces manager's own branchId regardless.
+          if (_selectedBranchId != null) 'branchId': _selectedBranchId,
         },
         options: Options(headers: {'Idempotency-Key': _idempotencyKey}),
       );
@@ -781,7 +786,9 @@ class _AddStaffSheetState extends ConsumerState<_AddStaffSheet> {
   }
 
   @override
-  Widget build(BuildContext context) => Padding(
+  Widget build(BuildContext context) {
+    final branchesAsync = ref.watch(_branchesProvider);
+    return Padding(
         padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 24),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Text('Add Staff Member', style: TextStyle(color: textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
@@ -802,6 +809,25 @@ class _AddStaffSheetState extends ConsumerState<_AddStaffSheet> {
                 .toList(),
             onChanged: (v) => setState(() => _selectedRole = v ?? 'waiter'),
           ),
+          const SizedBox(height: 10),
+          branchesAsync.when(
+            loading: () => const LinearProgressIndicator(color: copperAccent),
+            error: (_, __) => const SizedBox.shrink(),
+            data: (branches) => DropdownButtonFormField<String>(
+              value: _selectedBranchId,
+              dropdownColor: slateSurface,
+              style: const TextStyle(color: textPrimary),
+              decoration: _inputDec('Branch (optional)'),
+              items: [
+                const DropdownMenuItem<String>(value: null, child: Text('— No branch —')),
+                ...branches.map((b) => DropdownMenuItem<String>(
+                      value: b['_id'] as String,
+                      child: Text(b['name'] as String? ?? ''),
+                    )),
+              ],
+              onChanged: (v) => setState(() => _selectedBranchId = v),
+            ),
+          ),
           const SizedBox(height: 16),
           _PrimaryButton(
             label: _submitting ? 'Creating…' : 'Create Account',
@@ -809,6 +835,7 @@ class _AddStaffSheetState extends ConsumerState<_AddStaffSheet> {
           ),
         ]),
       );
+  }
 }
 
 class _StaffCard extends ConsumerWidget {
@@ -1125,7 +1152,15 @@ class _StaffAvatar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final photoUrl = user['photoUrl'] as String?;
-    final fullUrl = photoUrl != null ? '${AppConfig.baseUrl}$photoUrl' : null;
+    // Backend reuses the same /users/:id/photo URL on every upload, so we
+    // tack on updatedAt to bust CachedNetworkImage's cache when the doc
+    // changes.
+    final updatedAt = user['updatedAt'];
+    final v = updatedAt != null
+        ? (DateTime.tryParse(updatedAt.toString())?.millisecondsSinceEpoch ?? 0)
+        : 0;
+    final fullUrl =
+        photoUrl != null ? '${AppConfig.baseUrl}$photoUrl?v=$v' : null;
     final initials = (user['name'] as String? ?? 'U').substring(0, 1).toUpperCase();
 
     return GestureDetector(
@@ -1205,6 +1240,13 @@ class _StaffAvatar extends ConsumerWidget {
         options: Options(headers: {'Idempotency-Key': newIdempotencyKey('user-photo-$id')}),
       );
       ref.invalidate(_staffProvider);
+      // If the admin uploaded their own staff card's photo, the in-memory
+      // authProvider.user also needs to pick up the new photoUrl so the
+      // AppBar avatar refreshes.
+      final me = ref.read(authProvider).user;
+      if (me != null && me.id == id) {
+        await ref.read(authProvider.notifier).refreshUser();
+      }
       if (context.mounted) _showSuccess(context, 'Photo updated');
     } catch (e) {
       if (context.mounted) _showError(context, describeApiError(e));
@@ -1598,6 +1640,7 @@ class AdminInventoryTab extends ConsumerWidget {
         Positioned(
           bottom: 16, right: 16,
           child: FloatingActionButton.extended(
+            heroTag: 'admin_inventory_fab',
             backgroundColor: copperAccent,
             foregroundColor: Colors.white,
             icon: const Icon(Icons.add_box_outlined),
@@ -1840,6 +1883,7 @@ class AdminBranchesTab extends ConsumerWidget {
           bottom: 16,
           right: 16,
           child: FloatingActionButton.extended(
+            heroTag: 'admin_branches_fab',
             backgroundColor: copperAccent,
             foregroundColor: Colors.white,
             icon: const Icon(Icons.add_business_outlined),
@@ -2499,6 +2543,7 @@ class _MenuManagementTabState extends ConsumerState<_MenuManagementTab> {
             Positioned(
               bottom: 16, right: 16,
               child: FloatingActionButton.extended(
+                heroTag: 'admin_menu_fab',
                 backgroundColor: copperAccent,
                 foregroundColor: Colors.white,
                 icon: const Icon(Icons.restaurant_menu_outlined),
@@ -2600,12 +2645,24 @@ class _MenuManagementTabState extends ConsumerState<_MenuManagementTab> {
             // GLB picker
             GestureDetector(
               onTap: () async {
+                // FileType.custom + allowedExtensions: ['glb'] makes Android
+                // resolve a MIME for .glb, which it doesn't know — picker
+                // throws. Use FileType.any and validate the extension here.
                 final result = await FilePicker.platform.pickFiles(
-                  type: FileType.custom,
-                  allowedExtensions: ['glb'],
+                  type: FileType.any,
                   withData: true,
                 );
                 final file = result?.files.single;
+                if (file != null &&
+                    !(file.name.toLowerCase().endsWith('.glb'))) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text('Please pick a .glb file'),
+                      backgroundColor: crimson,
+                    ));
+                  }
+                  return;
+                }
                 if (file != null && file.bytes != null) {
                   setState(() {
                     pickedGlbBytes = file.bytes;
@@ -2896,11 +2953,19 @@ class _MenuItemCard extends ConsumerWidget {
 
   Future<void> _uploadGlb(BuildContext context, WidgetRef ref, String id) async {
     final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['glb'],
+      type: FileType.any,
       withData: true,
     );
     final file = result?.files.single;
+    if (file != null && !(file.name.toLowerCase().endsWith('.glb'))) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Please pick a .glb file'),
+          backgroundColor: crimson,
+        ));
+      }
+      return;
+    }
     if (file == null || file.bytes == null) return;
     try {
       final dio = createDioClient(ref.read(authProvider).token);

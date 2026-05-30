@@ -1,7 +1,7 @@
 // ─── Menu Schema ─────────────────────────────────────────────────────────────
 
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Types } from 'mongoose';
+import { Document } from 'mongoose';
 
 export type MenuItemDocument = MenuItem & Document;
 
@@ -29,8 +29,8 @@ class IngredientRef {
 @Schema({ timestamps: true })
 export class MenuItem {
   // ── Branch scope ────────────────────────────────────────────────────────────
-  @Prop({ type: Types.ObjectId, ref: 'Branch', required: true, index: true })
-  branchId: Types.ObjectId;
+  @Prop({ type: String, required: true, index: true })
+  branchId: string;
 
   // ── Core ────────────────────────────────────────────────────────────────────
   @Prop({ required: true }) name: string;
@@ -42,11 +42,11 @@ export class MenuItem {
   @Prop({ default: 0 }) prepTimeMinutes: number;
 
   // ── Media ───────────────────────────────────────────────────────────────────
-  @Prop({ default: null }) imageUrl: string | null;   // served via GET /menu/:id/image
-  @Prop({ default: null }) imageData: string | null;  // base64 stored in MongoDB
-  @Prop({ default: null }) imageMime: string | null;
-  @Prop({ default: null }) glbUrl: string | null;     // served via GET /menu/:id/glb
-  @Prop({ default: null }) glbData: string | null;    // base64 stored in MongoDB
+  @Prop({ type: String, default: null }) imageUrl: string | null;
+  @Prop({ type: String, default: null }) imageData: string | null;
+  @Prop({ type: String, default: null }) imageMime: string | null;
+  @Prop({ type: String, default: null }) glbUrl: string | null;
+  @Prop({ type: String, default: null }) glbData: string | null;
 
   // ── Rich data ───────────────────────────────────────────────────────────────
   @Prop({ type: [String], default: [] }) tags: string[];   // ['spicy','vegan','bestseller']
