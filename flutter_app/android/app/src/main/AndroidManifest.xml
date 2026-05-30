@@ -7,10 +7,10 @@
         android:label="rms_app"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
-        <!-- FCM default channel — must match _channelId in fcm_service.dart -->
+        <!-- FCM default channel — must match channelId sent by backend -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
-            android:value="rms_high_importance" />
+            android:value="low_stock" />
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_icon"
             android:resource="@mipmap/ic_launcher" />

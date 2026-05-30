@@ -130,6 +130,40 @@ class LiveOrdersNotifier extends StateNotifier<List<OrderEntity>> {
     }).toList();
   }
 
+  /// Wholesale-replace the items on an existing order. Only allowed by
+  /// the backend when the order is still in CREATED/CONFIRMED — the
+  /// service returns 400 otherwise and the optimistic update rolls back.
+  Future<void> amendItems({
+    required String orderId,
+    required List<Map<String, dynamic>> items,
+    String? notes,
+  }) async {
+    final idx = state.indexWhere((o) => o.id == orderId);
+    if (idx == -1) return;
+    final order = state[idx];
+
+    final idempotencyKey = _uuid.v4();
+    try {
+      final token = _ref.read(authProvider).token;
+      final dio = createDioClient(token);
+      final res = await dio.patch(
+        '/orders/$orderId/items',
+        data: {
+          'items': items,
+          'version': order.version,
+          if (notes != null) 'notes': notes,
+        },
+        options: _opts({'Idempotency-Key': idempotencyKey}),
+      );
+      final updated = OrderModel.fromJson(res.data).toEntity();
+      state = [...state]..[idx] = updated;
+    } catch (_) {
+      // Bail without enqueueing — amends past the prep window can't be
+      // retried offline; the waiter has to take the kitchen's call.
+      rethrow;
+    }
+  }
+
   Future<void> updateStatus(String orderId, OrderStatus newStatus) async {
     final idx = state.indexWhere((o) => o.id == orderId);
     if (idx == -1) return;

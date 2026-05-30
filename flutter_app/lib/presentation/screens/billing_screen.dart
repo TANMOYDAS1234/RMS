@@ -19,12 +19,31 @@ import 'package:intl/intl.dart';
 import '../../core/config/app_theme.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/services/websocket_service.dart';
+import 'dart:typed_data';
+import 'package:printing/printing.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
+import '../../core/payments/razorpay_sandbox.dart';
+import '../../core/receipts/receipt_pdf.dart';
 import '../../core/utils/api_error.dart';
 import '../../core/utils/idempotency.dart';
 import '../../domain/entities/order_entity.dart';
 import '../state/auth_provider.dart';
 import '../state/billing_provider.dart';
 import '../state/order_providers.dart';
+
+/// Razorpay sandbox config — cached so we don't refetch on every Pay tap.
+final _razorpayConfigProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  final token = ref.watch(authProvider).token;
+  final dio = createDioClient(token);
+  try {
+    final res = await dio.get('/billing/razorpay/config');
+    return Map<String, dynamic>.from(res.data);
+  } catch (_) {
+    return {'enabled': false, 'keyId': '', 'environment': 'sandbox'};
+  }
+});
 
 class BillingScreen extends ConsumerWidget {
   const BillingScreen({super.key});
@@ -553,6 +572,8 @@ class _BillCard extends ConsumerWidget {
                 'Paid via ${bill.paymentMethod?.toUpperCase() ?? 'N/A'} • ${DateFormat('dd MMM, HH:mm').format(bill.paidAt!)}',
                 style: const TextStyle(color: textSecondary, fontSize: 11),
               ),
+              const SizedBox(height: 10),
+              _ReceiptActions(bill: bill),
             ],
             if (!bill.isPaid) ...[
               const SizedBox(height: 12),
@@ -560,6 +581,107 @@ class _BillCard extends ConsumerWidget {
             ],
           ]),
     );
+  }
+}
+
+// ── Receipt print + share ───────────────────────────────────────────────────
+class _ReceiptActions extends ConsumerStatefulWidget {
+  final BillModel bill;
+  const _ReceiptActions({required this.bill});
+
+  @override
+  ConsumerState<_ReceiptActions> createState() => _ReceiptActionsState();
+}
+
+class _ReceiptActionsState extends ConsumerState<_ReceiptActions> {
+  bool _busy = false;
+
+  Future<Uint8List> _buildPdfBytes() async {
+    final user = ref.read(authProvider).user;
+    final doc = await ReceiptPdf.build(
+      bill: widget.bill,
+      branchName: 'DINE OPS',
+      // Branch metadata isn't on BillModel; using a sane default. Phase 6
+      // can resolve the branch name via a branchesProvider lookup.
+      branchAddress: null,
+      cashierName: user?.name,
+    );
+    return doc.save();
+  }
+
+  Future<void> _print() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final bytes = await _buildPdfBytes();
+      await Printing.layoutPdf(onLayout: (_) async => bytes);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Print failed: ${e.toString()}'),
+          backgroundColor: crimson,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _share() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final bytes = await _buildPdfBytes();
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/receipt-${widget.bill.id.substring(widget.bill.id.length - 6)}.pdf');
+      await file.writeAsBytes(bytes);
+      await SharePlus.instance.share(ShareParams(
+        files: [XFile(file.path, mimeType: 'application/pdf')],
+        text: 'Receipt for ${widget.bill.tableLabel} — ₹${widget.bill.total.toStringAsFixed(2)}',
+      ));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Share failed: ${e.toString()}'),
+          backgroundColor: crimson,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(children: [
+      Expanded(
+        child: OutlinedButton.icon(
+          icon: const Icon(Icons.print_outlined, size: 14),
+          label: const Text('Print'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: copperAccent,
+            side: BorderSide(color: copperAccent.withValues(alpha: 0.5)),
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+          ),
+          onPressed: _busy ? null : _print,
+        ),
+      ),
+      const SizedBox(width: 6),
+      Expanded(
+        child: OutlinedButton.icon(
+          icon: const Icon(Icons.share_outlined, size: 14),
+          label: const Text('Share'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: textPrimary,
+            side: BorderSide(color: textSecondary.withValues(alpha: 0.5)),
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+          ),
+          onPressed: _busy ? null : _share,
+        ),
+      ),
+    ]);
   }
 }
 
@@ -640,39 +762,73 @@ class _QuickPaySheet extends ConsumerStatefulWidget {
 class _QuickPaySheetState extends ConsumerState<_QuickPaySheet> {
   bool _busy = false;
 
-  Future<void> _pay(String method) async {
+  Future<void> _payCash() async => _record('cash');
+
+  Future<void> _payRazorpay() async {
     if (_busy) return;
     setState(() => _busy = true);
-    // UUID per attempt so a retry doesn't dedupe against the previous one
-    // — server is idempotent on the key, but each cashier tap is a real
-    // attempt that should reach the dedup window cleanly.
+    try {
+      final cfg = await ref.read(_razorpayConfigProvider.future);
+      final keyId = (cfg['keyId'] as String?) ?? '';
+      if (keyId.isEmpty || cfg['enabled'] != true) {
+        _snack('Razorpay not configured on server (sandbox mode disabled).', crimson);
+        return;
+      }
+      final result = await RazorpaySandbox.instance.pay(
+        keyId: keyId,
+        amount: widget.bill.total,
+        orderTag: '${widget.bill.tableLabel} • ${widget.bill.id.substring(widget.bill.id.length - 6)}',
+        customerName: ref.read(authProvider).user?.name,
+      );
+      if (!result.success) {
+        _snack(result.errorMessage ?? 'Payment cancelled.', amber);
+        return;
+      }
+      // Record on the backend. The bill is marked paid with method
+      // depending on what Razorpay reports; we treat anything that
+      // succeeded as 'card' for ledger purposes — the razorpayPaymentId
+      // is also stored on the bill for reconciliation.
+      await _record('card', razorpay: {
+        'razorpayPaymentId': result.paymentId,
+        'razorpayOrderId': result.orderId,
+      });
+    } catch (e) {
+      _snack(describeApiError(e), crimson);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _record(String method, {Map<String, String?>? razorpay}) async {
     final key = newIdempotencyKey('pay-${widget.bill.id}-$method');
     try {
       final dio = createDioClient(ref.read(authProvider).token);
       await dio.post(
         '/billing/${widget.bill.id}/pay',
-        data: {'paymentMethod': method},
+        data: {
+          'paymentMethod': method,
+          if (razorpay != null) ...razorpay,
+        },
         options: Options(headers: {'Idempotency-Key': key}),
       );
       ref.invalidate(billingProvider);
       ref.invalidate(dailyRevenueProvider);
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Paid ₹${widget.bill.total.toStringAsFixed(2)} via ${method.toUpperCase()}'),
-          backgroundColor: emerald,
-        ));
+        _snack(
+            'Paid ₹${widget.bill.total.toStringAsFixed(2)} via ${method.toUpperCase()}',
+            emerald);
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(describeApiError(e)),
-          backgroundColor: crimson,
-        ));
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
+      _snack(describeApiError(e), crimson);
     }
+  }
+
+  void _snack(String msg, Color color) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: color),
+    );
   }
 
   @override
@@ -687,27 +843,70 @@ class _QuickPaySheetState extends ConsumerState<_QuickPaySheet> {
                       color: textPrimary,
                       fontSize: 18,
                       fontWeight: FontWeight.w800)),
+              const SizedBox(height: 4),
+              const Text('Razorpay is in sandbox mode — no real money moves.',
+                  style: TextStyle(color: textSecondary, fontSize: 11)),
               const SizedBox(height: 16),
-              for (final m in const ['cash', 'card', 'upi'])
-                GestureDetector(
-                  onTap: _busy ? null : () => _pay(m),
-                  child: Container(
-                    width: double.infinity,
-                    margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    decoration: BoxDecoration(
-                      color: slateSurface,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Center(
-                      child: Text(m.toUpperCase(),
-                          style: const TextStyle(
-                              color: textPrimary,
-                              fontWeight: FontWeight.w700)),
-                    ),
-                  ),
-                ),
+              _PayTile(
+                icon: Icons.payments_outlined,
+                label: 'CASH',
+                color: emerald,
+                onTap: _busy ? null : _payCash,
+              ),
+              _PayTile(
+                icon: Icons.credit_card_outlined,
+                label: 'CARD / UPI (Razorpay Sandbox)',
+                color: copperAccent,
+                trailing: const Text('TEST',
+                    style: TextStyle(
+                        color: amber,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800)),
+                onTap: _busy ? null : _payRazorpay,
+              ),
             ]),
+      );
+}
+
+class _PayTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final Widget? trailing;
+  final VoidCallback? onTap;
+  const _PayTile({
+    required this.icon,
+    required this.label,
+    required this.color,
+    this.trailing,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: double.infinity,
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 14),
+          decoration: BoxDecoration(
+            color: slateSurface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: color.withValues(alpha: 0.4)),
+          ),
+          child: Row(children: [
+            Icon(icon, color: color, size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(label,
+                  style: const TextStyle(
+                      color: textPrimary,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13)),
+            ),
+            if (trailing != null) trailing!,
+          ]),
+        ),
       );
 }
 

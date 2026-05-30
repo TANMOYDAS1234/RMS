@@ -1,9 +1,13 @@
 // ─── Sentry Bootstrap ────────────────────────────────────────────────────────
 // Wrap runApp() with this. Becomes a no-op when SENTRY_DSN dart-define is
 // unset, so the same code runs in dev without local credentials.
+//
+// Uses the pure-Dart `sentry` package rather than `sentry_flutter` because
+// the project's pubspec.yaml pins `jni: ^1.0.0` in dependency_overrides,
+// which is incompatible with sentry_flutter's Android JNI bindings.
 
 import 'package:flutter/foundation.dart';
-import 'package:sentry_flutter/sentry_flutter.dart';
+import 'package:sentry/sentry.dart';
 
 const _dsn = String.fromEnvironment('SENTRY_DSN', defaultValue: '');
 const _env = String.fromEnvironment('APP_ENV', defaultValue: 'development');
@@ -15,12 +19,11 @@ Future<void> runWithSentry(Future<void> Function() runner) async {
     await runner();
     return;
   }
-  await SentryFlutter.init(
+  await Sentry.init(
     (opts) {
       opts.dsn = _dsn;
       opts.environment = _env;
       opts.tracesSampleRate = 0.1;
-      // Don't ship request bodies that may contain JWTs/passwords.
       opts.sendDefaultPii = false;
       opts.attachStacktrace = true;
       opts.beforeSend = (event, hint) {

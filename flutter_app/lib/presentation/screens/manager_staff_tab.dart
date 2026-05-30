@@ -217,7 +217,12 @@ class _StaffCard extends ConsumerWidget {
     final id        = member['_id'] as String? ?? '';
     final orders    = member['todayOrders'] as int? ?? 0;
     final photoUrl  = member['photoUrl'] as String?;
-    final fullPhoto = photoUrl != null ? '${AppConfig.baseUrl}$photoUrl' : null;
+    final updatedAt = member['updatedAt'];
+    final v = updatedAt != null
+        ? (DateTime.tryParse(updatedAt.toString())?.millisecondsSinceEpoch ?? 0)
+        : 0;
+    final fullPhoto =
+        photoUrl != null ? '${AppConfig.baseUrl}$photoUrl?v=$v' : null;
     final initial   = name.isNotEmpty ? name[0].toUpperCase() : 'S';
 
     return Container(

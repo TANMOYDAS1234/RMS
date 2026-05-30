@@ -5,13 +5,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../core/config/app_theme.dart';
 import '../../core/services/websocket_service.dart';
+import '../../core/utils/api_error.dart';
 import '../../domain/entities/order_entity.dart';
+import '../state/menu_provider.dart';
 import '../state/order_providers.dart';
 import '../state/auth_provider.dart';
 import '../widgets/order_card.dart';
 import '../widgets/metrics_ribbon.dart';
 import '../widgets/status_chip.dart';
 import 'new_order_screen.dart';
+import 'qr_scanner_screen.dart';
 
 /// Lifted state for the filter chips so the list actually filters.
 /// 0 = All, 1 = Urgent (READY/SERVED), 2 = Pending (CREATED/CONFIRMED/PREPARING).
@@ -180,12 +183,37 @@ class DashboardScreen extends ConsumerWidget {
         ),
       );
 
-  Widget _buildFAB(BuildContext context) => FloatingActionButton.extended(
-        backgroundColor: copperAccent,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add),
-        label: const Text('New Order', style: TextStyle(fontWeight: FontWeight.w700)),
-        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NewOrderScreen())),
+  Widget _buildFAB(BuildContext context) => Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          FloatingActionButton.small(
+            // Unique tag — when multiple FABs are mounted (other tabs in
+            // an IndexedStack), Flutter's default tag collides.
+            heroTag: 'waiter_qr_scan_fab',
+            backgroundColor: slateCard,
+            foregroundColor: copperAccent,
+            tooltip: 'Scan table QR',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const QrScannerScreen()),
+            ),
+            child: const Icon(Icons.qr_code_scanner),
+          ),
+          const SizedBox(height: 10),
+          FloatingActionButton.extended(
+            heroTag: 'waiter_new_order_fab',
+            backgroundColor: copperAccent,
+            foregroundColor: Colors.white,
+            icon: const Icon(Icons.add),
+            label: const Text('New Order',
+                style: TextStyle(fontWeight: FontWeight.w700)),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const NewOrderScreen()),
+            ),
+          ),
+        ],
       ).animate().scale(delay: 600.ms, duration: 300.ms);
 
   void _showStatusSheet(
@@ -310,6 +338,10 @@ class _StatusUpdateSheet extends StatelessWidget {
     final nextStatuses = OrderStatus.values
         .where((s) => order.status.canTransitionTo(s))
         .toList();
+    // Amend allowed before the kitchen starts (matches the backend rule
+    // in OrdersService.amendItems).
+    final canAmend = order.status == OrderStatus.created ||
+        order.status == OrderStatus.confirmed;
 
     return Padding(
       padding: const EdgeInsets.all(24),
@@ -336,6 +368,33 @@ class _StatusUpdateSheet extends StatelessWidget {
             style: const TextStyle(color: textSecondary, fontSize: 13),
           ),
           const SizedBox(height: 20),
+          if (canAmend) ...[
+            OutlinedButton.icon(
+              icon: const Icon(Icons.edit_outlined, size: 16),
+              label: const Text('Amend items'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: copperAccent,
+                side: const BorderSide(color: copperAccent),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                textStyle: const TextStyle(
+                    fontSize: 12, fontWeight: FontWeight.w700),
+              ),
+              onPressed: () {
+                Navigator.pop(context);
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: slateCard,
+                  shape: const RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.vertical(top: Radius.circular(20))),
+                  builder: (_) => _AmendItemsSheet(order: order),
+                );
+              },
+            ),
+            const SizedBox(height: 14),
+          ],
           if (nextStatuses.isEmpty)
             const Text('No further transitions available.',
                 style: TextStyle(color: textSecondary))
@@ -352,6 +411,190 @@ class _StatusUpdateSheet extends StatelessWidget {
           const SizedBox(height: 8),
         ],
       ),
+    );
+  }
+}
+
+// ── Amend items bottom sheet ───────────────────────────────────────────────
+class _AmendItemsSheet extends ConsumerStatefulWidget {
+  final OrderEntity order;
+  const _AmendItemsSheet({required this.order});
+  @override
+  ConsumerState<_AmendItemsSheet> createState() => _AmendItemsSheetState();
+}
+
+class _AmendItemsSheetState extends ConsumerState<_AmendItemsSheet> {
+  late final Map<String, int> _cart;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Seed the cart from the current order. Item ids should match menu ids
+    // because that's how the order was created.
+    _cart = {
+      for (final i in widget.order.items) i.id: i.quantity,
+    };
+  }
+
+  Future<void> _save() async {
+    if (_busy) return;
+    if (_cart.values.every((q) => q == 0)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Order must have at least one item.'),
+        backgroundColor: amber,
+      ));
+      return;
+    }
+    final branchId = ref.read(authProvider).user?.branchId;
+    final menu = ref.read(menuProvider(branchId)).value ?? [];
+    // Build the items payload from the cart. Prefer the menu's current
+    // price (could have changed since the order was created); fall back
+    // to the existing line item's unitPrice if the menu no longer
+    // contains the id.
+    final items = _cart.entries
+        .where((e) => e.value > 0)
+        .map((e) {
+      final menuItem = menu.where((m) => m.id == e.key).cast<dynamic>().firstOrNull;
+      final orderItem = widget.order.items.where((i) => i.id == e.key).cast<dynamic>().firstOrNull;
+      final name = menuItem?.name ?? orderItem?.name ?? 'Item';
+      final price = menuItem?.basePrice ?? orderItem?.unitPrice ?? 0;
+      return {
+        'itemId': e.key,
+        'name': name,
+        'quantity': e.value,
+        'unitPrice': price,
+      };
+    }).toList();
+
+    setState(() => _busy = true);
+    try {
+      await ref.read(liveOrdersProvider.notifier).amendItems(
+            orderId: widget.order.id,
+            items: items,
+          );
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Order amended'),
+          backgroundColor: emerald,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(describeApiError(e)),
+          backgroundColor: crimson,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = widget.order.items.toList();
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+          20, 20, 20, MediaQuery.of(context).viewInsets.bottom + 24),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Container(
+          width: 36, height: 4,
+          decoration: BoxDecoration(
+            color: textSecondary.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(height: 14),
+        Text('Amend items — ${widget.order.tableLabel}',
+            style: const TextStyle(
+                color: textPrimary, fontSize: 16, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 4),
+        const Text(
+            'Adjust quantities; set to 0 to remove. New items must be added via "New Order" — to add a brand-new dish, cancel this and place a separate order.',
+            style: TextStyle(color: textSecondary, fontSize: 11)),
+        const SizedBox(height: 16),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 320),
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              for (final item in entries)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: slateSurface,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(children: [
+                    Expanded(
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(item.name,
+                                style: const TextStyle(
+                                    color: textPrimary,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600)),
+                            Text('₹${item.unitPrice.toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                    color: copperAccent, fontSize: 11)),
+                          ]),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.remove, color: textSecondary, size: 18),
+                      onPressed: () => setState(() {
+                        final q = (_cart[item.id] ?? 0) - 1;
+                        if (q <= 0) {
+                          _cart.remove(item.id);
+                        } else {
+                          _cart[item.id] = q;
+                        }
+                      }),
+                    ),
+                    Text('${_cart[item.id] ?? 0}',
+                        style: const TextStyle(
+                            color: textPrimary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700)),
+                    IconButton(
+                      icon: const Icon(Icons.add, color: copperAccent, size: 18),
+                      onPressed: () => setState(() {
+                        _cart[item.id] = (_cart[item.id] ?? 0) + 1;
+                      }),
+                    ),
+                  ]),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            icon: _busy
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                        color: Colors.white, strokeWidth: 2))
+                : const Icon(Icons.save_outlined, size: 16),
+            label: const Text('Save changes'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: copperAccent,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+              textStyle: const TextStyle(
+                  fontSize: 14, fontWeight: FontWeight.w800),
+            ),
+            onPressed: _busy ? null : _save,
+          ),
+        ),
+      ]),
     );
   }
 }

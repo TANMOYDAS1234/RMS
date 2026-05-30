@@ -52,7 +52,14 @@ class _ProfileBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final photoUrl = profile['photoUrl'] as String?;
-    final fullUrl = photoUrl != null ? '${AppConfig.baseUrl}$photoUrl' : null;
+    // Cache-buster: backend keeps the photo URL stable across uploads,
+    // so we tack on updatedAt to force CachedNetworkImage to refetch.
+    final updatedAt = profile['updatedAt'];
+    final v = updatedAt != null
+        ? (DateTime.tryParse(updatedAt.toString())?.millisecondsSinceEpoch ?? 0)
+        : 0;
+    final fullUrl =
+        photoUrl != null ? '${AppConfig.baseUrl}$photoUrl?v=$v' : null;
     final name = profile['name'] as String? ?? '';
     final email = profile['email'] as String? ?? '';
     final role = profile['role'] as String? ?? '';
@@ -185,7 +192,11 @@ class _ProfileBody extends ConsumerWidget {
         data: formData,
         options: Options(headers: {'Idempotency-Key': newIdempotencyKey('profile-photo-$id')}),
       );
+      // Refresh both: the profile screen's local FutureProvider AND the
+      // shared authProvider.user so the AppBar avatar (and anything else
+      // that watches it) picks up the new photoUrl without a re-login.
       ref.invalidate(_profileProvider);
+      await ref.read(authProvider.notifier).refreshUser();
       if (context.mounted) _snack(context, 'Photo updated', emerald);
     } catch (e) {
       if (context.mounted) _snack(context, describeApiError(e), crimson);

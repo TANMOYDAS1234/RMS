@@ -20,6 +20,8 @@ import 'presentation/screens/admin_screen.dart';
 import 'presentation/screens/manager_shell.dart';
 import 'presentation/screens/qr_ordering_screen.dart';
 import 'presentation/screens/admin_profile_screen.dart';
+import 'presentation/screens/cash_drawer_screen.dart';
+import 'presentation/screens/floor_grid_screen.dart';
 import 'presentation/state/auth_provider.dart';
 
 void main() async {
@@ -220,6 +222,7 @@ class _MainShellState extends ConsumerState<MainShell> {
           ],
         UserRole.waiter => [
             const _TabDef('Orders',  Icons.receipt_outlined,      Icons.receipt,      DashboardScreen()),
+            const _TabDef('Floor',   Icons.grid_view_outlined,    Icons.grid_view,    FloorGridScreen()),
             const _TabDef('Kitchen', Icons.restaurant_outlined,   Icons.restaurant,   KitchenScreen()),
           ],
         UserRole.chef => [
@@ -229,6 +232,7 @@ class _MainShellState extends ConsumerState<MainShell> {
         UserRole.cashier => [
             const _TabDef('Orders',  Icons.receipt_outlined,      Icons.receipt,      DashboardScreen()),
             const _TabDef('Billing', Icons.receipt_long_outlined, Icons.receipt_long, BillingScreen()),
+            const _TabDef('Drawer',  Icons.point_of_sale_outlined, Icons.point_of_sale, CashDrawerScreen()),
           ],
         UserRole.customer => [
             const _TabDef('Orders', Icons.receipt_outlined, Icons.receipt, DashboardScreen()),
