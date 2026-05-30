@@ -6,6 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../core/network/dio_client.dart';
+import '../../core/services/fcm_service.dart';
 import '../../core/utils/idempotency.dart';
 
 /// Keychain (iOS) / Keystore (Android) / OS-encrypted credential vault (Win/macOS/Linux).
@@ -129,9 +130,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> logout() async {
+    // Tell the server to deactivate every FCM token for this user BEFORE
+    // we drop the JWT — once the token is gone we can't authenticate the
+    // clear request, and the next user on the device would silently keep
+    // receiving the previous user's pushes.
+    final token = state.token;
+    if (token != null) {
+      try {
+        await FcmService.instance.clearToken(token);
+      } catch (_) {}
+    }
     await _secureStorage.delete(key: _kTokenKey);
     await _secureStorage.delete(key: _kUserKey);
-    // Also clear the legacy Hive box in case a migration was pending.
     try {
       final box = await Hive.openBox<String>(_boxName);
       await box.deleteAll(['token', 'user']);
@@ -148,7 +158,28 @@ class AuthNotifier extends StateNotifier<AuthState> {
           orElse: () => UserRole.waiter,
         ),
         branchId: data['branchId'] as String?,
+        photoUrl: data['photoUrl'] as String?,
+        updatedAt: data['updatedAt'] != null
+            ? DateTime.tryParse(data['updatedAt'].toString())
+            : null,
       );
+
+  /// Re-fetch /auth/me and update the in-memory user. Call this after any
+  /// mutation that changes the current user (profile edit, photo upload,
+  /// password change) so the AppBar avatar and other authProvider watchers
+  /// see the new data without needing the user to log out.
+  Future<void> refreshUser() async {
+    final token = state.token;
+    if (token == null) return;
+    try {
+      final dio = createDioClient(token);
+      final res = await dio.get('/auth/me');
+      final user = _parseUser(res.data);
+      state = state.copyWith(user: user);
+      // Persist the updated user JSON so a cold start sees the new photoUrl.
+      await _secureStorage.write(key: _kUserKey, value: jsonEncode(res.data));
+    } catch (_) {}
+  }
 }
 
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>(
