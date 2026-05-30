@@ -13,6 +13,7 @@ import '../state/auth_provider.dart';
 import '../widgets/order_card.dart';
 import '../widgets/metrics_ribbon.dart';
 import '../widgets/status_chip.dart';
+import '../widgets/waiter_inbox.dart';
 import 'new_order_screen.dart';
 import 'qr_scanner_screen.dart';
 
@@ -64,6 +65,10 @@ class DashboardScreen extends ConsumerWidget {
                 revenue: metrics.revenue,
               ),
             ),
+            // Show the call-waiter inbox above the order list. The widget
+            // renders empty when there are no open requests so it's free
+            // when the dining room is quiet.
+            const SliverToBoxAdapter(child: WaiterInbox()),
             SliverToBoxAdapter(
               child: _buildSectionHeader(orders, filtered),
             ),

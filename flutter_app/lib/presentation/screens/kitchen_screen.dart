@@ -20,6 +20,23 @@ import '../state/auth_provider.dart';
 import '../state/order_providers.dart';
 import '../widgets/status_chip.dart';
 
+/// Branch-configured overdue threshold (minutes). Defaults to 15 when the
+/// branch hasn't set one, or when the caller has no branchId. Read from
+/// /branches/:id rather than hardcoded so each restaurant can tune it.
+final overdueAfterMinutesProvider = FutureProvider.autoDispose<int>((ref) async {
+  final branchId = ref.watch(authProvider).user?.branchId;
+  if (branchId == null || branchId.isEmpty) return 15;
+  try {
+    final dio = createDioClient(ref.watch(authProvider).token);
+    final res = await dio.get('/branches/$branchId');
+    final v = res.data['overdueAfterMinutes'];
+    if (v is num) return v.toInt().clamp(1, 120);
+    return 15;
+  } catch (_) {
+    return 15;
+  }
+});
+
 // ── Ticker — rebuilds the elapsed-minutes display every 30s without
 //    refetching from the server.
 final _nowTickerProvider = StreamProvider<DateTime>((ref) async* {
@@ -30,8 +47,6 @@ final _nowTickerProvider = StreamProvider<DateTime>((ref) async* {
 });
 
 enum _Filter { all, incoming, preparing, ready }
-
-const _kOverdueMinutes = 15;
 
 class KitchenScreen extends ConsumerStatefulWidget {
   const KitchenScreen({super.key});
@@ -254,7 +269,11 @@ class _KitchenCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final now = ref.watch(_nowTickerProvider).value ?? DateTime.now();
     final elapsed = now.difference(order.updatedAt);
-    final isOverdue = elapsed.inMinutes > _kOverdueMinutes;
+    // Branch-configured threshold; default 15m on first load or if the
+    // request hasn't returned yet so cards never go un-flagged for
+    // genuinely overdue orders.
+    final overdueAfter = ref.watch(overdueAfterMinutesProvider).value ?? 15;
+    final isOverdue = elapsed.inMinutes > overdueAfter;
 
     return Container(
       decoration: BoxDecoration(

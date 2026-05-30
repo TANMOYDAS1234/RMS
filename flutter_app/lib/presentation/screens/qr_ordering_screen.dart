@@ -227,7 +227,113 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
           ),
         ],
       ),
+      actions: [
+        if (session != null)
+          IconButton(
+            tooltip: 'Call a waiter',
+            icon: const Icon(Icons.notifications_active_outlined,
+                color: copperAccent),
+            onPressed: () => _callWaiter(session),
+          ),
+        const SizedBox(width: 4),
+      ],
     );
+  }
+
+  Future<void> _callWaiter(Map<String, dynamic> session) async {
+    final reasonCtrl = TextEditingController();
+    final reason = await showModalBottomSheet<String?>(
+      context: context,
+      backgroundColor: slateCard,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.fromLTRB(
+            24, 18, 24, MediaQuery.of(ctx).viewInsets.bottom + 18),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            width: 36, height: 4,
+            decoration: BoxDecoration(
+              color: textSecondary.withValues(alpha: 0.4),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 14),
+          const Text('Call a waiter',
+              style: TextStyle(
+                  color: textPrimary,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800)),
+          const SizedBox(height: 4),
+          const Text('Optional — let them know what you need.',
+              style: TextStyle(color: textSecondary, fontSize: 12)),
+          const SizedBox(height: 14),
+          TextField(
+            controller: reasonCtrl,
+            maxLines: 2,
+            style: const TextStyle(color: textPrimary, fontSize: 13),
+            decoration: InputDecoration(
+              hintText: 'e.g. extra napkins, water, the bill…',
+              hintStyle: const TextStyle(color: textSecondary, fontSize: 12),
+              filled: true,
+              fillColor: slateSurface,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: dividerColor),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: dividerColor),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: copperAccent),
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.send, size: 16),
+              label: const Text('Send'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: copperAccent,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: () =>
+                  Navigator.pop(ctx, reasonCtrl.text.trim()),
+            ),
+          ),
+        ]),
+      ),
+    );
+    reasonCtrl.dispose();
+    if (reason == null) return; // sheet dismissed
+    try {
+      await _dio.post(
+        '/sessions/${session['_id']}/call-waiter',
+        data: {if (reason.isNotEmpty) 'reason': reason},
+        options: Options(headers: {
+          'Idempotency-Key': _uuid.v4(),
+        }),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        backgroundColor: emerald,
+        content: const Text('A waiter has been notified.'),
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        backgroundColor: crimson,
+        content: Text(describeApiError(e)),
+      ));
+    }
   }
 
   void _onOrderPlaced(Map<String, dynamic> order) {
