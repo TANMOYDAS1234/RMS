@@ -13,6 +13,7 @@ import 'manager_discounts_tab.dart';
 import 'manager_inventory_tab.dart';
 import 'manager_reports_tab.dart';
 import 'manager_customer_service_tab.dart';
+import 'manager_menu_tab.dart';
 import 'admin_profile_screen.dart';
 
 // ── Tab index constants ───────────────────────────────────────────────────────
@@ -23,8 +24,9 @@ const _kStaff      = 3;
 // Drawer tabs (index 4+)
 const _kDiscounts  = 4;
 const _kInventory  = 5;
-const _kReports    = 6;
-const _kCustomer   = 7;
+const _kMenu       = 6;
+const _kReports    = 7;
+const _kCustomer   = 8;
 
 class ManagerShell extends ConsumerStatefulWidget {
   const ManagerShell({super.key});
@@ -45,13 +47,15 @@ class _ManagerShellState extends ConsumerState<ManagerShell> {
     ManagerStaffTab(),            // 3
     ManagerDiscountsTab(),        // 4
     ManagerInventoryTab(),        // 5
-    ManagerReportsTab(),          // 6
-    ManagerCustomerServiceTab(),  // 7
+    ManagerMenuTab(),             // 6
+    ManagerReportsTab(),          // 7
+    ManagerCustomerServiceTab(),  // 8
   ];
 
   static const _drawerItems = [
     _DrawerItem(_kDiscounts, Icons.discount_outlined,   Icons.discount,   'Discounts'),
     _DrawerItem(_kInventory, Icons.inventory_2_outlined, Icons.inventory_2, 'Inventory'),
+    _DrawerItem(_kMenu,      Icons.restaurant_menu_outlined, Icons.restaurant_menu, 'Menu'),
     _DrawerItem(_kReports,   Icons.bar_chart_outlined,  Icons.bar_chart,  'Reports'),
     _DrawerItem(_kCustomer,  Icons.support_agent_outlined, Icons.support_agent, 'Customer Svc'),
   ];
@@ -82,6 +86,7 @@ class _ManagerShellState extends ConsumerState<ManagerShell> {
         _kStaff      => 'Staff',
         _kDiscounts  => 'Discounts',
         _kInventory  => 'Inventory',
+        _kMenu       => 'Menu',
         _kReports    => 'Reports',
         _kCustomer   => 'Customer Service',
         _          => 'Manager',

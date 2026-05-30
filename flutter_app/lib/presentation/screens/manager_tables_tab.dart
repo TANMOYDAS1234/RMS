@@ -10,6 +10,7 @@ import '../../core/utils/api_error.dart';
 import '../../core/utils/idempotency.dart';
 import '../../data/api/manager_api.dart';
 import '../state/auth_provider.dart';
+import '../widgets/table_qr_sheet.dart';
 
 final _managerTablesProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>(
@@ -316,6 +317,24 @@ class _TableCard extends StatelessWidget {
               Row(children: [
                 Icon(icon, color: color, size: 18),
                 const Spacer(),
+                // QR action — opens the printable QR sheet for this table.
+                // Manager generates one per table, prints it, sticks it on
+                // the table. Customers scan with their phone camera.
+                GestureDetector(
+                  onTap: () => _showQrSheet(context),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 5, vertical: 2),
+                    margin: const EdgeInsets.only(right: 4),
+                    decoration: BoxDecoration(
+                      color: slateSurface,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: dividerColor),
+                    ),
+                    child: const Icon(Icons.qr_code,
+                        color: copperAccent, size: 11),
+                  ),
+                ),
                 if (hasOrder)
                   GestureDetector(
                     onTap: onViewOrder,
@@ -366,6 +385,31 @@ class _TableCard extends StatelessWidget {
             ]),
       ),
     ).animate().fadeIn(duration: 250.ms);
+  }
+
+  /// Opens the printable customer-QR sheet for this table.
+  void _showQrSheet(BuildContext context) {
+    final tableId = (table['_id'] ?? table['id'])?.toString() ?? '';
+    final branchId = (table['branchId'] ?? '')?.toString() ?? '';
+    if (tableId.isEmpty || branchId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text(
+            'Table is missing id or branch — cannot generate QR.'),
+      ));
+      return;
+    }
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: slateCard,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (_) => TableQrSheet(
+        tableId: tableId,
+        tableLabel: (table['label'] ?? '').toString(),
+        branchId: branchId,
+      ),
+    );
   }
 
   void _showStatusSheet(BuildContext context) {
