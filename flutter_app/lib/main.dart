@@ -1,11 +1,17 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
+// Mobile-only background handler registration lives in a separate file so
+// the web build doesn't have to compile firebase_messaging (which has
+// a long-running web compatibility bug).
+import 'core/services/fcm_bg_handler_io.dart'
+    if (dart.library.html) 'core/services/fcm_bg_handler_web.dart' as fcm_bg;
 import 'core/config/app_config.dart';
 import 'core/config/app_theme.dart';
+import 'core/config/system_config_provider.dart';
 import 'core/observability/sentry_bootstrap.dart';
 import 'core/services/sync_engine.dart';
 import 'core/services/websocket_service.dart';
@@ -27,11 +33,15 @@ import 'presentation/state/auth_provider.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
-  try {
-    await Firebase.initializeApp();
-  } catch (_) {}
-  // Must be registered before runApp()
-  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+  // Firebase initialization isn't required on web — the customer QR app
+  // doesn't use FCM at all, and the firebase_core_web SDK ships partially-
+  // working bindings that drag in firebase_messaging_web during link.
+  if (!kIsWeb) {
+    try {
+      await Firebase.initializeApp();
+    } catch (_) {}
+    fcm_bg.registerBackgroundHandler();
+  }
 
   // runWithSentry is a no-op when SENTRY_DSN dart-define is unset, so
   // local dev doesn't need credentials. Set --dart-define SENTRY_DSN=...
@@ -53,7 +63,7 @@ class _RmsAppState extends ConsumerState<RmsApp> {
   /// next rebuild — necessary because FCM messages can arrive before
   /// the navigator is ready (cold start) or while the wrong tab is
   /// mounted (background → foreground).
-  RemoteMessage? _pendingTap;
+  Map<String, dynamic>? _pendingTap;
 
   @override
   void initState() {
@@ -61,6 +71,11 @@ class _RmsAppState extends ConsumerState<RmsApp> {
     final engine = ref.read(syncEngineProvider);
     engine.setTokenProvider(() => ref.read(authProvider).token);
     engine.init();
+    // Prefetch the runtime system config (QR web origin, Razorpay key,
+    // env tag) so QR-sheet and payment flows have a warm cache. Errors
+    // fall through to the provider's defaulted fallback — see
+    // system_config_provider.dart.
+    ref.read(systemConfigProvider);
     ref.listenManual(authProvider, (prev, next) {
       if (next.isAuthenticated && prev?.isAuthenticated != true) {
         engine.flushQueue();
@@ -78,8 +93,8 @@ class _RmsAppState extends ConsumerState<RmsApp> {
 
   /// Map a notification type to the index of the role's tab that should
   /// be foregrounded when the user taps the notification.
-  int? _tabForMessage(RemoteMessage m, UserRole role) {
-    final type = m.data['type'];
+  int? _tabForMessage(Map<String, dynamic> data, UserRole role) {
+    final type = data['type'];
     switch (role) {
       case UserRole.waiter:
         // Waiter has Orders (0) and Kitchen (1) tabs. ORDER_READY belongs

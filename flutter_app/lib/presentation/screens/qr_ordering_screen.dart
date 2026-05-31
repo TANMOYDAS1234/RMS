@@ -4,12 +4,14 @@
 
 import 'dart:async';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/config/app_theme.dart';
+import '../../core/utils/web_window.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/services/websocket_service.dart';
 import '../../core/utils/api_error.dart';
@@ -568,11 +570,22 @@ class _QrMenuTile extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 4),
-                  Text('₹${item.basePrice.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                          color: copperAccent,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700)),
+                  Row(children: [
+                    Text('₹${item.basePrice.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                            color: copperAccent,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700)),
+                    // 3D / AR preview chip — only shown on web (the QR
+                    // ordering page is web-only anyway, but the guard
+                    // keeps the staff app neutral). For the demo, every
+                    // item uses /models/pizza.glb; once items have real
+                    // GLBs uploaded, this will use item.glbUrl.
+                    if (kIsWeb) ...[
+                      const SizedBox(width: 8),
+                      _ArChip(itemName: item.name),
+                    ],
+                  ]),
                 ],
               ),
             ),
@@ -625,6 +638,50 @@ class _QrMenuTile extends StatelessWidget {
           ],
         ),
       ).animate().fadeIn(duration: 250.ms);
+}
+
+/// A compact "3D" chip rendered next to the menu tile's price.
+///
+/// Opens the static <model-viewer> page (`/ar.html`) in a new tab.
+/// On Android the page surfaces a "View in your space" button that
+/// hands off to Scene Viewer for true AR. On iOS it falls back to
+/// drag-to-rotate 3D (Quick Look needs USDZ — we only have GLB for
+/// the demo). Only rendered on web; on mobile this is unreachable.
+class _ArChip extends StatelessWidget {
+  final String itemName;
+  const _ArChip({required this.itemName});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        // Demo: every item uses the pizza GLB. Real items will use
+        // /api/menu/<id>/glb once the upload flow is wired in.
+        final encoded = Uri.encodeComponent(itemName);
+        openInNewTab('/ar.html?model=/models/pizza.glb&name=$encoded');
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [copperAccent.withValues(alpha: 0.25), roseGold.withValues(alpha: 0.18)],
+          ),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: copperAccent.withValues(alpha: 0.5), width: 0.6),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: const [
+          Icon(Icons.view_in_ar, size: 11, color: copperAccent),
+          SizedBox(width: 4),
+          Text('3D',
+              style: TextStyle(
+                  color: copperAccent,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.5)),
+        ]),
+      ),
+    );
+  }
 }
 
 class _QrOrderCard extends StatelessWidget {

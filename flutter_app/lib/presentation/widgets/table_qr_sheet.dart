@@ -10,10 +10,10 @@
 // The PNG bytes are rendered off-screen with RepaintBoundary so the
 // shared/printed image is crisp at any size, not a screenshot.
 
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -22,10 +22,10 @@ import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
-import '../../core/config/app_config.dart';
 import '../../core/config/app_theme.dart';
+import '../../core/config/system_config_provider.dart';
 
-class TableQrSheet extends StatefulWidget {
+class TableQrSheet extends ConsumerStatefulWidget {
   final String tableId;
   final String tableLabel;
   final String branchId;
@@ -39,17 +39,23 @@ class TableQrSheet extends StatefulWidget {
   });
 
   @override
-  State<TableQrSheet> createState() => _TableQrSheetState();
+  ConsumerState<TableQrSheet> createState() => _TableQrSheetState();
 }
 
-class _TableQrSheetState extends State<TableQrSheet> {
+class _TableQrSheetState extends ConsumerState<TableQrSheet> {
   final GlobalKey _repaintKey = GlobalKey();
   bool _busy = false;
 
-  String get _url => AppConfig.qrUrlForTable(
-        tableId: widget.tableId,
-        branchId: widget.branchId,
-      );
+  /// Resolved from the runtime config provider, which itself falls back
+  /// to the page origin (web) or AppConfig (mobile) when the server
+  /// hasn't responded yet. Either way every code path here gets a
+  /// usable URL — no build-time --dart-define needed.
+  String get _url {
+    final base = ref
+        .read(runtimeQrWebBaseUrlProvider)
+        .replaceFirst(RegExp(r'/+$'), '');
+    return '$base/t/${widget.tableId}?branch=${widget.branchId}';
+  }
 
   /// Render the off-screen QR widget to a high-res PNG. We use a fixed
   /// pixel ratio so the image is sharp at any print size.
