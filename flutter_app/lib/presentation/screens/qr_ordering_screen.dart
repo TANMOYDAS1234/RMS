@@ -14,6 +14,7 @@ import '../../core/config/app_theme.dart';
 import '../../core/utils/web_window.dart';
 import '../../core/utils/razorpay_checkout.dart';
 import '../../core/utils/idempotency.dart';
+import '../../core/config/system_config_provider.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/services/websocket_service.dart';
 import '../../core/utils/api_error.dart';
@@ -771,9 +772,20 @@ class _OrderTrackingTab extends ConsumerWidget {
         ),
       ),
       // Sticky Pay Now bar — only shown on web (Razorpay Checkout JS is
-      // web-only) and only when there's a balance to pay.
+      // web-only) and only when there's a balance to pay. Also requires
+      // the server to expose razorpayWebEnabled (both KEY_ID + KEY_SECRET
+      // configured) — otherwise the button would 400 with the
+      // env-var-missing message.
       if (kIsWeb && outstanding > 0)
-        Consumer(builder: (ctx, ref, _) => _PayNowBar(outstanding: outstanding)),
+        Consumer(builder: (ctx, ref, _) {
+          final cfg = ref.watch(systemConfigProvider);
+          final ready = cfg.maybeWhen(
+            data: (c) => c.razorpayWebEnabled,
+            orElse: () => false,
+          );
+          if (!ready) return const SizedBox.shrink();
+          return _PayNowBar(outstanding: outstanding);
+        }),
     ]);
   }
 }

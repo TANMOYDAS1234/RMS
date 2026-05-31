@@ -33,6 +33,11 @@ class SystemConfig {
   /// instead of two.
   final String razorpayKeyId;
   final bool razorpayEnabled;
+  // True only when BOTH KEY_ID and KEY_SECRET are configured server-side.
+  // Customer web Pay Now uses this — false means the operator deployed
+  // without the SECRET and the button hides itself instead of showing a
+  // broken flow.
+  final bool razorpayWebEnabled;
   final String razorpayEnvironment;
 
   /// 'development' / 'production'. Used by Sentry / observability tags.
@@ -43,6 +48,7 @@ class SystemConfig {
     required this.apiBaseUrl,
     required this.razorpayKeyId,
     required this.razorpayEnabled,
+    required this.razorpayWebEnabled,
     required this.razorpayEnvironment,
     required this.environment,
   });
@@ -52,6 +58,7 @@ class SystemConfig {
         apiBaseUrl: AppConfig.baseUrl,
         razorpayKeyId: '',
         razorpayEnabled: false,
+        razorpayWebEnabled: false,
         razorpayEnvironment: 'sandbox',
         environment: 'unknown',
       );
@@ -66,6 +73,10 @@ class SystemConfig {
       apiBaseUrl: (j['apiBaseUrl'] as String?) ?? AppConfig.baseUrl,
       razorpayKeyId: (raz['keyId'] as String?) ?? '',
       razorpayEnabled: (raz['enabled'] as bool?) ?? false,
+      // Falls back to razorpayEnabled when an older backend doesn't yet
+      // expose `webEnabled` — that preserves the previous behaviour for
+      // operators who haven't redeployed.
+      razorpayWebEnabled: (raz['webEnabled'] as bool?) ?? (raz['enabled'] as bool?) ?? false,
       razorpayEnvironment: (raz['environment'] as String?) ?? 'sandbox',
       environment: (j['environment'] as String?) ?? 'unknown',
     );
