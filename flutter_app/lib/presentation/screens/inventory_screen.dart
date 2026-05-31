@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/config/app_theme.dart';
 import '../../core/network/dio_client.dart';
+import '../../domain/entities/user_entity.dart';
 import '../state/auth_provider.dart';
 
 class InventoryItem {
@@ -64,6 +65,39 @@ class InventoryScreen extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator(color: copperAccent)),
         error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: crimson))),
         data: (items) {
+          // Empty inventory is the default state on a fresh branch — chef
+          // can't add ingredients (manager/admin do that), so without a
+          // copy line they'd just see a blank screen and think it broke.
+          if (items.isEmpty) {
+            final role = ref.read(authProvider).user?.role;
+            final canAdd = role == UserRole.admin || role == UserRole.manager;
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.inventory_2_outlined,
+                        size: 64, color: textSecondary.withValues(alpha: 0.4)),
+                    const SizedBox(height: 18),
+                    const Text('No ingredients yet',
+                        style: TextStyle(
+                            color: textPrimary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 6),
+                    Text(
+                      canAdd
+                          ? 'Add your first ingredient to start tracking stock for this branch.'
+                          : 'Ask your manager to add the ingredients you cook with.\nOnce they appear here, you can adjust stock after each shift.',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: textSecondary, fontSize: 13, height: 1.4),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
           final lowItems = items.where((i) => i.isLow).toList();
           return ListView(
             padding: const EdgeInsets.all(16),
