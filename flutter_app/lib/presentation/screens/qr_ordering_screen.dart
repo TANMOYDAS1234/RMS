@@ -13,6 +13,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/config/app_theme.dart';
 import '../../core/utils/web_window.dart';
 import '../../core/utils/razorpay_checkout.dart';
+import '../../core/utils/idempotency.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/services/websocket_service.dart';
 import '../../core/utils/api_error.dart';
@@ -799,9 +800,19 @@ class _PayNowBarState extends ConsumerState<_PayNowBar> {
     if (sessionId.isEmpty) return;
     setState(() => _busy = true);
     final dio = createDioClient(null);
+    // One stable Idempotency-Key per attempt covers BOTH the init and
+    // verify calls. If the user mashes Pay Now or the network drops mid-
+    // way, the same key returns the same Razorpay Order and the same
+    // "session closed as paid" result instead of creating a second
+    // Razorpay Order or double-marking the session.
+    final initKey = newIdempotencyKey('pay-init-$sessionId');
+    final verifyKey = newIdempotencyKey('pay-verify-$sessionId');
     try {
       // 1) Init — backend creates a Razorpay Order for the running total.
-      final init = await dio.post('/sessions/$sessionId/pay/init');
+      final init = await dio.post(
+        '/sessions/$sessionId/pay/init',
+        options: Options(headers: {'Idempotency-Key': initKey}),
+      );
       final data = Map<String, dynamic>.from(init.data);
       // 2) Open Razorpay Checkout. On web this hits the JS bridge; on
       // mobile the stub returns an error and we surface it.
@@ -822,11 +833,15 @@ class _PayNowBarState extends ConsumerState<_PayNowBar> {
         return;
       }
       // 3) Verify on the backend — HMAC + close session as paid.
-      await dio.post('/sessions/$sessionId/pay/verify', data: {
-        'razorpayOrderId': result.razorpayOrderId,
-        'razorpayPaymentId': result.razorpayPaymentId,
-        'razorpaySignature': result.razorpaySignature,
-      });
+      await dio.post(
+        '/sessions/$sessionId/pay/verify',
+        data: {
+          'razorpayOrderId': result.razorpayOrderId,
+          'razorpayPaymentId': result.razorpayPaymentId,
+          'razorpaySignature': result.razorpaySignature,
+        },
+        options: Options(headers: {'Idempotency-Key': verifyKey}),
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         backgroundColor: emerald,
