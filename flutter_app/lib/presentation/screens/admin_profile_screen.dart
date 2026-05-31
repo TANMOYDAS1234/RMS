@@ -184,8 +184,10 @@ class _ProfileBody extends ConsumerWidget {
 
     try {
       final dio = createDioClient(ref.read(authProvider).token);
+      // Bytes-based upload — fromFile() can't open blob: URLs on web.
+      final bytes = await picked.readAsBytes();
       final formData = FormData.fromMap({
-        'photo': await MultipartFile.fromFile(picked.path, filename: 'photo.jpg'),
+        'photo': MultipartFile.fromBytes(bytes, filename: picked.name),
       });
       await dio.post(
         '/users/$id/photo',

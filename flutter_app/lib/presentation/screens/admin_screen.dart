@@ -1231,8 +1231,10 @@ class _StaffAvatar extends ConsumerWidget {
 
     try {
       final dio = createDioClient(ref.read(authProvider).token);
+      // Bytes-based upload — fromFile() can't open blob: URLs on web.
+      final bytes = await picked.readAsBytes();
       final formData = FormData.fromMap({
-        'photo': await MultipartFile.fromFile(picked.path, filename: 'photo.jpg'),
+        'photo': MultipartFile.fromBytes(bytes, filename: picked.name),
       });
       await dio.post(
         '/users/$id/photo',
@@ -2570,7 +2572,11 @@ class _MenuManagementTabState extends ConsumerState<_MenuManagementTab> {
     final tagsCtrl = TextEditingController(
         text: (existing?['tags'] as List?)?.join(', ') ?? '');
     bool isVeg = existing?['isVeg'] as bool? ?? false;
-    String? pickedImagePath;
+    // Hold the raw bytes — not the path — so the same code works on web
+    // (where XFile.path is a blob URL that MultipartFile.fromFile can't open)
+    // and on mobile. pickedImageName is just for the multipart filename hint.
+    Uint8List? pickedImageBytes;
+    String? pickedImageName;
     Uint8List? pickedGlbBytes;
     String? pickedGlbName;
 
@@ -2619,7 +2625,16 @@ class _MenuManagementTabState extends ConsumerState<_MenuManagementTab> {
               onTap: () async {
                 final picked = await ImagePicker().pickImage(
                     source: ImageSource.gallery, imageQuality: 85, maxWidth: 1024);
-                if (picked != null) setState(() => pickedImagePath = picked.path);
+                if (picked != null) {
+                  // readAsBytes() works on web and mobile alike, unlike
+                  // File(picked.path) which throws UnsupportedError in the
+                  // browser.
+                  final bytes = await picked.readAsBytes();
+                  setState(() {
+                    pickedImageBytes = bytes;
+                    pickedImageName = picked.name;
+                  });
+                }
               },
               child: Container(
                 width: double.infinity,
@@ -2627,16 +2642,16 @@ class _MenuManagementTabState extends ConsumerState<_MenuManagementTab> {
                 decoration: BoxDecoration(
                   color: slateSurface,
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: pickedImagePath != null ? copperAccent : dividerColor),
+                  border: Border.all(color: pickedImageBytes != null ? copperAccent : dividerColor),
                 ),
                 child: Row(children: [
                   Icon(Icons.add_photo_alternate_outlined,
-                      color: pickedImagePath != null ? copperAccent : textSecondary, size: 18),
+                      color: pickedImageBytes != null ? copperAccent : textSecondary, size: 18),
                   const SizedBox(width: 10),
                   Text(
-                    pickedImagePath != null ? 'Photo selected ✓' : 'Add Dish Photo (optional)',
+                    pickedImageBytes != null ? 'Photo selected ✓' : 'Add Dish Photo (optional)',
                     style: TextStyle(
-                        color: pickedImagePath != null ? copperAccent : textSecondary, fontSize: 13),
+                        color: pickedImageBytes != null ? copperAccent : textSecondary, fontSize: 13),
                   ),
                 ]),
               ),
@@ -2722,10 +2737,14 @@ class _MenuManagementTabState extends ConsumerState<_MenuManagementTab> {
                     await dio.patch('/menu/$id', data: data,
                         options: Options(headers: {'Idempotency-Key': newIdempotencyKey('menu-edit-$id')}));
                   }
-                  // Upload photo if picked
-                  if (pickedImagePath != null && savedId != null) {
+                  // Upload photo if picked. Bytes-based upload — see comment
+                  // on pickedImageBytes for why this isn't fromFile().
+                  if (pickedImageBytes != null && savedId != null) {
                     final formData = FormData.fromMap({
-                      'image': await MultipartFile.fromFile(pickedImagePath!, filename: 'dish.jpg'),
+                      'image': MultipartFile.fromBytes(
+                        pickedImageBytes!,
+                        filename: pickedImageName ?? 'dish.jpg',
+                      ),
                     });
                     await dio.post(
                       '/menu/$savedId/image',
@@ -3011,8 +3030,10 @@ class _MenuItemCard extends ConsumerWidget {
     if (picked == null) return;
     try {
       final dio = createDioClient(ref.read(authProvider).token);
+      // Bytes-based upload — fromFile() can't open blob: URLs on web.
+      final bytes = await picked.readAsBytes();
       final formData = FormData.fromMap({
-        'image': await MultipartFile.fromFile(picked.path, filename: 'dish.jpg'),
+        'image': MultipartFile.fromBytes(bytes, filename: picked.name),
       });
       await dio.post(
         '/menu/$id/image',
