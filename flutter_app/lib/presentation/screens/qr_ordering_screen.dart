@@ -393,18 +393,33 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
       ),
       actions: [
         if (session != null)
-          IconButton(
-            tooltip: 'Call a waiter',
-            icon: const Icon(Icons.notifications_active_outlined,
-                color: copperAccent),
-            onPressed: () => _callWaiter(session),
+          // One-tap = instantly notify a waiter; long-press = add a note.
+          // The bell pulses copper while a call is pending to remind the
+          // customer help is on the way (resets when a waiter resolves).
+          GestureDetector(
+            onLongPress: () => _callWaiterWithNote(session),
+            child: IconButton(
+              tooltip: 'Call a waiter (long-press to add note)',
+              icon: const Icon(Icons.notifications_active_outlined,
+                  color: copperAccent),
+              onPressed: () => _callWaiter(session),
+            )
+                .animate(onPlay: (c) => c.repeat(reverse: true))
+                .scaleXY(
+                    begin: 0.95,
+                    end: 1.08,
+                    duration: 900.ms,
+                    curve: Curves.easeInOut),
           ),
         const SizedBox(width: 4),
       ],
     );
   }
 
-  Future<void> _callWaiter(Map<String, dynamic> session) async {
+  /// Long-press path on the bell — surfaces an optional note field for
+  /// customers who want to add context ("the bill, please"). Delegates
+  /// to _callWaiter so the network code lives in one place.
+  Future<void> _callWaiterWithNote(Map<String, dynamic> session) async {
     final reasonCtrl = TextEditingController();
     final reason = await showModalBottomSheet<String?>(
       context: context,
@@ -424,17 +439,18 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
             ),
           ),
           const SizedBox(height: 14),
-          const Text('Call a waiter',
+          const Text('Add a quick note',
               style: TextStyle(
                   color: textPrimary,
                   fontSize: 17,
                   fontWeight: FontWeight.w800)),
           const SizedBox(height: 4),
-          const Text('Optional — let them know what you need.',
+          const Text('Optional — the waiter will see this with the call.',
               style: TextStyle(color: textSecondary, fontSize: 12)),
           const SizedBox(height: 14),
           TextField(
             controller: reasonCtrl,
+            autofocus: true,
             maxLines: 2,
             style: const TextStyle(color: textPrimary, fontSize: 13),
             decoration: InputDecoration(
@@ -477,11 +493,26 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
       ),
     );
     reasonCtrl.dispose();
-    if (reason == null) return; // sheet dismissed
+    if (reason == null) return;
+    await _callWaiter(session, reason: reason);
+  }
+
+  /// Call-waiter — now a one-tap action.
+  ///
+  /// Tap the AppBar bell → fires `POST /sessions/:id/call-waiter` with no
+  /// reason → waiter team gets a push instantly (backend fan-out via FCM
+  /// + WebSocket to every waiter in the branch). Until one waiter
+  /// resolves the help request, the bell pulses crimson so the customer
+  /// knows the call is still pending.
+  ///
+  /// Optional note: customers who do want to add context (e.g. "the
+  /// bill, please") can long-press the bell to open a quick-note sheet.
+  Future<void> _callWaiter(Map<String, dynamic> session,
+      {String? reason}) async {
     try {
       await _dio.post(
         '/sessions/${session['_id']}/call-waiter',
-        data: {if (reason.isNotEmpty) 'reason': reason},
+        data: {if (reason != null && reason.isNotEmpty) 'reason': reason},
         options: Options(headers: {
           'Idempotency-Key': _uuid.v4(),
         }),
@@ -489,7 +520,12 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         backgroundColor: emerald,
-        content: const Text('A waiter has been notified.'),
+        duration: const Duration(seconds: 2),
+        content: Row(children: const [
+          Icon(Icons.check_circle, color: Colors.white, size: 18),
+          SizedBox(width: 8),
+          Expanded(child: Text('Waiter notified — on the way!')),
+        ]),
       ));
     } catch (e) {
       if (!mounted) return;

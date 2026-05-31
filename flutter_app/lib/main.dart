@@ -167,163 +167,247 @@ class _RmsAppState extends ConsumerState<RmsApp> {
 }
 
 // ── Splash ────────────────────────────────────────────────────────────────────
+//
+// Multi-layer 3D entrance:
+//   1. Radial breath glow on the backdrop.
+//   2. Six orbiting copper particles at staggered radii (looks like a
+//      planetary system around the plate).
+//   3. Two counter-rotating sweep-gradient rings — depth via tilt.
+//   4. Inner slate disc with a Y-axis 3D flip-in of the cutlery icon.
+//   5. Wordmark slides up with a perspective skew, then settles.
+//   6. Tagline fades in last; copper dots bounce in a staggered loop.
+//
+// The whole crest sits inside a Transform with a perspective matrix so
+// the rotation around X/Y reads as actual depth instead of a 2D spin.
 class _SplashScreen extends StatelessWidget {
   const _SplashScreen();
 
   @override
   Widget build(BuildContext context) {
-    // Layered animation: radial copper glow ⇒ rotating plate ⇒ knife/fork
-    // crest ⇒ wordmark slide-up ⇒ tagline fade ⇒ progress shimmer.
-    // All chained through flutter_animate so the heavy lifting stays in
-    // one declarative pipeline.
     return Scaffold(
       backgroundColor: slateBg,
       body: Stack(
         children: [
-          // Background: soft radial copper glow that breathes.
+          // Layer 1: radial breath glow.
           Positioned.fill(
             child: Container(
               decoration: const BoxDecoration(
                 gradient: RadialGradient(
-                  center: Alignment(0, -0.1),
-                  radius: 0.9,
+                  center: Alignment(0, -0.05),
+                  radius: 1.0,
                   colors: [
-                    Color(0x33C87B3A),
+                    Color(0x55C87B3A),
                     Color(0x00000000),
                   ],
                 ),
               ),
             )
                 .animate(onPlay: (c) => c.repeat(reverse: true))
-                .scaleXY(begin: 1.0, end: 1.15, duration: 2200.ms, curve: Curves.easeInOut),
+                .scaleXY(begin: 1.0, end: 1.25, duration: 2400.ms, curve: Curves.easeInOut),
+          ),
+          // Layer 2: six orbiting particles. RotationTransition does the
+          // heavy lifting; each particle's Padding offsets its radius.
+          Center(
+            child: SizedBox(
+              width: 280, height: 280,
+              child: Stack(alignment: Alignment.center, children: List.generate(6, (i) {
+                final angle = (i / 6) * 2 * 3.14159;
+                final radius = 100.0 + (i % 2) * 28.0;
+                final size = 6.0 + (i % 3) * 2.0;
+                return Transform.translate(
+                  offset: Offset(radius * (i.isEven ? 1 : -1) * 0.5,
+                                 radius * (i.isOdd ? 1 : -1) * 0.5),
+                  child: Container(
+                    width: size, height: size,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: copperAccent.withValues(alpha: 0.85),
+                      boxShadow: [
+                        BoxShadow(
+                            color: copperAccent.withValues(alpha: 0.6),
+                            blurRadius: 8),
+                      ],
+                    ),
+                  )
+                      .animate(onPlay: (c) => c.repeat())
+                      .rotate(
+                          begin: angle / (2 * 3.14159),
+                          end: angle / (2 * 3.14159) + 1,
+                          duration: (8000 + i * 500).ms,
+                          curve: Curves.linear),
+                );
+              })),
+            ),
           ),
           Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Logo crest — outer plate ring + inner knife/fork icon.
-                SizedBox(
-                  width: 110,
-                  height: 110,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      // Slow-rotating copper ring (the "plate rim").
-                      Container(
-                        width: 110,
-                        height: 110,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: SweepGradient(
-                            colors: [
-                              copperAccent.withValues(alpha: 0.0),
-                              copperAccent.withValues(alpha: 0.9),
-                              roseGold.withValues(alpha: 0.7),
-                              copperAccent.withValues(alpha: 0.0),
-                            ],
-                            stops: const [0.0, 0.45, 0.7, 1.0],
-                          ),
-                        ),
-                      )
-                          .animate(onPlay: (c) => c.repeat())
-                          .rotate(duration: 6000.ms, curve: Curves.linear),
-                      // Inner disc covers the ring's centre so the
-                      // sweep gradient reads as a thin halo.
-                      Container(
-                        width: 92,
-                        height: 92,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: slateCard,
-                          boxShadow: [
-                            BoxShadow(
-                              color: copperAccent.withValues(alpha: 0.35),
-                              blurRadius: 24,
-                              spreadRadius: 2,
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.restaurant_outlined,
-                          color: copperAccent,
-                          size: 40,
-                        )
-                            .animate(onPlay: (c) => c.repeat(reverse: true))
-                            .scaleXY(
-                                begin: 1.0,
-                                end: 1.08,
-                                duration: 1400.ms,
-                                curve: Curves.easeInOut),
-                      ),
-                    ],
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              // Layer 3 + 4: counter-rotating rings + 3D-flipping crest.
+              SizedBox(
+                width: 150, height: 150,
+                child: Stack(alignment: Alignment.center, children: [
+                  // Outer sweep ring (clockwise).
+                  Container(
+                    width: 150, height: 150,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: SweepGradient(colors: [
+                        copperAccent.withValues(alpha: 0.0),
+                        copperAccent.withValues(alpha: 1.0),
+                        roseGold.withValues(alpha: 0.85),
+                        copperAccent.withValues(alpha: 0.0),
+                      ], stops: const [0.0, 0.45, 0.7, 1.0]),
+                    ),
+                  )
+                      .animate(onPlay: (c) => c.repeat())
+                      .rotate(duration: 7000.ms, curve: Curves.linear),
+                  // Inner sweep ring (counter-clockwise, dimmer, tighter).
+                  Container(
+                    width: 118, height: 118,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: SweepGradient(colors: [
+                        roseGold.withValues(alpha: 0.0),
+                        roseGold.withValues(alpha: 0.65),
+                        copperAccent.withValues(alpha: 0.45),
+                        roseGold.withValues(alpha: 0.0),
+                      ], stops: const [0.0, 0.45, 0.7, 1.0]),
+                    ),
+                  )
+                      .animate(onPlay: (c) => c.repeat())
+                      .rotate(
+                          begin: 1.0,
+                          end: 0.0,
+                          duration: 5500.ms,
+                          curve: Curves.linear),
+                  // Slate disc (the plate face).
+                  Container(
+                    width: 96, height: 96,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: const RadialGradient(colors: [
+                        Color(0xFF2A1810),
+                        Color(0xFF150B07),
+                      ]),
+                      boxShadow: [
+                        BoxShadow(
+                            color: copperAccent.withValues(alpha: 0.55),
+                            blurRadius: 32,
+                            spreadRadius: 3),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.restaurant_outlined,
+                      color: copperAccent,
+                      size: 44,
+                    )
+                        .animate(onPlay: (c) => c.repeat(reverse: true))
+                        .scaleXY(
+                            begin: 1.0,
+                            end: 1.12,
+                            duration: 1300.ms,
+                            curve: Curves.easeInOut),
                   ),
-                )
-                    .animate()
-                    .scaleXY(
-                        begin: 0.4,
-                        end: 1.0,
-                        duration: 700.ms,
-                        curve: Curves.elasticOut)
-                    .fadeIn(duration: 400.ms),
-                const SizedBox(height: 28),
-                // Wordmark — slides up + fades in.
-                const Text(
-                  'DINE OPS',
-                  style: TextStyle(
-                      color: textPrimary,
-                      fontSize: 26,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 8),
-                )
-                    .animate()
-                    .fadeIn(delay: 350.ms, duration: 500.ms)
-                    .slideY(begin: 0.4, end: 0, duration: 500.ms, curve: Curves.easeOutCubic),
-                const SizedBox(height: 6),
-                // Copper-tinted tagline.
-                Text(
-                  'Restaurant Operations, Reimagined',
-                  style: TextStyle(
-                      color: copperAccent.withValues(alpha: 0.85),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 2.2),
-                )
-                    .animate()
-                    .fadeIn(delay: 650.ms, duration: 500.ms),
-                const SizedBox(height: 36),
-                // Bouncing copper dots in place of the spinner — feels
-                // less "Material default", more crafted.
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: List.generate(3, (i) {
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: Container(
-                        width: 8,
-                        height: 8,
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: copperAccent,
-                        ),
-                      )
-                          .animate(onPlay: (c) => c.repeat())
-                          .moveY(
-                              begin: 0,
-                              end: -8,
-                              duration: 600.ms,
-                              delay: (i * 150).ms,
-                              curve: Curves.easeInOut)
-                          .then()
-                          .moveY(
-                              begin: -8,
-                              end: 0,
-                              duration: 600.ms,
-                              curve: Curves.easeInOut),
-                    );
-                  }),
-                ),
-              ],
-            ),
+                ]),
+              )
+                  // Crest enters with a 3D Y-axis flip — perspective makes
+                  // it feel like a coin landing on a table, not a sticker.
+                  .animate()
+                  .custom(
+                      duration: 1100.ms,
+                      curve: Curves.easeOutBack,
+                      builder: (_, value, child) {
+                        // value goes 0 → 1; we map it to a half-turn flip
+                        // with perspective baked in.
+                        final flip = (1 - value) * 3.14159; // π → 0
+                        return Transform(
+                          alignment: Alignment.center,
+                          transform: Matrix4.identity()
+                            ..setEntry(3, 2, 0.0015) // perspective
+                            ..rotateY(flip),
+                          child: Opacity(opacity: value, child: child),
+                        );
+                      })
+                  .scaleXY(
+                      begin: 0.3,
+                      end: 1.0,
+                      duration: 800.ms,
+                      curve: Curves.elasticOut),
+              const SizedBox(height: 32),
+              // Wordmark — slides up with a slight perspective skew.
+              const Text(
+                'DINE OPS',
+                style: TextStyle(
+                    color: textPrimary,
+                    fontSize: 30,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 10),
+              )
+                  .animate()
+                  .fadeIn(delay: 500.ms, duration: 600.ms)
+                  .slideY(begin: 0.5, end: 0, duration: 600.ms, curve: Curves.easeOutCubic)
+                  .custom(
+                      delay: 500.ms,
+                      duration: 600.ms,
+                      curve: Curves.easeOutCubic,
+                      builder: (_, value, child) {
+                        // Slight X-axis tilt during the entrance — the
+                        // text "rises off the surface" before locking flat.
+                        final tilt = (1 - value) * 0.3;
+                        return Transform(
+                          alignment: Alignment.bottomCenter,
+                          transform: Matrix4.identity()
+                            ..setEntry(3, 2, 0.002)
+                            ..rotateX(tilt),
+                          child: child,
+                        );
+                      }),
+              const SizedBox(height: 8),
+              Text(
+                'Restaurant Operations, Reimagined',
+                style: TextStyle(
+                    color: copperAccent.withValues(alpha: 0.9),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 2.6),
+              )
+                  .animate()
+                  .fadeIn(delay: 900.ms, duration: 500.ms),
+              const SizedBox(height: 40),
+              // Layer 6: bouncing copper dots.
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: List.generate(3, (i) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 5),
+                    child: Container(
+                      width: 9, height: 9,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: copperAccent,
+                        boxShadow: [
+                          BoxShadow(
+                              color: copperAccent.withValues(alpha: 0.6),
+                              blurRadius: 6),
+                        ],
+                      ),
+                    )
+                        .animate(onPlay: (c) => c.repeat())
+                        .moveY(
+                            begin: 0,
+                            end: -10,
+                            duration: 600.ms,
+                            delay: (i * 150).ms,
+                            curve: Curves.easeInOut)
+                        .then()
+                        .moveY(
+                            begin: -10,
+                            end: 0,
+                            duration: 600.ms,
+                            curve: Curves.easeInOut),
+                  );
+                }),
+              ),
+            ]),
           ),
         ],
       ),
