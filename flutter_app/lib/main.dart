@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -168,27 +169,166 @@ class _RmsAppState extends ConsumerState<RmsApp> {
 // ── Splash ────────────────────────────────────────────────────────────────────
 class _SplashScreen extends StatelessWidget {
   const _SplashScreen();
+
   @override
-  Widget build(BuildContext context) => const Scaffold(
-        backgroundColor: slateBg,
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.restaurant, color: copperAccent, size: 48),
-              SizedBox(height: 16),
-              Text('DINE OPS',
+  Widget build(BuildContext context) {
+    // Layered animation: radial copper glow ⇒ rotating plate ⇒ knife/fork
+    // crest ⇒ wordmark slide-up ⇒ tagline fade ⇒ progress shimmer.
+    // All chained through flutter_animate so the heavy lifting stays in
+    // one declarative pipeline.
+    return Scaffold(
+      backgroundColor: slateBg,
+      body: Stack(
+        children: [
+          // Background: soft radial copper glow that breathes.
+          Positioned.fill(
+            child: Container(
+              decoration: const BoxDecoration(
+                gradient: RadialGradient(
+                  center: Alignment(0, -0.1),
+                  radius: 0.9,
+                  colors: [
+                    Color(0x33C87B3A),
+                    Color(0x00000000),
+                  ],
+                ),
+              ),
+            )
+                .animate(onPlay: (c) => c.repeat(reverse: true))
+                .scaleXY(begin: 1.0, end: 1.15, duration: 2200.ms, curve: Curves.easeInOut),
+          ),
+          Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Logo crest — outer plate ring + inner knife/fork icon.
+                SizedBox(
+                  width: 110,
+                  height: 110,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // Slow-rotating copper ring (the "plate rim").
+                      Container(
+                        width: 110,
+                        height: 110,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: SweepGradient(
+                            colors: [
+                              copperAccent.withValues(alpha: 0.0),
+                              copperAccent.withValues(alpha: 0.9),
+                              roseGold.withValues(alpha: 0.7),
+                              copperAccent.withValues(alpha: 0.0),
+                            ],
+                            stops: const [0.0, 0.45, 0.7, 1.0],
+                          ),
+                        ),
+                      )
+                          .animate(onPlay: (c) => c.repeat())
+                          .rotate(duration: 6000.ms, curve: Curves.linear),
+                      // Inner disc covers the ring's centre so the
+                      // sweep gradient reads as a thin halo.
+                      Container(
+                        width: 92,
+                        height: 92,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: slateCard,
+                          boxShadow: [
+                            BoxShadow(
+                              color: copperAccent.withValues(alpha: 0.35),
+                              blurRadius: 24,
+                              spreadRadius: 2,
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.restaurant_outlined,
+                          color: copperAccent,
+                          size: 40,
+                        )
+                            .animate(onPlay: (c) => c.repeat(reverse: true))
+                            .scaleXY(
+                                begin: 1.0,
+                                end: 1.08,
+                                duration: 1400.ms,
+                                curve: Curves.easeInOut),
+                      ),
+                    ],
+                  ),
+                )
+                    .animate()
+                    .scaleXY(
+                        begin: 0.4,
+                        end: 1.0,
+                        duration: 700.ms,
+                        curve: Curves.elasticOut)
+                    .fadeIn(duration: 400.ms),
+                const SizedBox(height: 28),
+                // Wordmark — slides up + fades in.
+                const Text(
+                  'DINE OPS',
                   style: TextStyle(
                       color: textPrimary,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 4)),
-              SizedBox(height: 24),
-              CircularProgressIndicator(color: copperAccent, strokeWidth: 2),
-            ],
+                      fontSize: 26,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 8),
+                )
+                    .animate()
+                    .fadeIn(delay: 350.ms, duration: 500.ms)
+                    .slideY(begin: 0.4, end: 0, duration: 500.ms, curve: Curves.easeOutCubic),
+                const SizedBox(height: 6),
+                // Copper-tinted tagline.
+                Text(
+                  'Restaurant Operations, Reimagined',
+                  style: TextStyle(
+                      color: copperAccent.withValues(alpha: 0.85),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 2.2),
+                )
+                    .animate()
+                    .fadeIn(delay: 650.ms, duration: 500.ms),
+                const SizedBox(height: 36),
+                // Bouncing copper dots in place of the spinner — feels
+                // less "Material default", more crafted.
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: List.generate(3, (i) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: copperAccent,
+                        ),
+                      )
+                          .animate(onPlay: (c) => c.repeat())
+                          .moveY(
+                              begin: 0,
+                              end: -8,
+                              duration: 600.ms,
+                              delay: (i * 150).ms,
+                              curve: Curves.easeInOut)
+                          .then()
+                          .moveY(
+                              begin: -8,
+                              end: 0,
+                              duration: 600.ms,
+                              curve: Curves.easeInOut),
+                    );
+                  }),
+                ),
+              ],
+            ),
           ),
-        ),
-      );
+        ],
+      ),
+    );
+  }
 }
 
 // ── Main shell with role-based tabs ──────────────────────────────────────────

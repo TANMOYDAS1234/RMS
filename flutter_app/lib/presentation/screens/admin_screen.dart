@@ -1163,96 +1163,28 @@ class _StaffAvatar extends ConsumerWidget {
         photoUrl != null ? '${AppConfig.baseUrl}$photoUrl?v=$v' : null;
     final initials = (user['name'] as String? ?? 'U').substring(0, 1).toUpperCase();
 
-    return GestureDetector(
-      onTap: () => _pickAndUpload(context, ref),
-      child: Stack(
-        children: [
-          CircleAvatar(
-            radius: 20,
-            backgroundColor: color.withValues(alpha: 0.15),
-            child: fullUrl != null
-                ? ClipOval(
-                    child: CachedNetworkImage(
-                      imageUrl: fullUrl,
-                      width: 40,
-                      height: 40,
-                      fit: BoxFit.cover,
-                      placeholder: (_, __) => Text(initials,
-                          style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.w700)),
-                      errorWidget: (_, __, ___) => Text(initials,
-                          style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.w700)),
-                    ),
-                  )
-                : Text(initials, style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.w700)),
-          ),
-          Positioned(
-            bottom: 0, right: 0,
-            child: Container(
-              width: 14, height: 14,
-              decoration: BoxDecoration(
-                color: copperAccent, shape: BoxShape.circle,
-                border: Border.all(color: slateCard, width: 1.5),
+    // View-only: admins inspect staff photos here but cannot change them.
+    // The staff member changes their own photo from the profile screen
+    // (and the admin changes their own via /admin/profile, not from this
+    // list). No tap, no camera badge.
+    return CircleAvatar(
+      radius: 20,
+      backgroundColor: color.withValues(alpha: 0.15),
+      child: fullUrl != null
+          ? ClipOval(
+              child: CachedNetworkImage(
+                imageUrl: fullUrl,
+                width: 40,
+                height: 40,
+                fit: BoxFit.cover,
+                placeholder: (_, __) => Text(initials,
+                    style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.w700)),
+                errorWidget: (_, __, ___) => Text(initials,
+                    style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.w700)),
               ),
-              child: const Icon(Icons.camera_alt, size: 8, color: Colors.white),
-            ),
-          ),
-        ],
-      ),
+            )
+          : Text(initials, style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.w700)),
     );
-  }
-
-  Future<void> _pickAndUpload(BuildContext context, WidgetRef ref) async {
-    final source = await showModalBottomSheet<ImageSource>(
-      context: context,
-      backgroundColor: slateCard,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => SafeArea(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const SizedBox(height: 12),
-          ListTile(
-            leading: const Icon(Icons.camera_alt_outlined, color: copperAccent),
-            title: const Text('Camera', style: TextStyle(color: textPrimary)),
-            onTap: () => Navigator.pop(context, ImageSource.camera),
-          ),
-          ListTile(
-            leading: const Icon(Icons.photo_library_outlined, color: copperAccent),
-            title: const Text('Gallery', style: TextStyle(color: textPrimary)),
-            onTap: () => Navigator.pop(context, ImageSource.gallery),
-          ),
-          const SizedBox(height: 8),
-        ]),
-      ),
-    );
-    if (source == null) return;
-
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(source: source, imageQuality: 80, maxWidth: 512);
-    if (picked == null) return;
-
-    try {
-      final dio = createDioClient(ref.read(authProvider).token);
-      // Bytes-based upload — fromFile() can't open blob: URLs on web.
-      final bytes = await picked.readAsBytes();
-      final formData = FormData.fromMap({
-        'photo': MultipartFile.fromBytes(bytes, filename: picked.name),
-      });
-      await dio.post(
-        '/users/$id/photo',
-        data: formData,
-        options: Options(headers: {'Idempotency-Key': newIdempotencyKey('user-photo-$id')}),
-      );
-      ref.invalidate(_staffProvider);
-      // If the admin uploaded their own staff card's photo, the in-memory
-      // authProvider.user also needs to pick up the new photoUrl so the
-      // AppBar avatar refreshes.
-      final me = ref.read(authProvider).user;
-      if (me != null && me.id == id) {
-        await ref.read(authProvider.notifier).refreshUser();
-      }
-      if (context.mounted) _showSuccess(context, 'Photo updated');
-    } catch (e) {
-      if (context.mounted) _showError(context, describeApiError(e));
-    }
   }
 }
 
