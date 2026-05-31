@@ -1,8 +1,10 @@
 // ─── Premium Dashboard Screen ────────────────────────────────────────────────
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import '../../core/config/app_config.dart';
 import '../../core/config/app_theme.dart';
 import '../../core/services/websocket_service.dart';
 import '../../core/utils/api_error.dart';
@@ -128,16 +130,36 @@ class DashboardScreen extends ConsumerWidget {
         actions: [
           _WsIndicator(state: wsState),
           Consumer(
-            builder: (ctx, ref, _) => PopupMenuButton(
+            builder: (ctx, ref, _) {
+              // Watch the whole user so the avatar rebuilds when refreshUser()
+              // bumps updatedAt — otherwise a successful photo upload never
+              // re-renders the AppBar circle.
+              final user = ref.watch(authProvider).user;
+              final photoFullUrl = user?.photoUrlFor(AppConfig.baseUrl);
+              final initial = (user?.name.isNotEmpty == true)
+                  ? user!.name.substring(0, 1).toUpperCase()
+                  : 'A';
+              return PopupMenuButton(
               color: slateCard,
               padding: const EdgeInsets.symmetric(horizontal: 8),
               child: CircleAvatar(
                 radius: 15,
                 backgroundColor: copperAccent.withValues(alpha: 0.2),
-                child: Text(
-                  ref.watch(authProvider).user?.name.substring(0, 1).toUpperCase() ?? 'A',
-                  style: const TextStyle(color: copperAccent, fontSize: 12, fontWeight: FontWeight.w700),
-                ),
+                child: photoFullUrl != null
+                    ? ClipOval(
+                        child: CachedNetworkImage(
+                          imageUrl: photoFullUrl,
+                          width: 30,
+                          height: 30,
+                          fit: BoxFit.cover,
+                          placeholder: (_, __) => Text(initial,
+                              style: const TextStyle(color: copperAccent, fontSize: 12, fontWeight: FontWeight.w700)),
+                          errorWidget: (_, __, ___) => Text(initial,
+                              style: const TextStyle(color: copperAccent, fontSize: 12, fontWeight: FontWeight.w700)),
+                        ),
+                      )
+                    : Text(initial,
+                        style: const TextStyle(color: copperAccent, fontSize: 12, fontWeight: FontWeight.w700)),
               ),
               itemBuilder: (_) => [
                 PopupMenuItem(
@@ -145,7 +167,8 @@ class DashboardScreen extends ConsumerWidget {
                   onTap: () => ref.read(authProvider.notifier).logout(),
                 ),
               ],
-            ),
+            );
+            },
           ),
           const SizedBox(width: 8),
         ],

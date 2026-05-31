@@ -1,6 +1,8 @@
 // ─── Manager Shell ────────────────────────────────────────────────────────────
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/config/app_config.dart';
 import '../../core/config/app_theme.dart';
 import '../../core/services/websocket_service.dart';
 import '../../core/services/fcm_service.dart';
@@ -159,9 +161,38 @@ class _ManagerShellState extends ConsumerState<ManagerShell> {
                 CircleAvatar(
                   radius: 15,
                   backgroundColor: roseGold.withValues(alpha: 0.2),
-                  child: Text(initial,
-                      style: const TextStyle(
-                          color: roseGold, fontSize: 12, fontWeight: FontWeight.w700)),
+                  // Render the actual photo when one is on file. Falls back
+                  // to initials while loading or on error. The ?v=updatedAt
+                  // cache-buster lives inside photoUrlFor so a freshly
+                  // uploaded photo replaces the cached URL.
+                  child: () {
+                    final photo = user?.photoUrlFor(AppConfig.baseUrl);
+                    if (photo == null) {
+                      return Text(initial,
+                          style: const TextStyle(
+                              color: roseGold,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700));
+                    }
+                    return ClipOval(
+                      child: CachedNetworkImage(
+                        imageUrl: photo,
+                        width: 30,
+                        height: 30,
+                        fit: BoxFit.cover,
+                        placeholder: (_, __) => Text(initial,
+                            style: const TextStyle(
+                                color: roseGold,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700)),
+                        errorWidget: (_, __, ___) => Text(initial,
+                            style: const TextStyle(
+                                color: roseGold,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700)),
+                      ),
+                    );
+                  }(),
                 ),
                 const SizedBox(width: 4),
                 const Icon(Icons.keyboard_arrow_down, color: textSecondary, size: 16),
