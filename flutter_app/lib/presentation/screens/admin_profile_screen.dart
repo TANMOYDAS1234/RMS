@@ -9,6 +9,8 @@ import '../../core/network/dio_client.dart';
 import '../../core/utils/api_error.dart';
 import '../../core/utils/idempotency.dart';
 import '../state/auth_provider.dart';
+import 'admin_screen.dart' show adminStaffProvider;
+import 'manager_staff_tab.dart' show managerStaffProvider;
 
 final _profileProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
   final token = ref.watch(authProvider).token;
@@ -197,7 +199,18 @@ class _ProfileBody extends ConsumerWidget {
       // Refresh both: the profile screen's local FutureProvider AND the
       // shared authProvider.user so the AppBar avatar (and anything else
       // that watches it) picks up the new photoUrl without a re-login.
+      // Force every place that renders the user's photo to refetch.
+      // CachedNetworkImage keys on the URL itself, so the ?v=updatedAt
+      // cache-buster takes care of the actual image bytes — but the
+      // providers wrapping the data also need a kick or they keep
+      // handing out the stale updatedAt and the URL never changes.
       ref.invalidate(_profileProvider);
+      // Cross-screen invalidation: the same user appears in the admin
+      // staff tab AND the manager staff tab; both keep their own
+      // FutureProvider cache. Without this, switching tabs after a
+      // photo upload shows the stale image until autoDispose kicks in.
+      try { ref.invalidate(adminStaffProvider); } catch (_) {}
+      try { ref.invalidate(managerStaffProvider); } catch (_) {}
       await ref.read(authProvider.notifier).refreshUser();
       if (context.mounted) _snack(context, 'Photo updated', emerald);
     } catch (e) {

@@ -12,7 +12,7 @@ import '../../core/utils/idempotency.dart';
 import '../../data/api/manager_api.dart';
 import '../state/auth_provider.dart';
 
-final _managerStaffProvider =
+final managerStaffProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>(
         (ref) => ref.watch(managerApiProvider).staff());
 
@@ -31,12 +31,12 @@ class ManagerStaffTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final staffAsync = ref.watch(_managerStaffProvider);
+    final staffAsync = ref.watch(managerStaffProvider);
 
     return RefreshIndicator(
       color: copperAccent,
       backgroundColor: slateCard,
-      onRefresh: () async => ref.invalidate(_managerStaffProvider),
+      onRefresh: () async => ref.invalidate(managerStaffProvider),
       child: staffAsync.when(
         loading: () =>
             const Center(child: CircularProgressIndicator(color: copperAccent)),
@@ -368,7 +368,7 @@ class _StaffCard extends ConsumerWidget {
           'Idempotency-Key': newIdempotencyKey('toggle-active-$id'),
         }),
       );
-      ref.invalidate(_managerStaffProvider);
+      ref.invalidate(managerStaffProvider);
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(

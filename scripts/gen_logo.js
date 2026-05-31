@@ -108,4 +108,11 @@ const svgFg = `
   await sharp(Buffer.from(svgFg)).png().toFile(OUT_FG);
   console.log(`Wrote ${OUT}`);
   console.log(`Wrote ${OUT_FG}`);
+
+  // Web favicon — flutter_launcher_icons doesn't touch web/favicon.png,
+  // so we regenerate it ourselves at 256×256. Browsers downsample to
+  // 32 / 16 px automatically.
+  const FAVICON = path.join(__dirname, '..', 'flutter_app', 'web', 'favicon.png');
+  await sharp(Buffer.from(svg)).resize(256, 256).png().toFile(FAVICON);
+  console.log(`Wrote ${FAVICON}`);
 })();

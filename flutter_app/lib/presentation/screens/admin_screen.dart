@@ -62,7 +62,7 @@ final _peakHoursProvider =
   return ref.watch(adminApiProvider).peakHours(from: r.from, to: r.to);
 });
 
-final _staffProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+final adminStaffProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>(
     (ref) => ref.watch(adminApiProvider).users());
 
 final _branchesProvider =
@@ -686,7 +686,7 @@ class AdminStaffTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final staffAsync = ref.watch(_staffProvider);
+    final staffAsync = ref.watch(adminStaffProvider);
 
     return Stack(
       children: [
@@ -776,7 +776,7 @@ class _AddStaffSheetState extends ConsumerState<_AddStaffSheet> {
         },
         options: Options(headers: {'Idempotency-Key': _idempotencyKey}),
       );
-      ref.invalidate(_staffProvider);
+      ref.invalidate(adminStaffProvider);
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) _showError(context, describeApiError(e));
@@ -884,7 +884,7 @@ class _StaffCard extends ConsumerWidget {
                   final dio = createDioClient(ref.read(authProvider).token);
                   await dio.patch('/users/$id', data: {'isActive': !isActive},
                       options: Options(headers: {'Idempotency-Key': newIdempotencyKey('toggle-user-$id')}));
-                  ref.invalidate(_staffProvider);
+                  ref.invalidate(adminStaffProvider);
                 } catch (e) {
                   if (context.mounted) _showError(context, describeApiError(e));
                 }
@@ -945,7 +945,7 @@ class _StaffCard extends ConsumerWidget {
                             '/users/$id',
                             options: Options(headers: {'Idempotency-Key': newIdempotencyKey('del-user-$id')}),
                           );
-                          ref.invalidate(_staffProvider);
+                          ref.invalidate(adminStaffProvider);
                           if (context.mounted) _showSuccess(context, 'Staff removed');
                         } catch (e) {
                           if (context.mounted) _showError(context, describeApiError(e));
@@ -1011,7 +1011,7 @@ class _EditUserSheetState extends ConsumerState<_EditUserSheet> {
         data: {'name': _nameCtrl.text.trim(), 'role': _role, 'branchId': _branchId},
         options: Options(headers: {'Idempotency-Key': _idempotencyKey}),
       );
-      ref.invalidate(_staffProvider);
+      ref.invalidate(adminStaffProvider);
       if (mounted) {
         Navigator.pop(context);
         _showSuccess(context, 'Staff updated');

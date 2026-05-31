@@ -81,19 +81,33 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
 
       // 2. Get or create session. Idempotency key is stable per device+table
       //    so a refresh doesn't spawn a parallel session.
-      final sessionRes = await _dio.post(
-        '/sessions/scan',
-        data: {
-          'tableId': widget.tableId,
-          'branchId': widget.branchId,
-          'deviceId': _deviceId,
-        },
-        options: Options(headers: {
-          'Idempotency-Key': 'scan-${widget.tableId}-$_deviceId',
-        }),
-      );
+      //
+      //    Multi-party flow:
+      //    - First call goes without partySize.
+      //    - If the device is new to the table the backend responds with
+      //      { needsPartySize: true, capacity, occupied, remaining, ... }.
+      //      We prompt the customer for their party size, then retry the
+      //      scan with that value. Returning customers (deviceId already
+      //      participates) skip the prompt — the backend returns their
+      //      session straight away.
+      Map<String, dynamic> session = await _scanSession(partySize: null);
+      if (session['needsPartySize'] == true) {
+        final remaining = (session['remaining'] as num?)?.toInt() ?? 0;
+        if (remaining <= 0) {
+          throw _FullTableError(
+            tableLabel: session['tableLabel']?.toString() ?? 'this table',
+          );
+        }
+        final picked = await _askPartySize(remaining);
+        if (picked == null) {
+          // User backed out — leave the screen in error state with a hint
+          // that they can pull-to-refresh.
+          throw _CancelledError();
+        }
+        session = await _scanSession(partySize: picked);
+      }
       ref.read(_sessionProvider.notifier).state =
-          Map<String, dynamic>.from(sessionRes.data);
+          Map<String, dynamic>.from(session);
 
       // 3. Load existing orders for this session via public bill endpoint.
       await _loadSessionBill();
@@ -124,7 +138,18 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
         }
       });
     } catch (e) {
-      setState(() => _error = describeApiError(e));
+      // The multi-party flow throws typed errors for the cases where a
+      // generic "request failed" message would be wrong. Map them to
+      // their own copy; everything else flows through describeApiError.
+      String msg;
+      if (e is _FullTableError) {
+        msg = '${e.tableLabel} is full right now. Please ask a server to seat you at another table.';
+      } else if (e is _CancelledError) {
+        msg = 'Tap refresh to choose your party size and start ordering.';
+      } else {
+        msg = describeApiError(e);
+      }
+      setState(() => _error = msg);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -145,6 +170,129 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
     }
   }
 
+  /// Header subtitle for the QR ordering screen — fits the multi-party
+  /// model: "Table 5 · Party A · 2 ppl". Falls back to just the table
+  /// label when partyLabel is missing (legacy sessions).
+  String _headerSubtitle(Map<String, dynamic> session) {
+    final table = session['tableLabel']?.toString() ?? '';
+    final party = session['partyLabel']?.toString() ?? '';
+    final size = (session['partySize'] as num?)?.toInt() ?? 0;
+    final parts = <String>[
+      if (table.isNotEmpty) table,
+      if (party.isNotEmpty) 'Party $party',
+      if (size > 0) '$size ${size == 1 ? 'person' : 'ppl'}',
+    ];
+    return parts.join(' · ');
+  }
+
+  /// Round-trips POST /sessions/scan and returns the raw response map —
+  /// either a session document or a `{ needsPartySize: true, ... }`
+  /// envelope. Idempotency key is stable per (device, table, partySize)
+  /// so a refresh doesn't spawn a parallel session.
+  Future<Map<String, dynamic>> _scanSession({required int? partySize}) async {
+    final res = await _dio.post(
+      '/sessions/scan',
+      data: {
+        'tableId': widget.tableId,
+        'branchId': widget.branchId,
+        'deviceId': _deviceId,
+        if (partySize != null) 'partySize': partySize,
+      },
+      options: Options(headers: {
+        'Idempotency-Key': 'scan-${widget.tableId}-$_deviceId-${partySize ?? 'probe'}',
+      }),
+    );
+    return Map<String, dynamic>.from(res.data);
+  }
+
+  /// Bottom-sheet prompt: "How many of you are seated?". Caps the picker
+  /// at the table's remaining capacity so the customer can't pick more
+  /// than what's free (the backend re-checks regardless).
+  Future<int?> _askPartySize(int remaining) async {
+    int selected = 1;
+    return showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: slateCard,
+      isScrollControlled: true,
+      isDismissible: false,
+      enableDrag: false,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) => Padding(
+          padding: const EdgeInsets.fromLTRB(24, 22, 24, 28),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(
+                color: textSecondary.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 18),
+            const Icon(Icons.groups_2_outlined, color: copperAccent, size: 32),
+            const SizedBox(height: 10),
+            const Text('How many of you are seated?',
+                style: TextStyle(
+                    color: textPrimary,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800)),
+            const SizedBox(height: 4),
+            Text(
+              remaining == 1
+                  ? '1 seat free at this table.'
+                  : '$remaining seats free at this table.',
+              style: const TextStyle(color: textSecondary, fontSize: 12),
+            ),
+            const SizedBox(height: 20),
+            // Stepper row — minus / count / plus.
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              _StepperButton(
+                icon: Icons.remove,
+                onTap: selected > 1 ? () => setSt(() => selected--) : null,
+              ),
+              const SizedBox(width: 24),
+              SizedBox(
+                width: 60,
+                child: Text('$selected',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        color: textPrimary,
+                        fontSize: 30,
+                        fontWeight: FontWeight.w900)),
+              ),
+              const SizedBox(width: 24),
+              _StepperButton(
+                icon: Icons.add,
+                onTap: selected < remaining ? () => setSt(() => selected++) : null,
+              ),
+            ]),
+            const SizedBox(height: 22),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, selected),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: copperAccent,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                  textStyle: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1),
+                ),
+                child: const Text('CONTINUE'),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _activityTimer?.cancel();
@@ -160,20 +308,28 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
     final qrEnabled = ref.watch(_qrEnabledProvider);
 
     return Scaffold(
-      backgroundColor: slateBg,
+      // Transparent so the gradient/orb backdrop bleeds through into the
+      // nav bar and app bar areas.
+      backgroundColor: Colors.transparent,
+      extendBodyBehindAppBar: false,
       appBar: _buildAppBar(),
-      body: IndexedStack(
-        index: _tabIndex,
-        children: [
-          _MenuTab(
-            tableId: widget.tableId,
-            branchId: widget.branchId,
-            qrEnabled: qrEnabled,
-            onOrderPlaced: _onOrderPlaced,
-          ),
-          const _OrderTrackingTab(),
-        ],
-      ),
+      body: Stack(children: [
+        // Mood backdrop: two soft copper orbs on a near-black gradient.
+        // Pure decoration; doesn't affect hit testing.
+        const Positioned.fill(child: _AmbientBackdrop()),
+        IndexedStack(
+          index: _tabIndex,
+          children: [
+            _MenuTab(
+              tableId: widget.tableId,
+              branchId: widget.branchId,
+              qrEnabled: qrEnabled,
+              onOrderPlaced: _onOrderPlaced,
+            ),
+            const _OrderTrackingTab(),
+          ],
+        ),
+      ]),
       bottomNavigationBar: NavigationBar(
         backgroundColor: slateCard,
         indicatorColor: copperAccent.withValues(alpha: 0.2),
@@ -222,7 +378,7 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
                       letterSpacing: 2)),
               if (session != null)
                 Text(
-                  session['tableLabel'] ?? '',
+                  _headerSubtitle(session),
                   style: const TextStyle(color: textSecondary, fontSize: 11),
                 ),
             ],
@@ -398,21 +554,31 @@ class _MenuTabState extends ConsumerState<_MenuTab> {
                     color: amber,
                     message: 'Online ordering is currently unavailable. Browse the menu below.',
                   ),
-                ...categories.map((cat) {
-                  final catItems = available.where((i) => i.category == cat).toList();
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        child: Text(cat,
-                            style: const TextStyle(
-                                color: textSecondary,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 1)),
-                      ),
-                      ...catItems.map((item) => _QrMenuTile(
+                // Track a running index across categories so the stagger
+                // delay continues smoothly section-to-section rather than
+                // restarting at every category header.
+                ...(() {
+                  int idx = 0;
+                  return categories.map((cat) {
+                    final catItems = available.where((i) => i.category == cat).toList();
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: Text(cat,
+                              style: const TextStyle(
+                                  color: textSecondary,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 1)),
+                        )
+                            .animate()
+                            .fadeIn(duration: 300.ms)
+                            .slideX(begin: -0.2, end: 0, duration: 300.ms),
+                        ...catItems.map((item) {
+                          final delay = (idx++ * 40).ms;
+                          return _QrMenuTile(
                             item: item,
                             qty: _cart[item.id] ?? 0,
                             enabled: widget.qrEnabled,
@@ -425,10 +591,20 @@ class _MenuTabState extends ConsumerState<_MenuTab> {
                                 _cart[item.id] = q;
                               }
                             }),
-                          )),
-                    ],
-                  );
-                }),
+                          )
+                              .animate()
+                              .fadeIn(delay: delay, duration: 350.ms)
+                              .slideY(
+                                  begin: 0.15,
+                                  end: 0,
+                                  delay: delay,
+                                  duration: 350.ms,
+                                  curve: Curves.easeOutCubic);
+                        }),
+                      ],
+                    );
+                  });
+                })(),
               ],
             ),
             if (_cart.isNotEmpty && widget.qrEnabled)
@@ -668,6 +844,13 @@ class _ArChip extends StatelessWidget {
           ),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: copperAccent.withValues(alpha: 0.5), width: 0.6),
+          boxShadow: [
+            BoxShadow(
+              color: copperAccent.withValues(alpha: 0.45),
+              blurRadius: 8,
+              spreadRadius: 0,
+            ),
+          ],
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: const [
           Icon(Icons.view_in_ar, size: 11, color: copperAccent),
@@ -679,7 +862,14 @@ class _ArChip extends StatelessWidget {
                   fontWeight: FontWeight.w800,
                   letterSpacing: 0.5)),
         ]),
-      ),
+      )
+          .animate(onPlay: (c) => c.repeat(reverse: true))
+          .fadeIn(duration: 600.ms)
+          .then()
+          .tint(
+              color: roseGold.withValues(alpha: 0.4),
+              duration: 1200.ms,
+              curve: Curves.easeInOut),
     );
   }
 }
@@ -921,4 +1111,101 @@ class _ErrorView extends StatelessWidget {
           ),
         ),
       );
+}
+
+/// Thrown internally when the QR-scan flow needs to short-circuit init
+/// because the table has no free seats. Caught one frame later by the
+/// parent's try/catch and routed to the friendly "ask a server" copy.
+class _FullTableError implements Exception {
+  final String tableLabel;
+  _FullTableError({required this.tableLabel});
+}
+
+/// Customer dismissed the party-size picker. Init bails and the user
+/// sees a "tap refresh to start over" hint.
+class _CancelledError implements Exception {}
+
+/// Soft animated copper-glow backdrop. Two radial gradients orbit the
+/// canvas at different periods so the surface feels alive without ever
+/// distracting from the menu. CompositingLayer-friendly: just two
+/// containers, no per-frame allocations.
+class _AmbientBackdrop extends StatelessWidget {
+  const _AmbientBackdrop();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF120A06), Color(0xFF0A0604)],
+        ),
+      ),
+      child: Stack(children: [
+        Positioned(
+          top: -120, left: -80,
+          child: Container(
+            width: 320, height: 320,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(colors: [
+                copperAccent.withValues(alpha: 0.30),
+                copperAccent.withValues(alpha: 0.0),
+              ]),
+            ),
+          )
+              .animate(onPlay: (c) => c.repeat(reverse: true))
+              .moveX(begin: 0, end: 30, duration: 5500.ms, curve: Curves.easeInOut)
+              .moveY(begin: 0, end: 20, duration: 5500.ms, curve: Curves.easeInOut),
+        ),
+        Positioned(
+          bottom: -80, right: -60,
+          child: Container(
+            width: 260, height: 260,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(colors: [
+                roseGold.withValues(alpha: 0.22),
+                roseGold.withValues(alpha: 0.0),
+              ]),
+            ),
+          )
+              .animate(onPlay: (c) => c.repeat(reverse: true))
+              .moveX(begin: 0, end: -25, duration: 6500.ms, curve: Curves.easeInOut)
+              .moveY(begin: 0, end: -15, duration: 6500.ms, curve: Curves.easeInOut),
+        ),
+      ]),
+    );
+  }
+}
+
+/// Round copper stepper button used by the party-size picker. Disabled
+/// state fades out and ignores taps.
+class _StepperButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback? onTap;
+  const _StepperButton({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 180),
+        opacity: enabled ? 1.0 : 0.35,
+        child: Container(
+          width: 56, height: 56,
+          decoration: BoxDecoration(
+            color: copperAccent.withValues(alpha: 0.18),
+            shape: BoxShape.circle,
+            border: Border.all(
+                color: copperAccent.withValues(alpha: 0.6), width: 1.2),
+          ),
+          child: Icon(icon, color: copperAccent, size: 26),
+        ),
+      ),
+    );
+  }
 }
