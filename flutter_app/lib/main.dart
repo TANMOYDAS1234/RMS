@@ -463,15 +463,18 @@ class _MainShellState extends ConsumerState<MainShell> {
             const _TabDef('Orders',  Icons.receipt_outlined,      Icons.receipt,      DashboardScreen()),
             const _TabDef('Floor',   Icons.grid_view_outlined,    Icons.grid_view,    FloorGridScreen()),
             const _TabDef('Kitchen', Icons.restaurant_outlined,   Icons.restaurant,   KitchenScreen()),
+            const _TabDef('Profile', Icons.person_outline,        Icons.person,       AdminProfileScreen()),
           ],
         UserRole.chef => [
             const _TabDef('Kitchen',   Icons.restaurant_outlined,  Icons.restaurant,  KitchenScreen()),
             const _TabDef('Inventory', Icons.inventory_2_outlined, Icons.inventory_2, InventoryScreen()),
+            const _TabDef('Profile',   Icons.person_outline,       Icons.person,      AdminProfileScreen()),
           ],
         UserRole.cashier => [
             const _TabDef('Orders',  Icons.receipt_outlined,      Icons.receipt,      DashboardScreen()),
             const _TabDef('Billing', Icons.receipt_long_outlined, Icons.receipt_long, BillingScreen()),
             const _TabDef('Drawer',  Icons.point_of_sale_outlined, Icons.point_of_sale, CashDrawerScreen()),
+            const _TabDef('Profile', Icons.person_outline,        Icons.person,        AdminProfileScreen()),
           ],
         UserRole.customer => [
             const _TabDef('Orders', Icons.receipt_outlined, Icons.receipt, DashboardScreen()),
