@@ -2078,6 +2078,7 @@ class _EditBranchSheetState extends ConsumerState<_EditBranchSheet> {
   late final TextEditingController _gstCtrl;
   late final String _idempotencyKey;
   late bool _isActive;
+  late bool _chefCanManageInventory;
   bool _submitting = false;
 
   @override
@@ -2089,6 +2090,8 @@ class _EditBranchSheetState extends ConsumerState<_EditBranchSheet> {
     _gstCtrl = TextEditingController(
         text: (((widget.branch['gstRate'] as num? ?? 0.18) * 100)).toStringAsFixed(0));
     _isActive = widget.branch['isActive'] as bool? ?? true;
+    _chefCanManageInventory =
+        widget.branch['chefCanManageInventory'] as bool? ?? false;
     _idempotencyKey = newIdempotencyKey('edit-branch-${widget.branchId}');
   }
 
@@ -2116,6 +2119,7 @@ class _EditBranchSheetState extends ConsumerState<_EditBranchSheet> {
           'slug': _slugCtrl.text.trim(),
           if (gstPct != null) 'gstRate': gstPct / 100,
           'isActive': _isActive,
+          'chefCanManageInventory': _chefCanManageInventory,
         },
         options: Options(headers: {'Idempotency-Key': _idempotencyKey}),
       );
@@ -2158,6 +2162,31 @@ class _EditBranchSheetState extends ConsumerState<_EditBranchSheet> {
               inactiveTrackColor: slateSurface,
             ),
           ]),
+          const SizedBox(height: 4),
+          // When on, head chefs on this branch can add ingredients and
+          // set thresholds themselves. Chef-added items are flagged
+          // pendingReview until a manager audits the values. Off by
+          // default — keeps the cleaner separation of duties.
+          Row(children: [
+            const Expanded(
+              child: Text('Chef manages inventory',
+                  style: TextStyle(color: textPrimary, fontSize: 13)),
+            ),
+            Switch(
+              value: _chefCanManageInventory,
+              onChanged: (v) => setState(() => _chefCanManageInventory = v),
+              activeThumbColor: copperAccent,
+              inactiveThumbColor: textSecondary,
+              inactiveTrackColor: slateSurface,
+            ),
+          ]),
+          const Padding(
+            padding: EdgeInsets.only(top: 2, bottom: 6),
+            child: Text(
+              'Chef can add ingredients + set thresholds. Items they add show a REVIEW badge until you approve.',
+              style: TextStyle(color: textSecondary, fontSize: 10, height: 1.3),
+            ),
+          ),
           const SizedBox(height: 16),
           _PrimaryButton(
             label: _submitting ? 'Saving…' : 'Save Changes',
