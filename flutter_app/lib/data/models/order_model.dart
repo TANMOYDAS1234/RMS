@@ -20,7 +20,12 @@ class OrderItemModel {
   });
 
   factory OrderItemModel.fromJson(Map<String, dynamic> json) => OrderItemModel(
-        id: json['_id'] ?? json['id'] ?? '',
+        // Backend sub-document field is `itemId` (the menu item _id);
+        // sub-docs don't get their own _id. Older serializers used `id`
+        // or `_id`, so we accept all three. Without this fallback the
+        // chef KDS PATCH builds an `/items//progress` URL with an empty
+        // segment and the server 404s — the "can't patch order" bug.
+        id: json['itemId'] ?? json['_id'] ?? json['id'] ?? '',
         name: json['name'] ?? '',
         progress: (json['progress'] ?? 0).toDouble(),
         quantity: json['quantity'] ?? 1,

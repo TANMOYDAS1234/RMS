@@ -16,6 +16,7 @@ import '../widgets/order_card.dart';
 import '../widgets/metrics_ribbon.dart';
 import '../widgets/status_chip.dart';
 import '../widgets/waiter_inbox.dart';
+import 'admin_profile_screen.dart';
 import 'new_order_screen.dart';
 import 'qr_scanner_screen.dart';
 
@@ -161,7 +162,40 @@ class DashboardScreen extends ConsumerWidget {
                     : Text(initial,
                         style: const TextStyle(color: copperAccent, fontSize: 12, fontWeight: FontWeight.w700)),
               ),
-              itemBuilder: (_) => [
+              itemBuilder: (_) => <PopupMenuEntry<dynamic>>[
+                // Quick profile readout — name + role — non-clickable.
+                PopupMenuItem(
+                  enabled: false,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(user?.name ?? 'Staff',
+                          style: const TextStyle(
+                              color: textPrimary,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700)),
+                      Text((user?.role.name ?? '').toUpperCase(),
+                          style: const TextStyle(
+                              color: textSecondary, fontSize: 10)),
+                    ],
+                  ),
+                ),
+                const PopupMenuDivider(),
+                PopupMenuItem(
+                  child: const Row(children: [
+                    Icon(Icons.person_outline, color: copperAccent, size: 16),
+                    SizedBox(width: 8),
+                    Text('My Profile', style: TextStyle(color: textPrimary)),
+                  ]),
+                  onTap: () {
+                    // PopupMenuItem closes the menu before the onTap fires,
+                    // so the Navigator.push has to be deferred a frame.
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      Navigator.of(ctx).push(MaterialPageRoute(
+                          builder: (_) => const AdminProfileScreen()));
+                    });
+                  },
+                ),
                 PopupMenuItem(
                   child: const Row(children: [Icon(Icons.logout, color: crimson, size: 16), SizedBox(width: 8), Text('Logout', style: TextStyle(color: crimson))]),
                   onTap: () => ref.read(authProvider.notifier).logout(),
