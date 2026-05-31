@@ -15,6 +15,7 @@ import '../state/auth_provider.dart';
 import '../widgets/order_card.dart';
 import '../widgets/metrics_ribbon.dart';
 import '../widgets/status_chip.dart';
+import '../../domain/entities/user_entity.dart';
 import '../widgets/waiter_inbox.dart';
 import 'admin_profile_screen.dart';
 import 'new_order_screen.dart';
@@ -94,7 +95,14 @@ class DashboardScreen extends ConsumerWidget {
           ],
         ),
       ),
-      floatingActionButton: _buildFAB(context),
+      // QR scan + New Order are waiter-only actions. Chef has no use for
+      // QR scanning (they don't seat customers), and cashier never takes
+      // orders — they only handle billing/payment for existing ones.
+      // Hiding the FAB cluster for those roles cleans up the UI and
+      // prevents accidental order creation by the wrong staff.
+      floatingActionButton: ref.watch(authProvider).user?.role == UserRole.waiter
+          ? _buildFAB(context)
+          : null,
     );
   }
 
