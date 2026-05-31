@@ -308,26 +308,32 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
     final qrEnabled = ref.watch(_qrEnabledProvider);
 
     return Scaffold(
-      // Transparent so the gradient/orb backdrop bleeds through into the
-      // nav bar and app bar areas.
       backgroundColor: Colors.transparent,
       extendBodyBehindAppBar: false,
       appBar: _buildAppBar(),
       body: Stack(children: [
-        // Mood backdrop: two soft copper orbs on a near-black gradient.
-        // Pure decoration; doesn't affect hit testing.
         const Positioned.fill(child: _AmbientBackdrop()),
-        IndexedStack(
-          index: _tabIndex,
-          children: [
-            _MenuTab(
-              tableId: widget.tableId,
-              branchId: widget.branchId,
-              qrEnabled: qrEnabled,
-              onOrderPlaced: _onOrderPlaced,
+        // Responsive shell: on phones the menu fills the screen; on
+        // tablets/desktop we cap it at 640 px and center, so the menu
+        // doesn't read as a stretched single column on a 1080 px window.
+        // The backdrop above still fills edge-to-edge so the orbs feel
+        // ambient, not clipped.
+        Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 640),
+            child: IndexedStack(
+              index: _tabIndex,
+              children: [
+                _MenuTab(
+                  tableId: widget.tableId,
+                  branchId: widget.branchId,
+                  qrEnabled: qrEnabled,
+                  onOrderPlaced: _onOrderPlaced,
+                ),
+                const _OrderTrackingTab(),
+              ],
             ),
-            const _OrderTrackingTab(),
-          ],
+          ),
         ),
       ]),
       bottomNavigationBar: NavigationBar(
@@ -593,13 +599,28 @@ class _MenuTabState extends ConsumerState<_MenuTab> {
                             }),
                           )
                               .animate()
-                              .fadeIn(delay: delay, duration: 350.ms)
+                              .fadeIn(delay: delay, duration: 400.ms)
+                              // Y-axis rotate on entrance feels like the
+                              // tile is flipping off a stack — paired
+                              // with the slide it reads as 3D depth.
                               .slideY(
-                                  begin: 0.15,
+                                  begin: 0.25,
                                   end: 0,
                                   delay: delay,
-                                  duration: 350.ms,
-                                  curve: Curves.easeOutCubic);
+                                  duration: 400.ms,
+                                  curve: Curves.easeOutCubic)
+                              .rotate(
+                                  begin: -0.04,
+                                  end: 0,
+                                  delay: delay,
+                                  duration: 500.ms,
+                                  curve: Curves.easeOutBack)
+                              .scaleXY(
+                                  begin: 0.92,
+                                  end: 1.0,
+                                  delay: delay,
+                                  duration: 400.ms,
+                                  curve: Curves.easeOutBack);
                         }),
                       ],
                     );
@@ -910,7 +931,17 @@ class _QrOrderCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  'Order #${(order['_id'] as String? ?? '').substring(0, 8)}',
+                  // /sessions/:id/bill serialises the order id as `id`,
+                  // not `_id`. Accept either, and never call substring on
+                  // a string shorter than the slice length — which was
+                  // the actual cause of "My Orders" going gray right
+                  // after a successful order placement.
+                  () {
+                    final raw = (order['id'] ?? order['_id'] ?? '').toString();
+                    return raw.isEmpty
+                        ? 'Order'
+                        : 'Order #${raw.substring(0, raw.length < 8 ? raw.length : 8)}';
+                  }(),
                   style: const TextStyle(
                       color: textPrimary,
                       fontSize: 14,
