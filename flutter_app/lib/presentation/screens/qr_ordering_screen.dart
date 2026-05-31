@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/config/app_theme.dart';
 import '../../core/utils/web_window.dart';
+import '../../core/utils/razorpay_checkout.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/services/websocket_service.dart';
 import '../../core/utils/api_error.dart';
@@ -750,10 +751,141 @@ class _OrderTrackingTab extends ConsumerWidget {
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: orders.length,
-      itemBuilder: (_, i) => _QrOrderCard(order: orders[i]),
+    // Tally what's owed so the Pay Now button can show the running total.
+    // Bills haven't necessarily been generated yet, so we sum the orders
+    // themselves and exclude anything already paid or closed.
+    double outstanding = 0;
+    for (final o in orders) {
+      final st = (o['status'] as String?) ?? '';
+      if (st == 'paid' || st == 'closed') continue;
+      outstanding += ((o['total'] as num?) ?? 0).toDouble();
+    }
+
+    return Column(children: [
+      Expanded(
+        child: ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: orders.length,
+          itemBuilder: (_, i) => _QrOrderCard(order: orders[i]),
+        ),
+      ),
+      // Sticky Pay Now bar — only shown on web (Razorpay Checkout JS is
+      // web-only) and only when there's a balance to pay.
+      if (kIsWeb && outstanding > 0)
+        Consumer(builder: (ctx, ref, _) => _PayNowBar(outstanding: outstanding)),
+    ]);
+  }
+}
+
+/// Sticky bottom bar with "Pay Now" CTA, only rendered on the customer
+/// web build. Opens Razorpay Checkout JS via the conditional facade and
+/// hits POST /sessions/:id/pay/init + /pay/verify on success.
+class _PayNowBar extends ConsumerStatefulWidget {
+  final double outstanding;
+  const _PayNowBar({required this.outstanding});
+
+  @override
+  ConsumerState<_PayNowBar> createState() => _PayNowBarState();
+}
+
+class _PayNowBarState extends ConsumerState<_PayNowBar> {
+  bool _busy = false;
+
+  Future<void> _payNow() async {
+    if (_busy) return;
+    final session = ref.read(_sessionProvider);
+    if (session == null) return;
+    final sessionId = (session['_id'] ?? session['id'])?.toString() ?? '';
+    if (sessionId.isEmpty) return;
+    setState(() => _busy = true);
+    final dio = createDioClient(null);
+    try {
+      // 1) Init — backend creates a Razorpay Order for the running total.
+      final init = await dio.post('/sessions/$sessionId/pay/init');
+      final data = Map<String, dynamic>.from(init.data);
+      // 2) Open Razorpay Checkout. On web this hits the JS bridge; on
+      // mobile the stub returns an error and we surface it.
+      final result = await openRazorpayCheckout(
+        keyId: data['keyId'] ?? '',
+        razorpayOrderId: data['razorpayOrderId'] ?? '',
+        amountPaise: (data['amount'] as num?)?.toInt() ?? 0,
+        name: 'DINE OPS',
+        description: 'Table ${data['tableLabel'] ?? ''}',
+      );
+      if (!result.success) {
+        if (mounted && result.error != null) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            backgroundColor: crimson,
+            content: Text(result.error!),
+          ));
+        }
+        return;
+      }
+      // 3) Verify on the backend — HMAC + close session as paid.
+      await dio.post('/sessions/$sessionId/pay/verify', data: {
+        'razorpayOrderId': result.razorpayOrderId,
+        'razorpayPaymentId': result.razorpayPaymentId,
+        'razorpaySignature': result.razorpaySignature,
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        backgroundColor: emerald,
+        content: const Text('Payment received — thank you!'),
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        backgroundColor: crimson,
+        content: Text(describeApiError(e)),
+      ));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+        decoration: BoxDecoration(
+          color: slateCard,
+          border: Border(top: BorderSide(color: dividerColor)),
+        ),
+        child: Row(children: [
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Outstanding',
+                  style: TextStyle(color: textSecondary, fontSize: 11)),
+              Text('₹${widget.outstanding.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                      color: copperAccent,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900)),
+            ]),
+          ),
+          ElevatedButton.icon(
+            onPressed: _busy ? null : _payNow,
+            icon: _busy
+                ? const SizedBox(
+                    width: 14, height: 14,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white))
+                : const Icon(Icons.lock_outline, size: 16),
+            label: Text(_busy ? 'Opening…' : 'Pay Now'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: copperAccent,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+              textStyle: const TextStyle(
+                  fontSize: 13, fontWeight: FontWeight.w800, letterSpacing: 1),
+            ),
+          ),
+        ]),
+      ),
     );
   }
 }

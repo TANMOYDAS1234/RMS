@@ -56,6 +56,10 @@ dependencies:
   mobile_scanner: ^7.2.0
   qr_flutter: ^4.1.0
   path_provider: ^2.1.5
+  # Used by the web-only Razorpay Checkout interop for `allowInterop`. `js`
+  # ships transitively but the analyzer needs it as a direct dep to resolve
+  # `package:js/js_util.dart` for static checks.
+  js: ^0.6.7
 
 dev_dependencies:
   flutter_test:
