@@ -25,6 +25,9 @@ class AdminApi {
   Future<List<Map<String, dynamic>>> staffPerformance(
           {DateTime? from, DateTime? to}) =>
       _listQ('/analytics/staff-performance', _range(from, to));
+  Future<List<Map<String, dynamic>>> branchComparison(
+          {DateTime? from, DateTime? to}) =>
+      _listQ('/analytics/branch-comparison', _range(from, to));
 
   // ── Admin-only endpoints ────────────────────────────────────────────────
   Future<Map<String, dynamic>> systemHealth() => _map('/admin/system-health');
