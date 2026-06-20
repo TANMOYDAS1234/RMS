@@ -1360,6 +1360,27 @@ class AdminBillingTab extends ConsumerWidget {
           data: (fin) => _EodSummaryCard(data: fin),
         ),
         const SizedBox(height: 20),
+        // Pending refund requests — surfaced above the log because they
+        // need an approve/deny decision from the manager (or admin).
+        txAsync.when(
+          loading: () => const SizedBox.shrink(),
+          error: (_, __) => const SizedBox.shrink(),
+          data: (txs) {
+            final pending = txs
+                .where((t) => (t['refundStatus'] as String?) == 'PENDING')
+                .toList();
+            if (pending.isEmpty) return const SizedBox.shrink();
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const _SectionTitle('Pending Refund Requests'),
+                const SizedBox(height: 12),
+                ...pending.map((tx) => _PendingRefundCard(tx: tx)),
+                const SizedBox(height: 20),
+              ],
+            );
+          },
+        ),
         const _SectionTitle('Transaction Log'),
         const SizedBox(height: 12),
         txAsync.when(
@@ -1371,6 +1392,129 @@ class AdminBillingTab extends ConsumerWidget {
         ),
       ],
     );
+  }
+}
+
+// Card for a PENDING refund. Two actions: approve fires the existing
+// /billing/:id/approve-refund (manager+admin) which calls the PSP, and
+// deny posts to /billing/:id/deny-refund which just closes the request.
+class _PendingRefundCard extends ConsumerWidget {
+  final Map<String, dynamic> tx;
+  const _PendingRefundCard({required this.tx});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final id = tx['_id'] as String? ?? '';
+    final tableLabel = tx['tableLabel'] as String? ?? '';
+    final total = (tx['total'] as num?)?.toDouble() ?? 0;
+    final reason = tx['refundReason'] as String? ?? '';
+    final reference = tx['refundReference'] as String?;
+    final requestedAt = tx['refundRequestedAt'] != null
+        ? DateTime.tryParse(tx['refundRequestedAt'])
+        : null;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: slateCard,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: amber.withValues(alpha: 0.45)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Text('Table $tableLabel',
+              style: const TextStyle(
+                  color: textPrimary, fontSize: 13, fontWeight: FontWeight.w700)),
+          const Spacer(),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: amber.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Text('PENDING',
+                style: TextStyle(
+                    color: amber, fontSize: 9, fontWeight: FontWeight.w700)),
+          ),
+        ]),
+        const SizedBox(height: 6),
+        Row(children: [
+          Text('₹${total.toStringAsFixed(2)}',
+              style: const TextStyle(
+                  color: copperAccent,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800)),
+          const Spacer(),
+          if (requestedAt != null)
+            Text(DateFormat('dd MMM, HH:mm').format(requestedAt),
+                style: const TextStyle(color: textSecondary, fontSize: 11)),
+        ]),
+        const SizedBox(height: 8),
+        Text('Reason: $reason',
+            style: const TextStyle(color: textSecondary, fontSize: 12)),
+        if (reference != null && reference.isNotEmpty) ...[
+          const SizedBox(height: 2),
+          Text('Ref: $reference',
+              style: const TextStyle(color: textSecondary, fontSize: 11)),
+        ],
+        const SizedBox(height: 10),
+        Row(children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              icon: const Icon(Icons.close, size: 14),
+              label: const Text('Deny'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: textSecondary,
+                side: BorderSide(color: textSecondary.withValues(alpha: 0.5)),
+                padding: const EdgeInsets.symmetric(vertical: 9),
+                textStyle:
+                    const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+              ),
+              onPressed: () => _act(context, ref, id, approve: false),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.check, size: 14),
+              label: const Text('Approve'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: emerald,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 9),
+                textStyle:
+                    const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+              ),
+              onPressed: () => _act(context, ref, id, approve: true),
+            ),
+          ),
+        ]),
+      ]),
+    );
+  }
+
+  Future<void> _act(BuildContext context, WidgetRef ref, String id,
+      {required bool approve}) async {
+    try {
+      final dio = createDioClient(ref.read(authProvider).token);
+      final path = approve
+          ? '/billing/$id/approve-refund'
+          : '/billing/$id/deny-refund';
+      final prefix = approve ? 'refund-approve' : 'refund-deny';
+      await dio.post(
+        path,
+        options: Options(
+            headers: {'Idempotency-Key': newIdempotencyKey('$prefix-$id')}),
+      );
+      ref.invalidate(_transactionsProvider);
+      ref.invalidate(_financialSummaryProvider);
+      if (context.mounted) {
+        _showSuccess(context, approve ? 'Refund approved' : 'Refund denied');
+      }
+    } catch (e) {
+      if (context.mounted) _showError(context, describeApiError(e));
+    }
   }
 }
 

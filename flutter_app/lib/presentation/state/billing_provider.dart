@@ -13,6 +13,11 @@ class BillModel {
   final bool isPaid;
   final String? paymentMethod;
   final DateTime? paidAt;
+  // Refund workflow — null until the cashier requests a refund.
+  // Values: 'PENDING' | 'APPROVED' | 'DENIED'.
+  final String? refundStatus;
+  final String? refundReason;
+  final bool isRefunded;
 
   const BillModel({
     required this.id,
@@ -25,6 +30,9 @@ class BillModel {
     required this.isPaid,
     this.paymentMethod,
     this.paidAt,
+    this.refundStatus,
+    this.refundReason,
+    this.isRefunded = false,
   });
 
   factory BillModel.fromJson(Map<String, dynamic> j) => BillModel(
@@ -38,6 +46,9 @@ class BillModel {
         isPaid: j['isPaid'] ?? false,
         paymentMethod: j['paymentMethod'],
         paidAt: j['paidAt'] != null ? DateTime.parse(j['paidAt']) : null,
+        refundStatus: j['refundStatus'] as String?,
+        refundReason: j['refundReason'] as String?,
+        isRefunded: j['isRefunded'] ?? false,
       );
 }
 
