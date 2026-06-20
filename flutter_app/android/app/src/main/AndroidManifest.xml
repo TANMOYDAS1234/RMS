@@ -7,10 +7,14 @@
         android:label="Dine Ops"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
-        <!-- FCM default channel — must match channelId sent by backend -->
+        <!-- FCM default channel — must match channelId sent by backend.
+             Fallback for messages with no explicit channelId. Routes to
+             orders_new (high importance + vibrate) so an unrouted push
+             still wakes the staff phone instead of dropping into the
+             low_stock silent channel. -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
-            android:value="low_stock" />
+            android:value="orders_new" />
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_icon"
             android:resource="@mipmap/ic_launcher" />

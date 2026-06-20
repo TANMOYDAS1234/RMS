@@ -379,6 +379,58 @@ class _InventoryCard extends StatelessWidget {
                   child: const Text('REVIEW',
                       style: TextStyle(color: amber, fontSize: 10, fontWeight: FontWeight.w700)),
                 ),
+                // Manager + admin only: one-tap Approve to clear the
+                // pendingReview flag. Chef sees the badge but no button
+                // — only the manager can close the audit loop.
+                if (() {
+                  final r = ref.read(authProvider).user?.role;
+                  return r == UserRole.admin || r == UserRole.manager;
+                }()) ...[
+                  const SizedBox(width: 6),
+                  GestureDetector(
+                    onTap: () async {
+                      try {
+                        final token = ref.read(authProvider).token;
+                        final dio = createDioClient(token);
+                        await dio.patch(
+                          '/inventory/${item.id}/approve',
+                          options: Options(headers: {
+                            'Idempotency-Key': newIdempotencyKey('approve-${item.id}'),
+                          }),
+                        );
+                        ref.invalidate(inventoryProvider);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                            backgroundColor: emerald,
+                            content: Text('${item.name} approved'),
+                            duration: const Duration(seconds: 2),
+                          ));
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                            backgroundColor: crimson,
+                            content: Text('Approve failed.'),
+                          ));
+                        }
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                          color: emerald.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: emerald.withValues(alpha: 0.5), width: 0.5)),
+                      child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(Icons.check, color: emerald, size: 10),
+                        SizedBox(width: 3),
+                        Text('APPROVE',
+                            style: TextStyle(
+                                color: emerald, fontSize: 10, fontWeight: FontWeight.w700)),
+                      ]),
+                    ),
+                  ),
+                ],
               ],
               const SizedBox(width: 8),
               GestureDetector(

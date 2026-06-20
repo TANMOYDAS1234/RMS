@@ -191,8 +191,12 @@ class _ProfileBody extends ConsumerWidget {
       final formData = FormData.fromMap({
         'photo': MultipartFile.fromBytes(bytes, filename: picked.name),
       });
+      // /users/me/photo (not /users/:id/photo) — the :id variant is
+      // admin/manager only and was 403-ing for waiter/chef/cashier on
+      // their own profile screen. The /me variant lets the authenticated
+      // user always change their own photo regardless of role.
       await dio.post(
-        '/users/$id/photo',
+        '/users/me/photo',
         data: formData,
         options: Options(headers: {'Idempotency-Key': newIdempotencyKey('profile-photo-$id')}),
       );

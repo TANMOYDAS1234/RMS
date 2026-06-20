@@ -46,7 +46,12 @@ const _channels = <AndroidNotificationChannel>[
   AndroidNotificationChannel(
     'payments', 'Payments',
     description: 'Customer payment received',
-    importance: Importance.defaultImportance,
+    // Bumped from defaultImportance to high so the cashier's phone
+    // actually buzzes/heads-up when a customer pays via QR. Default
+    // importance shows as a silent status-bar icon — easy to miss
+    // during peak service.
+    importance: Importance.high,
+    enableVibration: true,
   ),
   AndroidNotificationChannel(
     'low_stock', 'Low Stock Alerts',
