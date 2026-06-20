@@ -1,4 +1,5 @@
 import 'dart:io' show Platform;
+import 'dart:typed_data' show Int64List;
 import 'package:dio/dio.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -27,36 +28,48 @@ final _localNotifications = FlutterLocalNotificationsPlugin();
 // alerts). The channel id MUST match the backend's CHANNEL_FOR mapping
 // in notifications.service.ts — otherwise the channel falls back to a
 // default low-importance one and the alert may be silently suppressed.
-const _channels = <AndroidNotificationChannel>[
+// Distinct vibration signatures so staff can recognise the event from
+// their pocket without looking at the screen. Patterns are
+// [silence, vibrate, silence, vibrate, …] in milliseconds.
+final _vibSos = Int64List.fromList(const [0, 200, 100, 200, 100, 200]);
+final _vibUrgent = Int64List.fromList(const [0, 400, 100, 400, 100, 400]);
+final _vibSubtle = Int64List.fromList(const [0, 150, 100, 150]);
+
+final _channels = <AndroidNotificationChannel>[
   AndroidNotificationChannel(
     'orders_new', 'New Orders',
     description: 'A new order has arrived in the kitchen',
     importance: Importance.high,
+    enableVibration: true,
+    vibrationPattern: _vibSos,
   ),
   AndroidNotificationChannel(
     'orders_ready', 'Orders Ready to Serve',
     description: 'Kitchen has marked an order ready for pickup',
     importance: Importance.high,
+    enableVibration: true,
+    vibrationPattern: _vibUrgent,
   ),
   AndroidNotificationChannel(
     'orders_served', 'Orders Served',
     description: 'Order delivered to table; ready to bill',
     importance: Importance.high,
+    enableVibration: true,
+    vibrationPattern: _vibSubtle,
   ),
   AndroidNotificationChannel(
     'payments', 'Payments',
     description: 'Customer payment received',
-    // Bumped from defaultImportance to high so the cashier's phone
-    // actually buzzes/heads-up when a customer pays via QR. Default
-    // importance shows as a silent status-bar icon — easy to miss
-    // during peak service.
     importance: Importance.high,
     enableVibration: true,
+    vibrationPattern: _vibSubtle,
   ),
   AndroidNotificationChannel(
     'low_stock', 'Low Stock Alerts',
     description: 'Inventory item below threshold',
     importance: Importance.high,
+    enableVibration: true,
+    vibrationPattern: _vibSubtle,
   ),
 ];
 

@@ -61,6 +61,12 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
   final _uuid = const Uuid();
   bool _loading = true;
   String? _error;
+  // Grace window before flipping the error UI on. Without this, transient
+  // errors during cold start (race between init steps, momentary network
+  // failure that succeeds on retry) flash _ErrorView for ~1 second before
+  // the real UI appears. We require the error to persist 500ms past the
+  // first set before rendering.
+  bool _showErrorEligible = false;
   int _tabIndex = 0;
   Timer? _activityTimer;
   String? _deviceId;
@@ -153,6 +159,14 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
         msg = describeApiError(e);
       }
       setState(() => _error = msg);
+      // Don't render the error UI immediately — wait 500ms to let any
+      // in-flight retry finish. If the error has been cleared in the
+      // meantime (e.g. resume after an auth flap), the gate stays closed.
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted && _error != null) {
+          setState(() => _showErrorEligible = true);
+        }
+      });
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -306,7 +320,12 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
   @override
   Widget build(BuildContext context) {
     if (_loading) return const _LoadingView();
-    if (_error != null) return _ErrorView(error: _error!);
+    // Only show _ErrorView once the 500ms grace has elapsed AND the
+    // error is still set. During the grace window we fall through to
+    // _LoadingView so the customer sees a calm spinner instead of a
+    // jarring error flash.
+    if (_error != null && _showErrorEligible) return _ErrorView(error: _error!);
+    if (_error != null && !_showErrorEligible) return const _LoadingView();
 
     final qrEnabled = ref.watch(_qrEnabledProvider);
 

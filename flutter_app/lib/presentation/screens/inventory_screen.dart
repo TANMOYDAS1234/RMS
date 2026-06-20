@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/config/app_theme.dart';
 import '../../core/network/dio_client.dart';
+import '../../core/services/websocket_service.dart';
 import '../../core/utils/idempotency.dart';
 import '../../domain/entities/user_entity.dart';
 import '../state/auth_provider.dart';
@@ -55,6 +56,17 @@ class InventoryScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final inventoryAsync = ref.watch(inventoryProvider);
+    // Real-time refresh — backend emits inventory:updated to
+    // branch:<branchId> on every chef/manager mutation. Subscribing here
+    // means manager and chef tabs both reflect changes without a manual
+    // pull-to-refresh.
+    ref.listen(wsEventsProvider, (_, next) {
+      next.whenData((evt) {
+        if (evt.event == 'inventory:updated') {
+          ref.invalidate(inventoryProvider);
+        }
+      });
+    });
     final role = ref.watch(authProvider).user?.role;
     // Admin + manager always have the Add power. Chef gets it too — the
     // backend re-checks the branch's chefCanManageInventory toggle and
