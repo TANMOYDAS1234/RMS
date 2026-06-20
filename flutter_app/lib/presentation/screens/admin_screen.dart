@@ -3,6 +3,7 @@
 
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,6 +17,7 @@ import '../../core/config/app_theme.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/services/websocket_service.dart';
 import '../../core/utils/api_error.dart';
+import '../../core/utils/file_download.dart';
 import '../../core/utils/idempotency.dart';
 import '../../data/api/admin_api.dart';
 import '../state/auth_provider.dart';
@@ -1360,6 +1362,8 @@ class AdminBillingTab extends ConsumerWidget {
           data: (fin) => _EodSummaryCard(data: fin),
         ),
         const SizedBox(height: 20),
+        const _TaxReportsCard(),
+        const SizedBox(height: 20),
         const _SectionTitle('Transaction Log'),
         const SizedBox(height: 12),
         txAsync.when(
@@ -1370,6 +1374,208 @@ class AdminBillingTab extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+// ─── Tax Reports (GST CSV export) ───────────────────────────────────────────
+//
+// Two DatePicker rows + an Export button. Hits /billing/reports/gst as bytes
+// so we can hand the same payload to a web Blob or a mobile share sheet
+// without parsing it twice.
+class _TaxReportsCard extends ConsumerStatefulWidget {
+  const _TaxReportsCard();
+
+  @override
+  ConsumerState<_TaxReportsCard> createState() => _TaxReportsCardState();
+}
+
+class _TaxReportsCardState extends ConsumerState<_TaxReportsCard> {
+  late DateTime _from;
+  late DateTime _to;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _to = now;
+    _from = now.subtract(const Duration(days: 30));
+  }
+
+  Future<void> _pickDate({required bool isFrom}) async {
+    final initial = isFrom ? _from : _to;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 1)),
+      builder: (ctx, child) => Theme(
+        // Match the admin portal's dark scheme so the picker doesn't flash white.
+        data: Theme.of(ctx).copyWith(
+          colorScheme: const ColorScheme.dark(
+            primary: copperAccent,
+            onPrimary: Colors.black,
+            surface: slateCard,
+            onSurface: textPrimary,
+          ),
+          dialogBackgroundColor: slateCard,
+        ),
+        child: child!,
+      ),
+    );
+    if (picked == null) return;
+    setState(() {
+      if (isFrom) {
+        _from = picked;
+        if (_to.isBefore(_from)) _to = _from;
+      } else {
+        _to = picked;
+        if (_from.isAfter(_to)) _from = _to;
+      }
+    });
+  }
+
+  Future<void> _export() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final dio = createDioClient(ref.read(authProvider).token);
+      // Span the full "to" day — server uses paidAt <= to.
+      final toEnd = DateTime(_to.year, _to.month, _to.day, 23, 59, 59, 999);
+      final fromStart = DateTime(_from.year, _from.month, _from.day);
+      final resp = await dio.get<List<int>>(
+        '/billing/reports/gst',
+        queryParameters: {
+          'from': fromStart.toIso8601String(),
+          'to': toEnd.toIso8601String(),
+        },
+        options: Options(
+          responseType: ResponseType.bytes,
+          headers: {'Accept': 'text/csv'},
+        ),
+      );
+      final bytes = Uint8List.fromList(resp.data ?? const []);
+      final fmt = DateFormat('yyyyMMdd');
+      final filename = 'gst-report-${fmt.format(_from)}-to-${fmt.format(_to)}.csv';
+      await downloadBytes(
+        bytes: bytes,
+        filename: filename,
+        mimeType: 'text/csv',
+      );
+      if (!mounted) return;
+      // On web the file is already in the downloads folder; on mobile
+      // share_plus has handed control to the OS share sheet, which often
+      // includes "Save to Downloads" as an option.
+      _showSuccess(
+        context,
+        kIsWeb ? 'CSV downloaded' : 'CSV saved to downloads',
+      );
+    } catch (e) {
+      if (mounted) _showError(context, describeApiError(e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final df = DateFormat('dd MMM yyyy');
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: slateCard,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: copperAccent.withValues(alpha: 0.25)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: const [
+          Icon(Icons.receipt_long_outlined, color: copperAccent, size: 16),
+          SizedBox(width: 6),
+          Text('Tax Reports',
+              style: TextStyle(color: textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
+        ]),
+        const SizedBox(height: 4),
+        const Text(
+          'Export a GST-ready CSV of paid bills for accounting.',
+          style: TextStyle(color: textSecondary, fontSize: 11),
+        ),
+        const SizedBox(height: 14),
+        Row(children: [
+          Expanded(
+            child: _DateField(
+              label: 'From',
+              value: df.format(_from),
+              onTap: () => _pickDate(isFrom: true),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: _DateField(
+              label: 'To',
+              value: df.format(_to),
+              onTap: () => _pickDate(isFrom: false),
+            ),
+          ),
+        ]),
+        const SizedBox(height: 14),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: _busy ? null : _export,
+            icon: _busy
+                ? const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                  )
+                : const Icon(Icons.download_outlined, size: 16),
+            label: Text(_busy ? 'Exporting…' : 'Export CSV'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: copperAccent,
+              foregroundColor: Colors.black,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              textStyle: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+class _DateField extends StatelessWidget {
+  final String label;
+  final String value;
+  final VoidCallback onTap;
+  const _DateField({required this.label, required this.value, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.25),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: dividerColor),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label, style: const TextStyle(color: textSecondary, fontSize: 10)),
+          const SizedBox(height: 2),
+          Row(children: [
+            const Icon(Icons.calendar_today_outlined, size: 12, color: textSecondary),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(value,
+                  style: const TextStyle(color: textPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
+            ),
+          ]),
+        ]),
+      ),
     );
   }
 }
