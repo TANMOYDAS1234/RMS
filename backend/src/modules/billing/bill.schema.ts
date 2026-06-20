@@ -36,6 +36,10 @@ export class Bill {
   @Prop() cashierId?: string;
   @Prop({ type: [String], default: [] }) processedKeys: string[];
 
+  // Tip is tracked separately from total — the bill total is settled at
+  // generation time; tips are captured at payment and reported separately.
+  @Prop({ default: 0, min: 0 }) tipAmount: number;
+
   // Refund tracking (admin only)
   @Prop({ default: false }) isRefunded: boolean;
   @Prop() refundedAt?: Date;
