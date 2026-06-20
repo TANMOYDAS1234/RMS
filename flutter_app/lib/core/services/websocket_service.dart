@@ -17,6 +17,12 @@ class WebSocketService {
   io.Socket? _socket;
   final _stateController = StreamController<SocketState>.broadcast();
   final _eventController = StreamController<WsEvent>.broadcast();
+  int _reconnectAttempt = 0;
+  Timer? _reconnectTimer;
+  String? _lastToken;
+  String? _lastTableId;
+  String? _lastBranchId;
+  String? _lastRole;
 
   Stream<SocketState> get stateStream => _stateController.stream;
   Stream<WsEvent> get eventStream => _eventController.stream;
@@ -33,6 +39,11 @@ class WebSocketService {
   /// the customer only sees events for their own table — no cross-tenant
   /// leak of strangers' orders.
   void connect(String token, {String? tableId, String? branchId, String? role}) {
+    _lastToken = token;
+    _lastTableId = tableId;
+    _lastBranchId = branchId;
+    _lastRole = role;
+    _reconnectTimer?.cancel();
     if (_socket != null) {
       try {
         _socket!.dispose();
@@ -61,9 +72,20 @@ class WebSocketService {
     _socket = socket;
 
     socket
-      ..onConnect((_) => _setState(SocketState.connected))
-      ..onDisconnect((_) => _setState(SocketState.disconnected))
-      ..onConnectError((_) => _setState(SocketState.error))
+      ..onConnect((_) {
+        _reconnectAttempt = 0;
+        _reconnectTimer?.cancel();
+        _setState(SocketState.connected);
+      })
+      ..onDisconnect((_) {
+        _setState(SocketState.disconnected);
+        _scheduleReconnect();
+      })
+      ..onConnectError((_) {
+        _setState(SocketState.disconnected);
+        _setState(SocketState.error);
+        _scheduleReconnect();
+      })
       ..on('order:updated', (data) => _handle('order:updated', data))
       ..on('order:created', (data) => _handle('order:created', data))
       ..on('kitchen:progress', (data) => _handle('kitchen:progress', data))
@@ -89,9 +111,31 @@ class WebSocketService {
     _stateController.add(s);
   }
 
-  void disconnect() => _socket?.disconnect();
+  void _scheduleReconnect() {
+    if (_reconnectTimer?.isActive ?? false) return;
+    final attempt = _reconnectAttempt.clamp(0, 5);
+    final delaySecs = (1 << attempt).clamp(1, 30);
+    if (_reconnectAttempt < 5) _reconnectAttempt++;
+    _reconnectTimer = Timer(Duration(seconds: delaySecs), () {
+      if (_lastToken == null) return;
+      connect(
+        _lastToken!,
+        tableId: _lastTableId,
+        branchId: _lastBranchId,
+        role: _lastRole,
+      );
+    });
+  }
+
+  void disconnect() {
+    _reconnectTimer?.cancel();
+    _reconnectAttempt = 0;
+    _lastToken = null;
+    _socket?.disconnect();
+  }
 
   void dispose() {
+    _reconnectTimer?.cancel();
     try {
       _socket?.dispose();
     } catch (_) {}
