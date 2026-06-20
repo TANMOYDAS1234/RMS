@@ -85,10 +85,46 @@ final _profitMarginProvider =
     FutureProvider.autoDispose<Map<String, dynamic>>(
         (ref) => ref.watch(adminApiProvider).profitMargin());
 
-final _auditLogProvider =
-    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
-        (ref) async {
-  final page = await ref.watch(adminApiProvider).auditLog();
+// ── Cross-cutting audit feed (auth + RBAC + refund + inventory approvals) ──
+//
+// Held as a single immutable filter object so widget rebuilds stay cheap
+// — Riverpod only re-fetches when the user actually changes a field.
+class AuditFilter {
+  final String? type;     // empty string in dropdown → null here
+  final String? actorId;  // free-form actor id / email substring
+  final DateTime? from;
+  final DateTime? to;
+
+  const AuditFilter({this.type, this.actorId, this.from, this.to});
+
+  AuditFilter copyWith({
+    Object? type = _sentinel,
+    Object? actorId = _sentinel,
+    Object? from = _sentinel,
+    Object? to = _sentinel,
+  }) =>
+      AuditFilter(
+        type: type == _sentinel ? this.type : type as String?,
+        actorId: actorId == _sentinel ? this.actorId : actorId as String?,
+        from: from == _sentinel ? this.from : from as DateTime?,
+        to: to == _sentinel ? this.to : to as DateTime?,
+      );
+
+  static const _sentinel = Object();
+}
+
+final auditFilterProvider =
+    StateProvider<AuditFilter>((_) => const AuditFilter());
+
+final auditEventsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  final f = ref.watch(auditFilterProvider);
+  final page = await ref.watch(adminApiProvider).auditEvents(
+        type: f.type,
+        actorId: f.actorId,
+        from: f.from,
+        to: f.to,
+      );
   return List<Map<String, dynamic>>.from(page['items'] ?? []);
 });
 
@@ -2362,18 +2398,246 @@ class _AuditLogTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final auditAsync = ref.watch(_auditLogProvider);
+    final auditAsync = ref.watch(auditEventsProvider);
 
-    return auditAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator(color: copperAccent)),
-      error: (e, _) => Center(child: _ErrorText('$e')),
-      data: (entries) => entries.isEmpty
-          ? const Center(child: Text('No audit entries', style: TextStyle(color: textSecondary)))
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: entries.length,
-              itemBuilder: (_, i) => _AuditEntry(entry: entries[i]),
+    return Column(
+      children: [
+        const _AuditFilterBar(),
+        Expanded(
+          child: auditAsync.when(
+            loading: () =>
+                const Center(child: CircularProgressIndicator(color: copperAccent)),
+            error: (e, _) => Center(child: _ErrorText('$e')),
+            data: (entries) => entries.isEmpty
+                ? const Center(
+                    child: Text('No audit entries',
+                        style: TextStyle(color: textSecondary)))
+                : RefreshIndicator(
+                    color: copperAccent,
+                    onRefresh: () async => ref.invalidate(auditEventsProvider),
+                    child: ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: entries.length,
+                      itemBuilder: (_, i) => _AuditEntry(entry: entries[i]),
+                    ),
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// Filter row — type dropdown, actor search, date range pickers. Each
+// control writes back to auditFilterProvider; the FutureProvider above
+// re-runs whenever the filter object changes.
+class _AuditFilterBar extends ConsumerStatefulWidget {
+  const _AuditFilterBar();
+
+  @override
+  ConsumerState<_AuditFilterBar> createState() => _AuditFilterBarState();
+}
+
+class _AuditFilterBarState extends ConsumerState<_AuditFilterBar> {
+  late final TextEditingController _actorCtrl;
+
+  // Mirrors the backend AuditEventType enum. Keep the list here in sync
+  // with backend/src/modules/audit/audit-log.schema.ts.
+  static const _types = <String, String>{
+    '': 'All types',
+    'AUTH_LOGIN': 'Auth · login',
+    'AUTH_LOGOUT': 'Auth · logout',
+    'AUTH_FAILED': 'Auth · failed',
+    'RBAC_ROLE_CHANGED': 'RBAC · role changed',
+    'BILL_REFUNDED': 'Bill · refunded',
+    'INVENTORY_APPROVED': 'Inventory · approved',
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    _actorCtrl =
+        TextEditingController(text: ref.read(auditFilterProvider).actorId ?? '');
+  }
+
+  @override
+  void dispose() {
+    _actorCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDate({required bool isFrom}) async {
+    final f = ref.read(auditFilterProvider);
+    final initial = (isFrom ? f.from : f.to) ?? DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 1)),
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx).copyWith(
+          colorScheme: const ColorScheme.dark(
+            primary: copperAccent,
+            onPrimary: Colors.white,
+            surface: slateCard,
+            onSurface: textPrimary,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked == null) return;
+    ref.read(auditFilterProvider.notifier).update(
+          (s) => isFrom
+              ? s.copyWith(from: picked)
+              : s.copyWith(to: picked),
+        );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final f = ref.watch(auditFilterProvider);
+    final df = DateFormat('dd MMM');
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      decoration: const BoxDecoration(
+        color: slateCard,
+        border: Border(bottom: BorderSide(color: dividerColor)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                decoration: BoxDecoration(
+                  color: slateBg,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: dividerColor),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: f.type ?? '',
+                    isExpanded: true,
+                    dropdownColor: slateCard,
+                    iconEnabledColor: copperAccent,
+                    style: const TextStyle(color: textPrimary, fontSize: 12),
+                    items: _types.entries
+                        .map((e) => DropdownMenuItem(
+                              value: e.key,
+                              child: Text(e.value),
+                            ))
+                        .toList(),
+                    onChanged: (v) {
+                      ref
+                          .read(auditFilterProvider.notifier)
+                          .update((s) => s.copyWith(type: v == '' ? null : v));
+                    },
+                  ),
+                ),
+              ),
             ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: SizedBox(
+                height: 38,
+                child: TextField(
+                  controller: _actorCtrl,
+                  style: const TextStyle(color: textPrimary, fontSize: 12),
+                  decoration: InputDecoration(
+                    hintText: 'Actor id',
+                    hintStyle:
+                        const TextStyle(color: textSecondary, fontSize: 12),
+                    isDense: true,
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    filled: true,
+                    fillColor: slateBg,
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: dividerColor),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: copperAccent),
+                    ),
+                    suffixIcon: _actorCtrl.text.isEmpty
+                        ? null
+                        : IconButton(
+                            iconSize: 16,
+                            icon: const Icon(Icons.close,
+                                color: textSecondary, size: 16),
+                            onPressed: () {
+                              _actorCtrl.clear();
+                              ref
+                                  .read(auditFilterProvider.notifier)
+                                  .update((s) => s.copyWith(actorId: null));
+                            },
+                          ),
+                  ),
+                  onSubmitted: (v) {
+                    final trimmed = v.trim();
+                    ref.read(auditFilterProvider.notifier).update(
+                          (s) => s.copyWith(
+                              actorId: trimmed.isEmpty ? null : trimmed),
+                        );
+                  },
+                ),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 8),
+          Row(children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: dividerColor),
+                  foregroundColor: textPrimary,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                ),
+                onPressed: () => _pickDate(isFrom: true),
+                icon: const Icon(Icons.calendar_today,
+                    size: 14, color: copperAccent),
+                label: Text(
+                  f.from == null ? 'From' : df.format(f.from!),
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: dividerColor),
+                  foregroundColor: textPrimary,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                ),
+                onPressed: () => _pickDate(isFrom: false),
+                icon: const Icon(Icons.calendar_today,
+                    size: 14, color: copperAccent),
+                label: Text(
+                  f.to == null ? 'To' : df.format(f.to!),
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            TextButton(
+              onPressed: () {
+                _actorCtrl.clear();
+                ref.read(auditFilterProvider.notifier).state =
+                    const AuditFilter();
+              },
+              style: TextButton.styleFrom(
+                foregroundColor: textSecondary,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+              ),
+              child: const Text('Clear', style: TextStyle(fontSize: 12)),
+            ),
+          ]),
+        ],
+      ),
     );
   }
 }
@@ -2382,7 +2646,17 @@ class _AuditEntry extends StatelessWidget {
   final Map<String, dynamic> entry;
   const _AuditEntry({required this.entry});
 
-  static const _actionColors = {
+  // Per-event-type accent colour. Anything unknown falls back to
+  // textSecondary so future event types still render.
+  static const _typeColors = {
+    'AUTH_LOGIN': emerald,
+    'AUTH_LOGOUT': textSecondary,
+    'AUTH_FAILED': crimson,
+    'RBAC_ROLE_CHANGED': amber,
+    'BILL_REFUNDED': crimson,
+    'INVENTORY_APPROVED': copperAccent,
+    // Legacy /admin/audit-log shapes — kept for the old order trail when
+    // the same widget is reused there.
     'FORCE_CLOSED': crimson,
     'DISCOUNT_APPLIED': amber,
     'REFUND': crimson,
@@ -2392,9 +2666,23 @@ class _AuditEntry extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final action = entry['action'] as String? ?? '';
-    final color = _actionColors[action] ?? textSecondary;
-    final at = entry['at'] != null ? DateTime.tryParse(entry['at']) : null;
+    // Tolerate both new (/audit) and legacy (/admin/audit-log) shapes —
+    // the AdminSystemTab now uses the new feed but the same widget might
+    // be reused elsewhere.
+    final type = (entry['type'] ?? entry['action']) as String? ?? '';
+    final color = _typeColors[type] ?? textSecondary;
+    final atRaw = entry['createdAt'] ?? entry['at'];
+    final at = atRaw is String ? DateTime.tryParse(atRaw) : null;
+
+    final actorEmail = entry['actorEmail'] as String?;
+    final actorRole = entry['actorRole'] as String?;
+    final actorId = entry['actorId'] ?? entry['by'];
+    final branchId = entry['branchId'] as String?;
+    final meta = entry['meta'];
+
+    final actorLine = actorEmail != null && actorEmail.isNotEmpty
+        ? '$actorEmail${actorRole != null ? ' · $actorRole' : ''}'
+        : 'by ${actorId ?? 'system'}';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -2404,21 +2692,53 @@ class _AuditEntry extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: dividerColor),
       ),
-      child: Row(children: [
-        Container(
-          width: 4, height: 36,
-          decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2)),
-        ),
-        const SizedBox(width: 10),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(action, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w700)),
-          Text('Table ${entry['tableLabel'] ?? ''} · by ${entry['by'] ?? 'system'}',
-              style: const TextStyle(color: textSecondary, fontSize: 11)),
-        ])),
-        if (at != null)
-          Text(DateFormat('dd MMM HH:mm').format(at),
-              style: const TextStyle(color: textSecondary, fontSize: 10)),
-      ]),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 4,
+            height: 44,
+            decoration: BoxDecoration(
+                color: color, borderRadius: BorderRadius.circular(2)),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(type,
+                    style: TextStyle(
+                        color: color,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700)),
+                Text(actorLine,
+                    style: const TextStyle(
+                        color: textSecondary, fontSize: 11)),
+                if (branchId != null && branchId.isNotEmpty)
+                  Text('branch · $branchId',
+                      style: const TextStyle(
+                          color: textSecondary, fontSize: 10)),
+                if (meta is Map && meta.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      meta.entries
+                          .map((e) => '${e.key}: ${e.value}')
+                          .join(' · '),
+                      style: const TextStyle(
+                          color: textSecondary, fontSize: 10),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          if (at != null)
+            Text(DateFormat('dd MMM HH:mm').format(at),
+                style: const TextStyle(color: textSecondary, fontSize: 10)),
+        ],
+      ),
     );
   }
 }

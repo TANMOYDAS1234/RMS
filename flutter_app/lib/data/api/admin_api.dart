@@ -37,6 +37,30 @@ class AdminApi {
     return Map<String, dynamic>.from(res.data);
   }
 
+  /// Cross-cutting audit feed (auth + RBAC + refund + inventory approvals).
+  /// Backed by the dedicated /audit collection (separate from the per-order
+  /// /admin/audit-log trail). All filter params are server-side.
+  Future<Map<String, dynamic>> auditEvents({
+    String? type,
+    String? actorId,
+    DateTime? from,
+    DateTime? to,
+    String? branchId,
+    int skip = 0,
+    int limit = 100,
+  }) async {
+    final res = await _dio.get('/audit', queryParameters: {
+      if (type != null && type.isNotEmpty) 'type': type,
+      if (actorId != null && actorId.isNotEmpty) 'actorId': actorId,
+      if (from != null) 'from': from.toIso8601String(),
+      if (to != null) 'to': to.toIso8601String(),
+      if (branchId != null && branchId.isNotEmpty) 'branchId': branchId,
+      'skip': skip,
+      'limit': limit,
+    });
+    return Map<String, dynamic>.from(res.data);
+  }
+
   Future<void> forceCloseOrder(String orderId, {required String idempotencyKey}) =>
       _dio.patch('/admin/orders/$orderId/force-close',
           options: _key(idempotencyKey));
