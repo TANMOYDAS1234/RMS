@@ -134,6 +134,35 @@ class BrandColors {
   }
 }
 
+/// Brightness-aware Theme override for showDatePicker / showDateRangePicker.
+///
+/// Date pickers ship with a Material default ColorScheme. Wrapping the
+/// dialog in a Theme that forces ColorScheme.dark made every label and
+/// number white-on-cream when the app was set to Light, so the user
+/// couldn't see what they were picking. This helper picks the right
+/// brightness off Theme.of(ctx) and keeps copper as the accent either way.
+ThemeData datePickerTheme(BuildContext ctx) {
+  final isLight = Theme.of(ctx).brightness == Brightness.light;
+  if (isLight) {
+    return Theme.of(ctx).copyWith(
+      colorScheme: const ColorScheme.light(
+        primary: copperAccent,
+        onPrimary: Colors.white,
+        surface: paperCard,
+        onSurface: inkPrimary,
+      ),
+    );
+  }
+  return Theme.of(ctx).copyWith(
+    colorScheme: const ColorScheme.dark(
+      primary: copperAccent,
+      onPrimary: Colors.white,
+      surface: slateCard,
+      onSurface: textPrimary,
+    ),
+  );
+}
+
 ThemeData buildLightTheme() => ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,

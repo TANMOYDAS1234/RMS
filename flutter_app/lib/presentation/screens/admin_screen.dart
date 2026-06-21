@@ -513,14 +513,7 @@ class _AnalyticsRangePicker extends ConsumerWidget {
                 initialDateRange:
                     DateTimeRange(start: range.from, end: range.to),
                 builder: (ctx, child) => Theme(
-                  data: Theme.of(ctx).copyWith(
-                    colorScheme: const ColorScheme.dark(
-                      primary: copperAccent,
-                      onPrimary: Colors.white,
-                      surface: slateCard,
-                      onSurface: textPrimary,
-                    ),
-                  ),
+                  data: datePickerTheme(ctx),
                   child: child!,
                 ),
               );
@@ -1744,16 +1737,7 @@ class _TaxReportsCardState extends ConsumerState<_TaxReportsCard> {
       firstDate: DateTime(2020),
       lastDate: DateTime.now().add(const Duration(days: 1)),
       builder: (ctx, child) => Theme(
-        // Match the admin portal's dark scheme so the picker doesn't flash white.
-        data: Theme.of(ctx).copyWith(
-          colorScheme: const ColorScheme.dark(
-            primary: copperAccent,
-            onPrimary: Colors.black,
-            surface: slateCard,
-            onSurface: textPrimary,
-          ),
-          dialogBackgroundColor: slateCard,
-        ),
+        data: datePickerTheme(ctx),
         child: child!,
       ),
     );
@@ -3282,14 +3266,7 @@ class _AuditFilterBarState extends ConsumerState<_AuditFilterBar> {
       firstDate: DateTime(2020),
       lastDate: DateTime.now().add(const Duration(days: 1)),
       builder: (ctx, child) => Theme(
-        data: Theme.of(ctx).copyWith(
-          colorScheme: const ColorScheme.dark(
-            primary: copperAccent,
-            onPrimary: Colors.white,
-            surface: slateCard,
-            onSurface: textPrimary,
-          ),
-        ),
+        data: datePickerTheme(ctx),
         child: child!,
       ),
     );

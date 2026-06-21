@@ -280,14 +280,7 @@ class _DateRangePicker extends ConsumerWidget {
       lastDate: now,
       initialDateRange: DateTimeRange(start: range.from, end: range.to),
       builder: (ctx, child) => Theme(
-        data: Theme.of(ctx).copyWith(
-          colorScheme: const ColorScheme.dark(
-            primary: copperAccent,
-            onPrimary: Colors.white,
-            surface: slateCard,
-            onSurface: textPrimary,
-          ),
-        ),
+        data: datePickerTheme(ctx),
         child: child!,
       ),
     );
