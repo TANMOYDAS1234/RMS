@@ -13,7 +13,6 @@ import 'core/services/fcm_bg_handler_io.dart'
 import 'core/config/app_config.dart';
 import 'core/config/app_theme.dart';
 import 'core/config/system_config_provider.dart';
-import 'core/config/theme_mode_provider.dart';
 import 'core/observability/sentry_bootstrap.dart';
 import 'core/services/sync_engine.dart';
 import 'core/services/websocket_service.dart';
@@ -123,17 +122,11 @@ class _RmsAppState extends ConsumerState<RmsApp> {
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
-    // Pull the user's saved theme preference. Defaults to ThemeMode.dark
-    // so the brand experience hits on first launch; user can flip to
-    // System or Light from the Profile screen.
-    final mode = ref.watch(themeModeProvider);
 
     if (auth.isRestoring) {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
-        theme: buildLightTheme(),
-        darkTheme: buildAppTheme(),
-        themeMode: mode,
+        theme: buildAppTheme(),
         scaffoldMessengerKey: FcmService.messengerKey,
         home: const _SplashScreen(),
       );
@@ -147,9 +140,7 @@ class _RmsAppState extends ConsumerState<RmsApp> {
       return MaterialApp(
         title: 'DINE OPS',
         debugShowCheckedModeBanner: false,
-        theme: buildLightTheme(),
-        darkTheme: buildAppTheme(),
-        themeMode: mode,
+        theme: buildAppTheme(),
         scaffoldMessengerKey: FcmService.messengerKey,
         home: QrOrderingScreen(tableId: tableId, branchId: branchId),
       );
@@ -166,9 +157,7 @@ class _RmsAppState extends ConsumerState<RmsApp> {
     return MaterialApp(
       title: 'DINE OPS',
       debugShowCheckedModeBanner: false,
-      theme: buildLightTheme(),
-      darkTheme: buildAppTheme(),
-      themeMode: mode,
+      theme: buildAppTheme(),
       scaffoldMessengerKey: FcmService.messengerKey,
       home: auth.isAuthenticated
           ? MainShell(role: auth.user!.role, jumpToTab: jumpTo)
@@ -196,9 +185,7 @@ class _SplashScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // No explicit backgroundColor — falls through to
-      // Theme.of(context).scaffoldBackgroundColor so the page bg flips
-      // between slateBg (Dark) and paperBg (Light).
+      backgroundColor: slateBg,
       body: Stack(
         children: [
           // Layer 1: radial breath glow.
@@ -462,7 +449,6 @@ class _MainShellState extends ConsumerState<MainShell> {
         UserRole.admin => [
             const _TabDef('Overview',  Icons.dashboard_outlined,    Icons.dashboard,    AdminOverviewTab()),
             const _TabDef('Analytics', Icons.bar_chart_outlined,    Icons.bar_chart,    AdminAnalyticsTab()),
-            const _TabDef('Compare',   Icons.compare_arrows_outlined, Icons.compare_arrows, AdminComparisonTab()),
             const _TabDef('Staff',     Icons.people_outline,        Icons.people,       AdminStaffTab()),
             const _TabDef('Orders',    Icons.receipt_outlined,      Icons.receipt,      AdminOrdersTab()),
             const _TabDef('Billing',   Icons.payments_outlined,     Icons.payments,     AdminBillingTab()),
@@ -477,18 +463,15 @@ class _MainShellState extends ConsumerState<MainShell> {
             const _TabDef('Orders',  Icons.receipt_outlined,      Icons.receipt,      DashboardScreen()),
             const _TabDef('Floor',   Icons.grid_view_outlined,    Icons.grid_view,    FloorGridScreen()),
             const _TabDef('Kitchen', Icons.restaurant_outlined,   Icons.restaurant,   KitchenScreen()),
-            const _TabDef('Profile', Icons.person_outline,        Icons.person,       AdminProfileScreen()),
           ],
         UserRole.chef => [
             const _TabDef('Kitchen',   Icons.restaurant_outlined,  Icons.restaurant,  KitchenScreen()),
             const _TabDef('Inventory', Icons.inventory_2_outlined, Icons.inventory_2, InventoryScreen()),
-            const _TabDef('Profile',   Icons.person_outline,       Icons.person,      AdminProfileScreen()),
           ],
         UserRole.cashier => [
             const _TabDef('Orders',  Icons.receipt_outlined,      Icons.receipt,      DashboardScreen()),
             const _TabDef('Billing', Icons.receipt_long_outlined, Icons.receipt_long, BillingScreen()),
             const _TabDef('Drawer',  Icons.point_of_sale_outlined, Icons.point_of_sale, CashDrawerScreen()),
-            const _TabDef('Profile', Icons.person_outline,        Icons.person,        AdminProfileScreen()),
           ],
         UserRole.customer => [
             const _TabDef('Orders', Icons.receipt_outlined, Icons.receipt, DashboardScreen()),
@@ -515,9 +498,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     final isAdmin = widget.role == UserRole.admin;
 
     return Scaffold(
-      // No explicit backgroundColor — falls through to
-      // Theme.of(context).scaffoldBackgroundColor so the page bg flips
-      // between slateBg (Dark) and paperBg (Light).
+      backgroundColor: slateBg,
       appBar: isAdmin ? _buildAdminAppBar() : null,
       body: IndexedStack(
           index: _index, children: tabs.map((t) => t.screen).toList()),

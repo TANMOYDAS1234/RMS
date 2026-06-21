@@ -3,9 +3,6 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/config/app_theme.dart';
 import '../../core/network/dio_client.dart';
-import '../../core/services/websocket_service.dart';
-import '../../core/utils/idempotency.dart';
-import '../../domain/entities/user_entity.dart';
 import '../state/auth_provider.dart';
 
 class InventoryItem {
@@ -15,10 +12,6 @@ class InventoryItem {
   final double currentStock;
   final double lowStockThreshold;
   final double costPerUnit;
-  // True when a chef added the item under chefCanManageInventory and the
-  // manager hasn't audited the cost/threshold yet. Pure soft flag — the
-  // item is fully usable; the badge just nudges the manager to verify.
-  final bool pendingReview;
 
   const InventoryItem({
     required this.id,
@@ -27,7 +20,6 @@ class InventoryItem {
     required this.currentStock,
     required this.lowStockThreshold,
     required this.costPerUnit,
-    this.pendingReview = false,
   });
 
   factory InventoryItem.fromJson(Map<String, dynamic> j) => InventoryItem(
@@ -37,7 +29,6 @@ class InventoryItem {
         currentStock: (j['currentStock'] ?? 0).toDouble(),
         lowStockThreshold: (j['lowStockThreshold'] ?? 0).toDouble(),
         costPerUnit: (j['costPerUnit'] ?? 0).toDouble(),
-        pendingReview: j['pendingReview'] == true,
       );
 
   bool get isLow => currentStock <= lowStockThreshold;
@@ -56,41 +47,12 @@ class InventoryScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final inventoryAsync = ref.watch(inventoryProvider);
-    // Real-time refresh — backend emits inventory:updated to
-    // branch:<branchId> on every chef/manager mutation. Subscribing here
-    // means manager and chef tabs both reflect changes without a manual
-    // pull-to-refresh.
-    ref.listen(wsEventsProvider, (_, next) {
-      next.whenData((evt) {
-        if (evt.event == 'inventory:updated') {
-          ref.invalidate(inventoryProvider);
-        }
-      });
-    });
-    final role = ref.watch(authProvider).user?.role;
-    // Admin + manager always have the Add power. Chef gets it too — the
-    // backend re-checks the branch's chefCanManageInventory toggle and
-    // 403s with a helpful message if the chef's branch hasn't enabled
-    // it. We surface the FAB optimistically so chefs on enabled branches
-    // see it without an extra round-trip; the 403 path falls through to
-    // the snackbar inside _showAddSheet.
-    final canAttemptAdd = role == UserRole.admin ||
-        role == UserRole.manager ||
-        role == UserRole.chef;
 
     return Scaffold(
-      floatingActionButton: canAttemptAdd
-          ? FloatingActionButton.extended(
-              backgroundColor: copperAccent,
-              foregroundColor: Colors.white,
-              icon: const Icon(Icons.add),
-              label: const Text('Add Ingredient',
-                  style: TextStyle(fontWeight: FontWeight.w700)),
-              onPressed: () => _showAddSheet(context, ref, role!),
-            )
-          : null,
+      backgroundColor: slateBg,
       appBar: AppBar(
         title: const Text('INVENTORY'),
+        backgroundColor: slateBg,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh, color: textSecondary),
@@ -98,47 +60,10 @@ class InventoryScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: RefreshIndicator(
-        color: copperAccent,
-        backgroundColor: slateCard,
-        onRefresh: () async => ref.invalidate(inventoryProvider),
-        child: inventoryAsync.when(
+      body: inventoryAsync.when(
         loading: () => const Center(child: CircularProgressIndicator(color: copperAccent)),
         error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: crimson))),
         data: (items) {
-          // Empty inventory is the default state on a fresh branch — chef
-          // can't add ingredients (manager/admin do that), so without a
-          // copy line they'd just see a blank screen and think it broke.
-          if (items.isEmpty) {
-            final role = ref.read(authProvider).user?.role;
-            final canAdd = role == UserRole.admin || role == UserRole.manager;
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.inventory_2_outlined,
-                        size: 64, color: textSecondary.withValues(alpha: 0.4)),
-                    const SizedBox(height: 18),
-                    const Text('No ingredients yet',
-                        style: TextStyle(
-                            color: textPrimary,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800)),
-                    const SizedBox(height: 6),
-                    Text(
-                      canAdd
-                          ? 'Add your first ingredient to start tracking stock for this branch.'
-                          : 'Ask your manager to add the ingredients you cook with.\nOnce they appear here, you can adjust stock after each shift.',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: textSecondary, fontSize: 13, height: 1.4),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
           final lowItems = items.where((i) => i.isLow).toList();
           return ListView(
             padding: const EdgeInsets.all(16),
@@ -165,182 +90,6 @@ class InventoryScreen extends ConsumerWidget {
             ],
           );
         },
-      ),
-      ),
-    );
-  }
-
-  /// Add-ingredient bottom sheet. Same UI for chef/manager/admin; the
-  /// backend decides whether the chef's add gets through (depends on the
-  /// branch's chefCanManageInventory toggle) and tags it pendingReview.
-  /// We don't need to read the toggle on the client — we let the server
-  /// be the source of truth.
-  void _showAddSheet(BuildContext context, WidgetRef ref, UserRole role) {
-    final nameCtrl = TextEditingController();
-    final unitCtrl = TextEditingController(text: 'kg');
-    final stockCtrl = TextEditingController(text: '0');
-    final thresholdCtrl = TextEditingController(text: '5');
-    final costCtrl = TextEditingController(text: '0');
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: slateCard,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.fromLTRB(
-            24, 20, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Container(
-            width: 36, height: 4,
-            decoration: BoxDecoration(
-              color: textSecondary.withValues(alpha: 0.4),
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(height: 14),
-          const Text('Add Ingredient',
-              style: TextStyle(
-                  color: textPrimary,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800)),
-          if (role == UserRole.chef) ...[
-            const SizedBox(height: 4),
-            const Text(
-                'Your manager will review the cost and threshold after you add it.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: textSecondary, fontSize: 11)),
-          ],
-          const SizedBox(height: 16),
-          _Field(label: 'Name', controller: nameCtrl),
-          const SizedBox(height: 10),
-          Row(children: [
-            Expanded(child: _Field(label: 'Unit (kg, litre, pcs)', controller: unitCtrl)),
-            const SizedBox(width: 10),
-            Expanded(
-                child: _Field(
-                    label: 'Current stock',
-                    controller: stockCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true))),
-          ]),
-          const SizedBox(height: 10),
-          Row(children: [
-            Expanded(
-                child: _Field(
-                    label: 'Low-stock threshold',
-                    controller: thresholdCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true))),
-            const SizedBox(width: 10),
-            Expanded(
-                child: _Field(
-                    label: 'Cost / unit (₹)',
-                    controller: costCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true))),
-          ]),
-          const SizedBox(height: 18),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              icon: const Icon(Icons.check, size: 16),
-              label: const Text('Add'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: copperAccent,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
-                textStyle: const TextStyle(fontWeight: FontWeight.w800),
-              ),
-              onPressed: () async {
-                final name = nameCtrl.text.trim();
-                final unit = unitCtrl.text.trim();
-                final stock = double.tryParse(stockCtrl.text);
-                final threshold = double.tryParse(thresholdCtrl.text);
-                final cost = double.tryParse(costCtrl.text);
-                if (name.isEmpty || unit.isEmpty || stock == null || threshold == null || cost == null) {
-                  return;
-                }
-                Navigator.pop(ctx);
-                final token = ref.read(authProvider).token;
-                final branchId = ref.read(authProvider).user?.branchId;
-                try {
-                  final dio = createDioClient(token);
-                  await dio.post(
-                    '/inventory',
-                    data: {
-                      'name': name,
-                      'unit': unit,
-                      'currentStock': stock,
-                      'lowStockThreshold': threshold,
-                      'costPerUnit': cost,
-                      if (branchId != null) 'branchId': branchId,
-                    },
-                    options: Options(headers: {
-                      'Idempotency-Key': newIdempotencyKey('ingredient-add'),
-                    }),
-                  );
-                  ref.invalidate(inventoryProvider);
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      backgroundColor: emerald,
-                      content: Text(role == UserRole.chef
-                          ? 'Added — awaiting manager review.'
-                          : 'Ingredient added.'),
-                    ));
-                  }
-                } catch (e) {
-                  if (context.mounted) {
-                    final msg = e is DioException
-                        ? (e.response?.data is Map
-                            ? (e.response!.data['message']?.toString() ??
-                                'Failed to add.')
-                            : 'Failed to add.')
-                        : 'Failed to add.';
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      backgroundColor: crimson,
-                      content: Text(msg),
-                    ));
-                  }
-                }
-              },
-            ),
-          ),
-        ]),
-      ),
-    );
-  }
-}
-
-class _Field extends StatelessWidget {
-  final String label;
-  final TextEditingController controller;
-  final TextInputType? keyboardType;
-  const _Field({required this.label, required this.controller, this.keyboardType});
-
-  @override
-  Widget build(BuildContext context) {
-    return TextField(
-      controller: controller,
-      keyboardType: keyboardType,
-      style: const TextStyle(color: textPrimary, fontSize: 13),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(color: textSecondary, fontSize: 12),
-        filled: true,
-        fillColor: slateSurface,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: dividerColor),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: dividerColor),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: copperAccent),
-        ),
       ),
     );
   }
@@ -380,73 +129,6 @@ class _InventoryCard extends StatelessWidget {
                   decoration: BoxDecoration(color: crimson.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
                   child: const Text('LOW', style: TextStyle(color: crimson, fontSize: 10, fontWeight: FontWeight.w700)),
                 ),
-              // Chef-added items waiting on a manager audit. Soft signal —
-              // the item still works; the badge just nudges the manager
-              // to verify cost + threshold before they slide into reports.
-              if (item.pendingReview) ...[
-                const SizedBox(width: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                      color: amber.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: amber.withValues(alpha: 0.4), width: 0.5)),
-                  child: const Text('REVIEW',
-                      style: TextStyle(color: amber, fontSize: 10, fontWeight: FontWeight.w700)),
-                ),
-                // Manager + admin only: one-tap Approve to clear the
-                // pendingReview flag. Chef sees the badge but no button
-                // — only the manager can close the audit loop.
-                if (() {
-                  final r = ref.read(authProvider).user?.role;
-                  return r == UserRole.admin || r == UserRole.manager;
-                }()) ...[
-                  const SizedBox(width: 6),
-                  GestureDetector(
-                    onTap: () async {
-                      try {
-                        final token = ref.read(authProvider).token;
-                        final dio = createDioClient(token);
-                        await dio.patch(
-                          '/inventory/${item.id}/approve',
-                          options: Options(headers: {
-                            'Idempotency-Key': newIdempotencyKey('approve-${item.id}'),
-                          }),
-                        );
-                        ref.invalidate(inventoryProvider);
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                            backgroundColor: emerald,
-                            content: Text('${item.name} approved'),
-                            duration: const Duration(seconds: 2),
-                          ));
-                        }
-                      } catch (e) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                            backgroundColor: crimson,
-                            content: Text('Approve failed.'),
-                          ));
-                        }
-                      }
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                          color: emerald.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: emerald.withValues(alpha: 0.5), width: 0.5)),
-                      child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                        Icon(Icons.check, color: emerald, size: 10),
-                        SizedBox(width: 3),
-                        Text('APPROVE',
-                            style: TextStyle(
-                                color: emerald, fontSize: 10, fontWeight: FontWeight.w700)),
-                      ]),
-                    ),
-                  ),
-                ],
-              ],
               const SizedBox(width: 8),
               GestureDetector(
                 onTap: () => _showAdjustSheet(context),

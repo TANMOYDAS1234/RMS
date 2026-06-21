@@ -119,10 +119,8 @@ class BrandColors {
         divider: paperBorder,
       );
     }
-    // Refer to the top-level dark constants by name. Naming the fields
-    // textHi/textLo (instead of textPrimary/textSecondary) avoids the
-    // shadow that would otherwise make the const initialiser refer to
-    // the instance field rather than the top-level const.
+    // Top-level constants are const Color again, so this constructor
+    // resolves to a const expression.
     return const BrandColors(
       bg: slateBg,
       card: slateCard,

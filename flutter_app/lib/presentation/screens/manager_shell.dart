@@ -98,6 +98,7 @@ class _ManagerShellState extends ConsumerState<ManagerShell> {
   Widget build(BuildContext context) {
     return Scaffold(
       key: _scaffoldKey,
+      backgroundColor: slateBg,
       appBar: _buildAppBar(),
       drawer: _buildDrawer(),
       body: IndexedStack(index: _index, children: _screens),
@@ -107,6 +108,7 @@ class _ManagerShellState extends ConsumerState<ManagerShell> {
 
   // ── AppBar ─────────────────────────────────────────────────────────────────
   PreferredSizeWidget _buildAppBar() => AppBar(
+        backgroundColor: slateCard,
         elevation: 0,
         titleSpacing: 16,
         leading: IconButton(

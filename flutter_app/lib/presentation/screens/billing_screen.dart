@@ -29,7 +29,6 @@ import '../../core/receipts/receipt_pdf.dart';
 import '../../core/utils/api_error.dart';
 import '../../core/utils/idempotency.dart';
 import '../../domain/entities/order_entity.dart';
-import '../../domain/entities/user_entity.dart';
 import '../state/auth_provider.dart';
 import '../state/billing_provider.dart';
 import '../state/order_providers.dart';
@@ -74,8 +73,10 @@ class BillingScreen extends ConsumerWidget {
         .toList();
 
     return Scaffold(
+      backgroundColor: slateBg,
       appBar: AppBar(
         title: const Text('BILLING'),
+        backgroundColor: slateBg,
       ),
       body: RefreshIndicator(
         color: copperAccent,
@@ -524,38 +525,6 @@ class _BillCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final role = ref.watch(authProvider).user?.role;
-    // Cashier UI surfaces the refund-request action on paid bills that
-    // aren't already refunded or pending a decision. Manager+admin can
-    // also use it (they're the ones who'll then approve in admin tab),
-    // but the primary intent here is the cashier flow.
-    final canRequestRefund = bill.isPaid &&
-        !bill.isRefunded &&
-        bill.refundStatus == null &&
-        (role == UserRole.cashier ||
-            role == UserRole.manager ||
-            role == UserRole.admin);
-
-    // Status label + colour. Refund state takes priority over PAID.
-    String statusLabel;
-    Color statusColor;
-    if (bill.isRefunded || bill.refundStatus == 'APPROVED') {
-      statusLabel = 'REFUNDED';
-      statusColor = crimson;
-    } else if (bill.refundStatus == 'PENDING') {
-      statusLabel = 'REFUND PENDING';
-      statusColor = amber;
-    } else if (bill.refundStatus == 'DENIED') {
-      statusLabel = 'REFUND DENIED';
-      statusColor = textSecondary;
-    } else if (bill.isPaid) {
-      statusLabel = 'PAID';
-      statusColor = emerald;
-    } else {
-      statusLabel = 'PENDING';
-      statusColor = amber;
-    }
-
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
@@ -578,12 +547,14 @@ class _BillCard extends ConsumerWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
                 decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.12),
+                  color: bill.isPaid
+                      ? emerald.withValues(alpha: 0.12)
+                      : amber.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Text(statusLabel,
+                child: Text(bill.isPaid ? 'PAID' : 'PENDING',
                     style: TextStyle(
-                        color: statusColor,
+                        color: bill.isPaid ? emerald : amber,
                         fontSize: 10,
                         fontWeight: FontWeight.w700)),
               ),
@@ -601,220 +572,14 @@ class _BillCard extends ConsumerWidget {
                 'Paid via ${bill.paymentMethod?.toUpperCase() ?? 'N/A'} • ${DateFormat('dd MMM, HH:mm').format(bill.paidAt!)}',
                 style: const TextStyle(color: textSecondary, fontSize: 11),
               ),
-              if (bill.refundReason != null && bill.refundReason!.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Text('Reason: ${bill.refundReason}',
-                    style: const TextStyle(
-                        color: textSecondary, fontSize: 11, fontStyle: FontStyle.italic)),
-              ],
               const SizedBox(height: 10),
               _ReceiptActions(bill: bill),
-              if (canRequestRefund) ...[
-                const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.undo_outlined, size: 14),
-                    label: const Text('Request Refund'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: crimson,
-                      side: BorderSide(color: crimson.withValues(alpha: 0.5)),
-                      padding: const EdgeInsets.symmetric(vertical: 9),
-                      textStyle: const TextStyle(
-                          fontSize: 11, fontWeight: FontWeight.w800),
-                    ),
-                    onPressed: () => _showRefundSheet(context, ref),
-                  ),
-                ),
-              ],
             ],
             if (!bill.isPaid) ...[
               const SizedBox(height: 12),
               _PayButtons(bill: bill),
             ],
           ]),
-    );
-  }
-
-  void _showRefundSheet(BuildContext context, WidgetRef ref) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: slateCard,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => _RequestRefundSheet(bill: bill),
-    );
-  }
-}
-
-// ── Request refund sheet (cashier) ─────────────────────────────────────────
-class _RequestRefundSheet extends ConsumerStatefulWidget {
-  final BillModel bill;
-  const _RequestRefundSheet({required this.bill});
-  @override
-  ConsumerState<_RequestRefundSheet> createState() =>
-      _RequestRefundSheetState();
-}
-
-class _RequestRefundSheetState extends ConsumerState<_RequestRefundSheet> {
-  final _reasonCtrl = TextEditingController();
-  final _referenceCtrl = TextEditingController();
-  bool _busy = false;
-  late final String _idempotencyKey;
-
-  @override
-  void initState() {
-    super.initState();
-    _idempotencyKey = newIdempotencyKey('refund-req-${widget.bill.id}');
-  }
-
-  @override
-  void dispose() {
-    _reasonCtrl.dispose();
-    _referenceCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    if (_busy) return;
-    final reason = _reasonCtrl.text.trim();
-    if (reason.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Please enter a reason for the refund.'),
-        backgroundColor: crimson,
-      ));
-      return;
-    }
-    setState(() => _busy = true);
-    try {
-      final dio = createDioClient(ref.read(authProvider).token);
-      await dio.post(
-        '/billing/${widget.bill.id}/request-refund',
-        data: {
-          'reason': reason,
-          if (_referenceCtrl.text.trim().isNotEmpty)
-            'reference': _referenceCtrl.text.trim(),
-        },
-        options: Options(headers: {'Idempotency-Key': _idempotencyKey}),
-      );
-      ref.invalidate(billingProvider);
-      if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Refund requested for ${widget.bill.tableLabel}'),
-          backgroundColor: amber,
-        ));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(describeApiError(e)),
-          backgroundColor: crimson,
-        ));
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-          24, 20, 24, MediaQuery.of(context).viewInsets.bottom + 24),
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Container(
-          width: 36,
-          height: 4,
-          decoration: BoxDecoration(
-            color: textSecondary.withValues(alpha: 0.4),
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-        const SizedBox(height: 14),
-        Text('Request Refund — ${widget.bill.tableLabel}',
-            style: const TextStyle(
-                color: textPrimary, fontSize: 15, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 4),
-        Text('₹${widget.bill.total.toStringAsFixed(2)}',
-            style: const TextStyle(
-                color: copperAccent, fontSize: 13, fontWeight: FontWeight.w700)),
-        const SizedBox(height: 16),
-        TextField(
-          controller: _reasonCtrl,
-          maxLines: 3,
-          style: const TextStyle(color: textPrimary, fontSize: 13),
-          decoration: InputDecoration(
-            labelText: 'Reason *',
-            labelStyle: const TextStyle(color: textSecondary, fontSize: 12),
-            hintText: 'Why is this bill being refunded?',
-            hintStyle: const TextStyle(color: textSecondary, fontSize: 12),
-            filled: true,
-            fillColor: slateSurface,
-            border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide.none),
-          ),
-        ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: _referenceCtrl,
-          style: const TextStyle(color: textPrimary, fontSize: 13),
-          decoration: InputDecoration(
-            labelText: 'Reference (optional)',
-            labelStyle: const TextStyle(color: textSecondary, fontSize: 12),
-            hintText: 'Ticket / complaint id',
-            hintStyle: const TextStyle(color: textSecondary, fontSize: 12),
-            filled: true,
-            fillColor: slateSurface,
-            border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide.none),
-          ),
-        ),
-        const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: amber.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const Row(children: [
-            Icon(Icons.info_outline, color: amber, size: 16),
-            SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Manager approval required before money is returned.',
-                style: TextStyle(color: amber, fontSize: 11),
-              ),
-            ),
-          ]),
-        ),
-        const SizedBox(height: 14),
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: crimson,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 13),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-              textStyle:
-                  const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
-            ),
-            onPressed: _busy ? null : _submit,
-            child: _busy
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                        color: Colors.white, strokeWidth: 2))
-                : const Text('Submit Refund Request'),
-          ),
-        ),
-      ]),
     );
   }
 }
@@ -996,17 +761,6 @@ class _QuickPaySheet extends ConsumerStatefulWidget {
 
 class _QuickPaySheetState extends ConsumerState<_QuickPaySheet> {
   bool _busy = false;
-  // Tip is captured at payment time and recorded separately from the bill
-  // total — the server stores it on bill.tipAmount.
-  final TextEditingController _tipCtrl = TextEditingController();
-
-  @override
-  void dispose() {
-    _tipCtrl.dispose();
-    super.dispose();
-  }
-
-  double get _tipAmount => double.tryParse(_tipCtrl.text) ?? 0;
 
   Future<void> _payCash() async => _record('cash');
 
@@ -1053,7 +807,6 @@ class _QuickPaySheetState extends ConsumerState<_QuickPaySheet> {
         '/billing/${widget.bill.id}/pay',
         data: {
           'paymentMethod': method,
-          if (_tipAmount > 0) 'tipAmount': _tipAmount,
           if (razorpay != null) ...razorpay,
         },
         options: Options(headers: {'Idempotency-Key': key}),
@@ -1094,43 +847,6 @@ class _QuickPaySheetState extends ConsumerState<_QuickPaySheet> {
               const Text('Razorpay is in sandbox mode — no real money moves.',
                   style: TextStyle(color: textSecondary, fontSize: 11)),
               const SizedBox(height: 16),
-              // Optional tip — recorded separately from the bill total so
-              // the server can report it on staff payouts.
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-                decoration: BoxDecoration(
-                  color: slateSurface,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: copperAccent.withValues(alpha: 0.3)),
-                ),
-                child: Row(children: [
-                  const Icon(Icons.volunteer_activism_outlined,
-                      color: copperAccent, size: 18),
-                  const SizedBox(width: 10),
-                  const Text('Tip ₹',
-                      style: TextStyle(
-                          color: textPrimary,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700)),
-                  Expanded(
-                    child: TextField(
-                      controller: _tipCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true),
-                      style: const TextStyle(color: textPrimary, fontSize: 14),
-                      textAlign: TextAlign.right,
-                      decoration: const InputDecoration(
-                        hintText: '0',
-                        hintStyle:
-                            TextStyle(color: textSecondary, fontSize: 14),
-                        border: InputBorder.none,
-                      ),
-                      onChanged: (_) => setState(() {}),
-                    ),
-                  ),
-                ]),
-              ),
-              const SizedBox(height: 12),
               _PayTile(
                 icon: Icons.payments_outlined,
                 label: 'CASH',
@@ -1205,9 +921,6 @@ class _SplitPaySheet extends ConsumerStatefulWidget {
 class _SplitPaySheetState extends ConsumerState<_SplitPaySheet> {
   // Three default allocations (cash/card/upi) the cashier can edit.
   final Map<String, double> _allocations = {'cash': 0, 'card': 0, 'upi': 0};
-  // Mirrors the tip field on the single-payment sheet so a split bill
-  // doesn't silently lose the tip on the way to the server.
-  final TextEditingController _tipCtrl = TextEditingController();
   bool _busy = false;
   late final String _idempotencyKey;
 
@@ -1217,15 +930,8 @@ class _SplitPaySheetState extends ConsumerState<_SplitPaySheet> {
     _idempotencyKey = newIdempotencyKey('split-${widget.bill.id}');
   }
 
-  @override
-  void dispose() {
-    _tipCtrl.dispose();
-    super.dispose();
-  }
-
   double get _allocated => _allocations.values.fold(0, (s, v) => s + v);
   double get _remaining => widget.bill.total - _allocated;
-  double get _tipAmount => double.tryParse(_tipCtrl.text) ?? 0;
 
   Future<void> _submit() async {
     if (_busy) return;
@@ -1254,10 +960,6 @@ class _SplitPaySheetState extends ConsumerState<_SplitPaySheet> {
           'paymentMethod': splits.reduce((a, b) =>
               (a['amount'] as double) >= (b['amount'] as double) ? a : b)['method'],
           'splitPayments': splits,
-          // Forward the tip on splits too. The single-payment path on
-          // line ~1058 was the only one carrying tipAmount before — that
-          // silently dropped tip revenue on any multi-method bill.
-          if (_tipAmount > 0) 'tipAmount': _tipAmount,
         },
         options: Options(headers: {'Idempotency-Key': _idempotencyKey}),
       );
@@ -1305,42 +1007,6 @@ class _SplitPaySheetState extends ConsumerState<_SplitPaySheet> {
           method: m,
           value: _allocations[m]!,
           onChanged: (v) => setState(() => _allocations[m] = v),
-        ),
-        const SizedBox(height: 8),
-        // Tip row — matches the single-payment sheet at line ~1099. Without
-        // this the cashier had no way to record a tip on a split bill and
-        // any tip entered on the single sheet was lost when they switched.
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: copperAccent.withValues(alpha: 0.06),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Row(children: [
-            const Icon(Icons.volunteer_activism_outlined,
-                color: copperAccent, size: 18),
-            const SizedBox(width: 10),
-            const Text('Tip ₹',
-                style: TextStyle(
-                    color: textPrimary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700)),
-            Expanded(
-              child: TextField(
-                controller: _tipCtrl,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                style: const TextStyle(color: textPrimary, fontSize: 14),
-                textAlign: TextAlign.right,
-                decoration: const InputDecoration(
-                  hintText: '0',
-                  hintStyle: TextStyle(color: textSecondary, fontSize: 14),
-                  border: InputBorder.none,
-                ),
-                onChanged: (_) => setState(() {}),
-              ),
-            ),
-          ]),
         ),
         const SizedBox(height: 14),
         Container(

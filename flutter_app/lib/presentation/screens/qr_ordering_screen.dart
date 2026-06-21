@@ -3,7 +3,6 @@
 // Handles: session resume, feature-flag check, menu browse, order placement, tracking
 
 import 'dart:async';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -11,12 +10,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
-import '../../core/config/app_config.dart';
 import '../../core/config/app_theme.dart';
 import '../../core/utils/web_window.dart';
-import '../../core/utils/razorpay_checkout.dart';
-import '../../core/utils/idempotency.dart';
-import '../../core/config/system_config_provider.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/services/websocket_service.dart';
 import '../../core/utils/api_error.dart';
@@ -63,15 +58,8 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
   final _uuid = const Uuid();
   bool _loading = true;
   String? _error;
-  // Grace window before flipping the error UI on. Without this, transient
-  // errors during cold start (race between init steps, momentary network
-  // failure that succeeds on retry) flash _ErrorView for ~1 second before
-  // the real UI appears. We require the error to persist 500ms past the
-  // first set before rendering.
-  bool _showErrorEligible = false;
   int _tabIndex = 0;
   Timer? _activityTimer;
-  Timer? _billPollTimer;
   String? _deviceId;
   StreamSubscription<WsEvent>? _wsSub;
 
@@ -149,16 +137,6 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
               }));
         }
       });
-
-      // 6. Bill polling fallback for web customers. WebSocket events
-      //    drive most refreshes, but on flaky mobile networks (or when
-      //    the WS reconnect backoff is between attempts) the customer
-      //    can sit on a stale "preparing" status while staff have moved
-      //    them to "ready". A 30-second poll closes that gap without
-      //    burdening the backend.
-      _billPollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-        if (mounted) _loadSessionBill();
-      });
     } catch (e) {
       // The multi-party flow throws typed errors for the cases where a
       // generic "request failed" message would be wrong. Map them to
@@ -172,14 +150,6 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
         msg = describeApiError(e);
       }
       setState(() => _error = msg);
-      // Don't render the error UI immediately — wait 500ms to let any
-      // in-flight retry finish. If the error has been cleared in the
-      // meantime (e.g. resume after an auth flap), the gate stays closed.
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted && _error != null) {
-          setState(() => _showErrorEligible = true);
-        }
-      });
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -326,7 +296,6 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
   @override
   void dispose() {
     _activityTimer?.cancel();
-    _billPollTimer?.cancel();
     _wsSub?.cancel();
     super.dispose();
   }
@@ -334,12 +303,7 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
   @override
   Widget build(BuildContext context) {
     if (_loading) return const _LoadingView();
-    // Only show _ErrorView once the 500ms grace has elapsed AND the
-    // error is still set. During the grace window we fall through to
-    // _LoadingView so the customer sees a calm spinner instead of a
-    // jarring error flash.
-    if (_error != null && _showErrorEligible) return _ErrorView(error: _error!);
-    if (_error != null && !_showErrorEligible) return const _LoadingView();
+    if (_error != null) return _ErrorView(error: _error!);
 
     final qrEnabled = ref.watch(_qrEnabledProvider);
 
@@ -396,6 +360,7 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
   PreferredSizeWidget _buildAppBar() {
     final session = ref.watch(_sessionProvider);
     return AppBar(
+      backgroundColor: slateBg,
       title: Row(
         children: [
           Container(
@@ -446,70 +411,9 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
                     duration: 900.ms,
                     curve: Curves.easeInOut),
           ),
-        if (session != null)
-          IconButton(
-            tooltip: 'Leave session',
-            icon: const Icon(Icons.exit_to_app, color: textSecondary),
-            onPressed: () => _leaveSession(session),
-          ),
         const SizedBox(width: 4),
       ],
     );
-  }
-
-  /// Customer ends the QR session without ordering or paying. Backend
-  /// refuses if there's an unpaid order (it'd be a dine-and-dash). On
-  /// success, the table seat is freed for the next party immediately
-  /// instead of being phantom-occupied for the rest of the 30-min TTL.
-  Future<void> _leaveSession(Map<String, dynamic> session) async {
-    final sessionId = (session['_id'] ?? session['id'])?.toString() ?? '';
-    if (sessionId.isEmpty) return;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: slateCard,
-        title: const Text('Leave this table?',
-            style: TextStyle(color: textPrimary, fontSize: 15)),
-        content: const Text(
-          'You can come back by rescanning the QR. We can only let you leave if all orders are paid or cancelled.',
-          style: TextStyle(color: textSecondary, fontSize: 12),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Stay', style: TextStyle(color: textSecondary)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Leave', style: TextStyle(color: crimson)),
-          ),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    try {
-      await _dio.post(
-        '/sessions/$sessionId/leave',
-        options: Options(headers: {
-          'Idempotency-Key': newIdempotencyKey('leave-$sessionId'),
-        }),
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        backgroundColor: emerald,
-        content: const Text('Session ended — thanks for visiting!'),
-      ));
-      // Clear local session state so the screen reverts to its initial
-      // empty state. The customer can rescan if they want to come back.
-      ref.read(_sessionProvider.notifier).state = null;
-      ref.read(_qrOrdersProvider.notifier).state = [];
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        backgroundColor: crimson,
-        content: Text(describeApiError(e)),
-      ));
-    }
   }
 
   /// Long-press path on the bell — surfaces an optional note field for
@@ -846,175 +750,10 @@ class _OrderTrackingTab extends ConsumerWidget {
       );
     }
 
-    // Tally what's owed so the Pay Now button can show the running total.
-    // Bills haven't necessarily been generated yet, so we sum the orders
-    // themselves and exclude anything already paid or closed.
-    double outstanding = 0;
-    for (final o in orders) {
-      final st = (o['status'] as String?) ?? '';
-      if (st == 'paid' || st == 'closed') continue;
-      outstanding += ((o['total'] as num?) ?? 0).toDouble();
-    }
-
-    return Column(children: [
-      Expanded(
-        child: ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: orders.length,
-          itemBuilder: (_, i) => _QrOrderCard(order: orders[i]),
-        ),
-      ),
-      // Sticky Pay Now bar — only shown on web (Razorpay Checkout JS is
-      // web-only) and only when there's a balance to pay. Also requires
-      // the server to expose razorpayWebEnabled (both KEY_ID + KEY_SECRET
-      // configured) — otherwise the button would 400 with the
-      // env-var-missing message.
-      if (kIsWeb && outstanding > 0)
-        Consumer(builder: (ctx, ref, _) {
-          final cfg = ref.watch(systemConfigProvider);
-          final ready = cfg.maybeWhen(
-            data: (c) => c.razorpayWebEnabled,
-            orElse: () => false,
-          );
-          if (!ready) return const SizedBox.shrink();
-          return _PayNowBar(outstanding: outstanding);
-        }),
-    ]);
-  }
-}
-
-/// Sticky bottom bar with "Pay Now" CTA, only rendered on the customer
-/// web build. Opens Razorpay Checkout JS via the conditional facade and
-/// hits POST /sessions/:id/pay/init + /pay/verify on success.
-class _PayNowBar extends ConsumerStatefulWidget {
-  final double outstanding;
-  const _PayNowBar({required this.outstanding});
-
-  @override
-  ConsumerState<_PayNowBar> createState() => _PayNowBarState();
-}
-
-class _PayNowBarState extends ConsumerState<_PayNowBar> {
-  bool _busy = false;
-
-  Future<void> _payNow() async {
-    if (_busy) return;
-    final session = ref.read(_sessionProvider);
-    if (session == null) return;
-    final sessionId = (session['_id'] ?? session['id'])?.toString() ?? '';
-    if (sessionId.isEmpty) return;
-    setState(() => _busy = true);
-    final dio = createDioClient(null);
-    // One stable Idempotency-Key per attempt covers BOTH the init and
-    // verify calls. If the user mashes Pay Now or the network drops mid-
-    // way, the same key returns the same Razorpay Order and the same
-    // "session closed as paid" result instead of creating a second
-    // Razorpay Order or double-marking the session.
-    final initKey = newIdempotencyKey('pay-init-$sessionId');
-    final verifyKey = newIdempotencyKey('pay-verify-$sessionId');
-    try {
-      // 1) Init — backend creates a Razorpay Order for the running total.
-      final init = await dio.post(
-        '/sessions/$sessionId/pay/init',
-        options: Options(headers: {'Idempotency-Key': initKey}),
-      );
-      final data = Map<String, dynamic>.from(init.data);
-      // 2) Open Razorpay Checkout. On web this hits the JS bridge; on
-      // mobile the stub returns an error and we surface it.
-      final result = await openRazorpayCheckout(
-        keyId: data['keyId'] ?? '',
-        razorpayOrderId: data['razorpayOrderId'] ?? '',
-        amountPaise: (data['amount'] as num?)?.toInt() ?? 0,
-        name: 'DINE OPS',
-        description: 'Table ${data['tableLabel'] ?? ''}',
-      );
-      if (!result.success) {
-        if (mounted && result.error != null) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            backgroundColor: crimson,
-            content: Text(result.error!),
-          ));
-        }
-        return;
-      }
-      // 3) Verify on the backend — HMAC + close session as paid.
-      await dio.post(
-        '/sessions/$sessionId/pay/verify',
-        data: {
-          'razorpayOrderId': result.razorpayOrderId,
-          'razorpayPaymentId': result.razorpayPaymentId,
-          'razorpaySignature': result.razorpaySignature,
-        },
-        options: Options(headers: {'Idempotency-Key': verifyKey}),
-      );
-      if (!mounted) return;
-      // Replace the transient snackbar with a celebratory full-screen
-      // confirmation — gives the customer a clear "we got it" moment
-      // and shows the running total / payment method / table reference
-      // they can screenshot before walking out. Pushes a separate route
-      // so dismissing it leaves them back on the menu screen.
-      await Navigator.of(context).push(MaterialPageRoute(
-        fullscreenDialog: true,
-        builder: (_) => _PaymentSuccessScreen(
-          amount: widget.outstanding,
-          paymentId: result.razorpayPaymentId,
-          tableLabel: ref.read(_sessionProvider)?['tableLabel']?.toString() ?? '',
-        ),
-      ));
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        backgroundColor: crimson,
-        content: Text(describeApiError(e)),
-      ));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
-        decoration: BoxDecoration(
-          color: slateCard,
-          border: Border(top: BorderSide(color: dividerColor)),
-        ),
-        child: Row(children: [
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Outstanding',
-                  style: TextStyle(color: textSecondary, fontSize: 11)),
-              Text('₹${widget.outstanding.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                      color: copperAccent,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900)),
-            ]),
-          ),
-          ElevatedButton.icon(
-            onPressed: _busy ? null : _payNow,
-            icon: _busy
-                ? const SizedBox(
-                    width: 14, height: 14,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white))
-                : const Icon(Icons.lock_outline, size: 16),
-            label: Text(_busy ? 'Opening…' : 'Pay Now'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: copperAccent,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
-              textStyle: const TextStyle(
-                  fontSize: 13, fontWeight: FontWeight.w800, letterSpacing: 1),
-            ),
-          ),
-        ]),
-      ),
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: orders.length,
+      itemBuilder: (_, i) => _QrOrderCard(order: orders[i]),
     );
   }
 }
@@ -1036,23 +775,6 @@ class _QrMenuTile extends StatelessWidget {
     required this.onRemove,
   });
 
-  /// True when the backend ships customisation options on this item —
-  /// renders the Customize CTA inline so the customer notices it exists.
-  bool get _hasOptions =>
-      item.variants.isNotEmpty || item.modifiers.isNotEmpty;
-
-  void _showCustomizeSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: slateCard,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => _CustomizeSheet(item: item),
-    );
-  }
-
   @override
   Widget build(BuildContext context) => Container(
         margin: const EdgeInsets.only(bottom: 8),
@@ -1065,15 +787,6 @@ class _QrMenuTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Photo thumbnail — tap opens the customization / details sheet
-            // when options exist. Otherwise it's just decorative.
-            GestureDetector(
-              onTap: _hasOptions
-                  ? () => _showCustomizeSheet(context)
-                  : null,
-              child: _MenuPhotoThumb(item: item),
-            ),
-            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1103,11 +816,7 @@ class _QrMenuTile extends StatelessWidget {
                     // GLBs uploaded, this will use item.glbUrl.
                     if (kIsWeb) ...[
                       const SizedBox(width: 8),
-                      _ArChip(
-                        itemName: item.name,
-                        glbUrl: item.glbUrl,
-                        usdzUrl: item.usdzUrl,
-                      ),
+                      _ArChip(itemName: item.name),
                     ],
                   ]),
                 ],
@@ -1171,78 +880,18 @@ class _QrMenuTile extends StatelessWidget {
 /// hands off to Scene Viewer for true AR. On iOS it falls back to
 /// drag-to-rotate 3D (Quick Look needs USDZ — we only have GLB for
 /// the demo). Only rendered on web; on mobile this is unreachable.
-/// Square photo thumbnail for a menu tile. Renders the uploaded item
-/// photo when one exists; otherwise shows a copper-tinted utensil
-/// icon on a slate background so the row layout stays stable. The
-/// `?v=` cache-buster wasn't worth it here — menu item images change
-/// infrequently and CachedNetworkImage already keys on the full URL.
-class _MenuPhotoThumb extends StatelessWidget {
-  final MenuItemModel item;
-  const _MenuPhotoThumb({required this.item});
-
-  @override
-  Widget build(BuildContext context) {
-    final url = item.imageUrl;
-    final fullUrl = url != null && url.isNotEmpty
-        ? '${AppConfig.baseUrl}$url'
-        : null;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        width: 60,
-        height: 60,
-        color: slateSurface,
-        child: fullUrl != null
-            ? CachedNetworkImage(
-                imageUrl: fullUrl,
-                width: 60,
-                height: 60,
-                fit: BoxFit.cover,
-                placeholder: (_, __) => const Icon(
-                    Icons.restaurant_outlined,
-                    color: copperAccent,
-                    size: 22),
-                errorWidget: (_, __, ___) => const Icon(
-                    Icons.restaurant_outlined,
-                    color: copperAccent,
-                    size: 22),
-              )
-            : const Icon(Icons.restaurant_outlined,
-                color: copperAccent, size: 22),
-      ),
-    );
-  }
-}
-
 class _ArChip extends StatelessWidget {
   final String itemName;
-  /// Server path of the item's GLB (e.g. `/menu/<id>/glb`). When null
-  /// we fall back to the demo pizza so the chip still feels alive on
-  /// brand-new branches that haven't uploaded any models yet.
-  final String? glbUrl;
-  /// iOS-specific USDZ. When set, model-viewer hands off to AR Quick
-  /// Look on iPhones; otherwise iOS falls back to in-page 3D only.
-  final String? usdzUrl;
-  const _ArChip({required this.itemName, this.glbUrl, this.usdzUrl});
+  const _ArChip({required this.itemName});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () {
-        // Use the item's own GLB when uploaded; otherwise fall back to
-        // the demo pizza so the chip remains tappable.
-        final modelPath = (glbUrl != null && glbUrl!.isNotEmpty)
-            ? glbUrl!
-            : '/models/pizza.glb';
+        // Demo: every item uses the pizza GLB. Real items will use
+        // /api/menu/<id>/glb once the upload flow is wired in.
         final encoded = Uri.encodeComponent(itemName);
-        final modelEnc = Uri.encodeComponent(modelPath);
-        // Pass iosModel only when an explicit USDZ exists. ar.html falls
-        // back to deriving `.glb`→`.usdz` for the demo pizza so the iOS
-        // AR button works there too.
-        final iosParam = (usdzUrl != null && usdzUrl!.isNotEmpty)
-            ? '&iosModel=${Uri.encodeComponent(usdzUrl!)}'
-            : '';
-        openInNewTab('/ar.html?model=$modelEnc&name=$encoded$iosParam');
+        openInNewTab('/ar.html?model=/models/pizza.glb&name=$encoded');
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -1282,66 +931,9 @@ class _ArChip extends StatelessWidget {
   }
 }
 
-class _QrOrderCard extends ConsumerWidget {
+class _QrOrderCard extends StatelessWidget {
   final Map<String, dynamic> order;
   const _QrOrderCard({required this.order});
-
-  Future<void> _cancel(BuildContext context, WidgetRef ref) async {
-    final session = ref.read(_sessionProvider);
-    if (session == null) return;
-    final sessionId = (session['_id'] ?? session['id'])?.toString() ?? '';
-    final orderId = (order['id'] ?? order['_id'])?.toString() ?? '';
-    if (sessionId.isEmpty || orderId.isEmpty) return;
-    // Confirm — customer might fat-finger the button.
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: slateCard,
-        title: const Text('Cancel this order?',
-            style: TextStyle(color: textPrimary, fontSize: 15)),
-        content: const Text(
-          'You can only cancel before the kitchen starts cooking.',
-          style: TextStyle(color: textSecondary, fontSize: 12),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Keep order',
-                style: TextStyle(color: textSecondary)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Cancel',
-                style: TextStyle(color: crimson)),
-          ),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    try {
-      final dio = createDioClient(null);
-      await dio.post(
-        '/orders/$orderId/cancel',
-        data: {'sessionId': sessionId},
-        options: Options(headers: {
-          'Idempotency-Key': newIdempotencyKey('cancel-$orderId'),
-        }),
-      );
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          backgroundColor: emerald,
-          content: const Text('Order cancelled.'),
-        ));
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          backgroundColor: crimson,
-          content: Text(describeApiError(e)),
-        ));
-      }
-    }
-  }
 
   static const _statusColors = {
     'created': textSecondary,
@@ -1355,11 +947,10 @@ class _QrOrderCard extends ConsumerWidget {
   };
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final status = order['status'] as String? ?? 'created';
     final color = _statusColors[status] ?? textSecondary;
     final items = List<Map<String, dynamic>>.from(order['items'] ?? []);
-    final canCancel = status == 'created' || status == 'confirmed';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1450,27 +1041,6 @@ class _QrOrderCard extends ConsumerWidget {
               icon: Icons.check_circle_outline,
               color: emerald,
               message: 'Your order is ready! A waiter will serve you shortly.',
-            ),
-          ],
-          // Customer self-cancel. Only allowed while the order is still
-          // CREATED or CONFIRMED (the kitchen hasn't started). After that
-          // they have to ask a staff member, who'd refund instead.
-          if (canCancel) ...[
-            const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                icon: const Icon(Icons.cancel_outlined, size: 16),
-                label: const Text('Cancel order'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: crimson,
-                  side: BorderSide(color: crimson.withValues(alpha: 0.5)),
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  textStyle: const TextStyle(
-                      fontSize: 12, fontWeight: FontWeight.w700),
-                ),
-                onPressed: () => _cancel(context, ref),
-              ),
             ),
           ],
         ],
@@ -1565,6 +1135,7 @@ class _LoadingView extends StatelessWidget {
   const _LoadingView();
   @override
   Widget build(BuildContext context) => const Scaffold(
+        backgroundColor: slateBg,
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1584,6 +1155,7 @@ class _ErrorView extends StatelessWidget {
   const _ErrorView({required this.error});
   @override
   Widget build(BuildContext context) => Scaffold(
+        backgroundColor: slateBg,
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(32),
@@ -1700,460 +1272,6 @@ class _StepperButton extends StatelessWidget {
           ),
           child: Icon(icon, color: copperAccent, size: 26),
         ),
-      ),
-    );
-  }
-}
-
-/// Celebratory full-screen confirmation pushed when the customer's
-/// Razorpay payment clears. Replaces the transient snackbar that the
-/// user could miss if they tabbed away. Shows amount, table, and the
-/// PSP payment id so they can screenshot it as their receipt.
-class _PaymentSuccessScreen extends StatelessWidget {
-  final double amount;
-  final String? paymentId;
-  final String tableLabel;
-  const _PaymentSuccessScreen({
-    required this.amount,
-    required this.paymentId,
-    required this.tableLabel,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Stack(children: [
-        const Positioned.fill(child: _AmbientBackdrop()),
-        SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-            child: Column(children: [
-              const Spacer(),
-              // Big copper check with a glow halo — celebratory but on-brand.
-              Container(
-                width: 130,
-                height: 130,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: const RadialGradient(colors: [
-                    Color(0xFF2A1810),
-                    Color(0xFF150B07),
-                  ]),
-                  boxShadow: [
-                    BoxShadow(
-                      color: copperAccent.withValues(alpha: 0.55),
-                      blurRadius: 40,
-                      spreadRadius: 4,
-                    ),
-                  ],
-                ),
-                child:
-                    const Icon(Icons.check, color: copperAccent, size: 62),
-              )
-                  .animate()
-                  .scaleXY(
-                      begin: 0.4,
-                      end: 1.0,
-                      duration: 600.ms,
-                      curve: Curves.elasticOut),
-              const SizedBox(height: 24),
-              const Text('PAYMENT RECEIVED',
-                  style: TextStyle(
-                      color: textPrimary,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 4))
-                  .animate()
-                  .fadeIn(delay: 300.ms, duration: 400.ms),
-              const SizedBox(height: 8),
-              Text('Thank you — see you again soon.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                      color: copperAccent.withValues(alpha: 0.85),
-                      fontSize: 12,
-                      letterSpacing: 2))
-                  .animate()
-                  .fadeIn(delay: 500.ms, duration: 400.ms),
-              const SizedBox(height: 36),
-              // Summary card with amount + table + payment id.
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: slateCard,
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(
-                      color: copperAccent.withValues(alpha: 0.4), width: 1),
-                ),
-                child: Column(children: [
-                  Text('₹${amount.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                          color: copperAccent,
-                          fontSize: 36,
-                          fontWeight: FontWeight.w900)),
-                  if (tableLabel.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(tableLabel,
-                        style: const TextStyle(
-                            color: textSecondary, fontSize: 12)),
-                  ],
-                  if (paymentId != null && paymentId!.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: slateSurface,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(paymentId!,
-                          style: const TextStyle(
-                              color: textSecondary,
-                              fontSize: 11,
-                              fontFamily: 'monospace')),
-                    ),
-                  ],
-                ]),
-              )
-                  .animate()
-                  .fadeIn(delay: 700.ms, duration: 500.ms)
-                  .slideY(
-                      begin: 0.2,
-                      end: 0,
-                      delay: 700.ms,
-                      duration: 500.ms,
-                      curve: Curves.easeOutCubic),
-              const Spacer(),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: copperAccent,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                    textStyle: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 2),
-                  ),
-                  child: const Text('DONE'),
-                ),
-              )
-                  .animate()
-                  .fadeIn(delay: 900.ms, duration: 400.ms),
-            ]),
-          ),
-        ),
-      ]),
-    );
-  }
-}
-
-/// Customer-facing customization sheet. Renders the menu item's variants
-/// (single-select — sizing/portion) and modifiers (multi-select — extras).
-/// Live total recomputes as the customer toggles options. Hitting "Send
-/// to waiter" fires the existing call-waiter endpoint with the choices
-/// as the reason so the waiter brings the customised order to the
-/// kitchen — no cart refactor needed for the MVP, and it matches how
-/// most restaurants actually take custom orders today.
-class _CustomizeSheet extends ConsumerStatefulWidget {
-  final MenuItemModel item;
-  const _CustomizeSheet({required this.item});
-
-  @override
-  ConsumerState<_CustomizeSheet> createState() => _CustomizeSheetState();
-}
-
-class _CustomizeSheetState extends ConsumerState<_CustomizeSheet> {
-  int? _variantIndex;
-  final Set<int> _modifierIndices = {};
-
-  double get _total {
-    final base = _variantIndex == null
-        ? widget.item.basePrice
-        : widget.item.variants[_variantIndex!].price;
-    final addons = _modifierIndices.fold<double>(
-      0,
-      (sum, i) => sum + widget.item.modifiers[i].extraPrice,
-    );
-    return base + addons;
-  }
-
-  String _renderChoices() {
-    final parts = <String>[];
-    if (_variantIndex != null) {
-      parts.add(widget.item.variants[_variantIndex!].name);
-    }
-    if (_modifierIndices.isNotEmpty) {
-      parts.add(_modifierIndices
-          .map((i) => widget.item.modifiers[i].name)
-          .join(', '));
-    }
-    return parts.join(' · ');
-  }
-
-  Future<void> _send() async {
-    final session = ref.read(_sessionProvider);
-    if (session == null) {
-      Navigator.pop(context);
-      return;
-    }
-    final sessionId = (session['_id'] ?? session['id'])?.toString() ?? '';
-    final choices = _renderChoices();
-    final reason = choices.isEmpty
-        ? '${widget.item.name} — custom request'
-        : '${widget.item.name}: $choices  (₹${_total.toStringAsFixed(2)})';
-    try {
-      final dio = createDioClient(null);
-      await dio.post(
-        '/sessions/$sessionId/call-waiter',
-        data: {'reason': reason},
-        options: Options(headers: {
-          'Idempotency-Key': newIdempotencyKey('customize-${widget.item.id}'),
-        }),
-      );
-      if (!mounted) return;
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        backgroundColor: emerald,
-        content: const Text('Waiter notified — bringing your custom order!'),
-      ));
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        backgroundColor: crimson,
-        content: Text(describeApiError(e)),
-      ));
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final item = widget.item;
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-            22, 16, 22, MediaQuery.of(context).viewInsets.bottom + 22),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Container(
-            width: 36, height: 4,
-            decoration: BoxDecoration(
-              color: textSecondary.withValues(alpha: 0.4),
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(height: 14),
-          Text(item.name,
-              style: const TextStyle(
-                  color: textPrimary,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800)),
-          if ((item.description ?? '').isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(item.description!,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: textSecondary, fontSize: 12)),
-          ],
-          const SizedBox(height: 18),
-          if (item.variants.isNotEmpty) ...[
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: Text('CHOOSE A SIZE',
-                  style: TextStyle(
-                      color: textSecondary,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.5)),
-            ),
-            const SizedBox(height: 8),
-            Wrap(spacing: 8, runSpacing: 8, children: [
-              for (var i = 0; i < item.variants.length; i++)
-                _OptionPill(
-                  label: item.variants[i].name,
-                  trailing: '₹${item.variants[i].price.toStringAsFixed(0)}',
-                  active: _variantIndex == i,
-                  onTap: () => setState(() => _variantIndex = i),
-                ),
-            ]),
-            const SizedBox(height: 18),
-          ],
-          if (item.modifiers.isNotEmpty) ...[
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: Text('ADD EXTRAS',
-                  style: TextStyle(
-                      color: textSecondary,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.5)),
-            ),
-            const SizedBox(height: 8),
-            Wrap(spacing: 8, runSpacing: 8, children: [
-              for (var i = 0; i < item.modifiers.length; i++)
-                _OptionPill(
-                  label: item.modifiers[i].name,
-                  trailing:
-                      '+₹${item.modifiers[i].extraPrice.toStringAsFixed(0)}',
-                  active: _modifierIndices.contains(i),
-                  onTap: () => setState(() {
-                    if (_modifierIndices.contains(i)) {
-                      _modifierIndices.remove(i);
-                    } else {
-                      _modifierIndices.add(i);
-                    }
-                  }),
-                ),
-            ]),
-            const SizedBox(height: 18),
-          ],
-          // Live total
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: copperAccent.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(children: [
-              const Text('Total',
-                  style: TextStyle(
-                      color: textSecondary,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700)),
-              const Spacer(),
-              Text('₹${_total.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                      color: copperAccent,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900)),
-            ]),
-          ),
-          const SizedBox(height: 14),
-          // Preview-in-3D button only renders when a model exists
-          // SOMEWHERE in the customisation pick — either the item's
-          // base GLB or a selected modifier's override. Picks the most
-          // specific one (last modifier with a model wins; modifier
-          // models trump the base item model). On web this opens
-          // /ar.html in a new tab; on mobile the button is hidden.
-          if (kIsWeb && _activeModelUrl() != null) ...[
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                icon: const Icon(Icons.view_in_ar, size: 16),
-                label: const Text('Preview in 3D / AR'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: copperAccent,
-                  side: BorderSide(color: copperAccent.withValues(alpha: 0.6)),
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  textStyle: const TextStyle(
-                      fontSize: 12, fontWeight: FontWeight.w800),
-                ),
-                onPressed: _openAr,
-              ),
-            ),
-            const SizedBox(height: 10),
-          ],
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              icon: const Icon(Icons.send, size: 16),
-              label: const Text('Send custom order to waiter'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: copperAccent,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-                textStyle: const TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.w800),
-              ),
-              onPressed: _send,
-            ),
-          ),
-        ]),
-      ),
-    );
-  }
-
-  /// Resolve the model to render in AR. Modifier overrides win over the
-  /// item's base model so a customer picking "extra cheese" with its own
-  /// GLB sees the cheesy version. Returns null when nothing is on file
-  /// — the button stays hidden.
-  String? _activeModelUrl() {
-    for (final i in _modifierIndices) {
-      final mod = widget.item.modifiers[i];
-      if ((mod.glbUrl ?? '').isNotEmpty) return mod.glbUrl;
-    }
-    return widget.item.glbUrl;
-  }
-
-  String? _activeIosModelUrl() {
-    for (final i in _modifierIndices) {
-      final mod = widget.item.modifiers[i];
-      if ((mod.usdzUrl ?? '').isNotEmpty) return mod.usdzUrl;
-    }
-    return widget.item.usdzUrl;
-  }
-
-  void _openAr() {
-    final glb = _activeModelUrl();
-    if (glb == null) return;
-    final usdz = _activeIosModelUrl();
-    final encodedName = Uri.encodeComponent(widget.item.name);
-    final encodedGlb = Uri.encodeComponent(glb);
-    final iosParam = (usdz != null && usdz.isNotEmpty)
-        ? '&iosModel=${Uri.encodeComponent(usdz)}'
-        : '';
-    openInNewTab('/ar.html?model=$encodedGlb&name=$encodedName$iosParam');
-  }
-}
-
-class _OptionPill extends StatelessWidget {
-  final String label;
-  final String trailing;
-  final bool active;
-  final VoidCallback onTap;
-  const _OptionPill({
-    required this.label,
-    required this.trailing,
-    required this.active,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: active ? copperAccent.withValues(alpha: 0.18) : slateSurface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-              color: active ? copperAccent : dividerColor, width: 1),
-        ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(
-              active
-                  ? Icons.check_circle
-                  : Icons.radio_button_unchecked,
-              color: active ? copperAccent : textSecondary,
-              size: 14),
-          const SizedBox(width: 6),
-          Text(label,
-              style: TextStyle(
-                  color: active ? copperAccent : textPrimary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700)),
-          const SizedBox(width: 6),
-          Text(trailing,
-              style: TextStyle(
-                  color: active ? copperAccent : textSecondary,
-                  fontSize: 11)),
-        ]),
       ),
     );
   }
