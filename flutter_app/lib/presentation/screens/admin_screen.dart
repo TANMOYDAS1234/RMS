@@ -16,6 +16,7 @@ import '../../core/config/app_config.dart';
 import '../../core/config/app_theme.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/services/websocket_service.dart';
+import '../../domain/entities/user_entity.dart';
 import '../../core/utils/api_error.dart';
 import '../../core/utils/file_download.dart';
 import '../../core/utils/idempotency.dart';
@@ -733,6 +734,37 @@ class AdminComparisonTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Defense-in-depth: this tab is wired into the admin-only role tabs
+    // list in main.dart, but if a future caller surfaces it elsewhere we
+    // render a clean "admin only" empty state instead of letting the
+    // backend 403 land as a generic error.
+    final role = ref.watch(authProvider).user?.role;
+    if (role != UserRole.admin) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.lock_outline,
+                  size: 56, color: textSecondary.withValues(alpha: 0.4)),
+              const SizedBox(height: 16),
+              const Text('Admins only',
+                  style: TextStyle(
+                      color: textPrimary,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800)),
+              const SizedBox(height: 6),
+              const Text(
+                'Cross-branch comparisons are limited to chain administrators.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: textSecondary, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     final dataAsync = ref.watch(_branchComparisonProvider);
 
     return ListView(

@@ -69,6 +69,7 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
   bool _showErrorEligible = false;
   int _tabIndex = 0;
   Timer? _activityTimer;
+  Timer? _billPollTimer;
   String? _deviceId;
   StreamSubscription<WsEvent>? _wsSub;
 
@@ -145,6 +146,16 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
                 'Idempotency-Key': _uuid.v4(),
               }));
         }
+      });
+
+      // 6. Bill polling fallback for web customers. WebSocket events
+      //    drive most refreshes, but on flaky mobile networks (or when
+      //    the WS reconnect backoff is between attempts) the customer
+      //    can sit on a stale "preparing" status while staff have moved
+      //    them to "ready". A 30-second poll closes that gap without
+      //    burdening the backend.
+      _billPollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+        if (mounted) _loadSessionBill();
       });
     } catch (e) {
       // The multi-party flow throws typed errors for the cases where a
@@ -313,6 +324,7 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
   @override
   void dispose() {
     _activityTimer?.cancel();
+    _billPollTimer?.cancel();
     _wsSub?.cancel();
     super.dispose();
   }
@@ -433,9 +445,70 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
                     duration: 900.ms,
                     curve: Curves.easeInOut),
           ),
+        if (session != null)
+          IconButton(
+            tooltip: 'Leave session',
+            icon: const Icon(Icons.exit_to_app, color: textSecondary),
+            onPressed: () => _leaveSession(session),
+          ),
         const SizedBox(width: 4),
       ],
     );
+  }
+
+  /// Customer ends the QR session without ordering or paying. Backend
+  /// refuses if there's an unpaid order (it'd be a dine-and-dash). On
+  /// success, the table seat is freed for the next party immediately
+  /// instead of being phantom-occupied for the rest of the 30-min TTL.
+  Future<void> _leaveSession(Map<String, dynamic> session) async {
+    final sessionId = (session['_id'] ?? session['id'])?.toString() ?? '';
+    if (sessionId.isEmpty) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: slateCard,
+        title: const Text('Leave this table?',
+            style: TextStyle(color: textPrimary, fontSize: 15)),
+        content: const Text(
+          'You can come back by rescanning the QR. We can only let you leave if all orders are paid or cancelled.',
+          style: TextStyle(color: textSecondary, fontSize: 12),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Stay', style: TextStyle(color: textSecondary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Leave', style: TextStyle(color: crimson)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await _dio.post(
+        '/sessions/$sessionId/leave',
+        options: Options(headers: {
+          'Idempotency-Key': newIdempotencyKey('leave-$sessionId'),
+        }),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        backgroundColor: emerald,
+        content: const Text('Session ended — thanks for visiting!'),
+      ));
+      // Clear local session state so the screen reverts to its initial
+      // empty state. The customer can rescan if they want to come back.
+      ref.read(_sessionProvider.notifier).state = null;
+      ref.read(_qrOrdersProvider.notifier).state = [];
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        backgroundColor: crimson,
+        content: Text(describeApiError(e)),
+      ));
+    }
   }
 
   /// Long-press path on the bell — surfaces an optional note field for
@@ -1109,9 +1182,66 @@ class _ArChip extends StatelessWidget {
   }
 }
 
-class _QrOrderCard extends StatelessWidget {
+class _QrOrderCard extends ConsumerWidget {
   final Map<String, dynamic> order;
   const _QrOrderCard({required this.order});
+
+  Future<void> _cancel(BuildContext context, WidgetRef ref) async {
+    final session = ref.read(_sessionProvider);
+    if (session == null) return;
+    final sessionId = (session['_id'] ?? session['id'])?.toString() ?? '';
+    final orderId = (order['id'] ?? order['_id'])?.toString() ?? '';
+    if (sessionId.isEmpty || orderId.isEmpty) return;
+    // Confirm — customer might fat-finger the button.
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: slateCard,
+        title: const Text('Cancel this order?',
+            style: TextStyle(color: textPrimary, fontSize: 15)),
+        content: const Text(
+          'You can only cancel before the kitchen starts cooking.',
+          style: TextStyle(color: textSecondary, fontSize: 12),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Keep order',
+                style: TextStyle(color: textSecondary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Cancel',
+                style: TextStyle(color: crimson)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      final dio = createDioClient(null);
+      await dio.post(
+        '/orders/$orderId/cancel',
+        data: {'sessionId': sessionId},
+        options: Options(headers: {
+          'Idempotency-Key': newIdempotencyKey('cancel-$orderId'),
+        }),
+      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          backgroundColor: emerald,
+          content: const Text('Order cancelled.'),
+        ));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          backgroundColor: crimson,
+          content: Text(describeApiError(e)),
+        ));
+      }
+    }
+  }
 
   static const _statusColors = {
     'created': textSecondary,
@@ -1125,10 +1255,11 @@ class _QrOrderCard extends StatelessWidget {
   };
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final status = order['status'] as String? ?? 'created';
     final color = _statusColors[status] ?? textSecondary;
     final items = List<Map<String, dynamic>>.from(order['items'] ?? []);
+    final canCancel = status == 'created' || status == 'confirmed';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1219,6 +1350,27 @@ class _QrOrderCard extends StatelessWidget {
               icon: Icons.check_circle_outline,
               color: emerald,
               message: 'Your order is ready! A waiter will serve you shortly.',
+            ),
+          ],
+          // Customer self-cancel. Only allowed while the order is still
+          // CREATED or CONFIRMED (the kitchen hasn't started). After that
+          // they have to ask a staff member, who'd refund instead.
+          if (canCancel) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.cancel_outlined, size: 16),
+                label: const Text('Cancel order'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: crimson,
+                  side: BorderSide(color: crimson.withValues(alpha: 0.5)),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  textStyle: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w700),
+                ),
+                onPressed: () => _cancel(context, ref),
+              ),
             ),
           ],
         ],

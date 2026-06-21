@@ -1207,6 +1207,9 @@ class _SplitPaySheet extends ConsumerStatefulWidget {
 class _SplitPaySheetState extends ConsumerState<_SplitPaySheet> {
   // Three default allocations (cash/card/upi) the cashier can edit.
   final Map<String, double> _allocations = {'cash': 0, 'card': 0, 'upi': 0};
+  // Mirrors the tip field on the single-payment sheet so a split bill
+  // doesn't silently lose the tip on the way to the server.
+  final TextEditingController _tipCtrl = TextEditingController();
   bool _busy = false;
   late final String _idempotencyKey;
 
@@ -1216,8 +1219,15 @@ class _SplitPaySheetState extends ConsumerState<_SplitPaySheet> {
     _idempotencyKey = newIdempotencyKey('split-${widget.bill.id}');
   }
 
+  @override
+  void dispose() {
+    _tipCtrl.dispose();
+    super.dispose();
+  }
+
   double get _allocated => _allocations.values.fold(0, (s, v) => s + v);
   double get _remaining => widget.bill.total - _allocated;
+  double get _tipAmount => double.tryParse(_tipCtrl.text) ?? 0;
 
   Future<void> _submit() async {
     if (_busy) return;
@@ -1246,6 +1256,10 @@ class _SplitPaySheetState extends ConsumerState<_SplitPaySheet> {
           'paymentMethod': splits.reduce((a, b) =>
               (a['amount'] as double) >= (b['amount'] as double) ? a : b)['method'],
           'splitPayments': splits,
+          // Forward the tip on splits too. The single-payment path on
+          // line ~1058 was the only one carrying tipAmount before — that
+          // silently dropped tip revenue on any multi-method bill.
+          if (_tipAmount > 0) 'tipAmount': _tipAmount,
         },
         options: Options(headers: {'Idempotency-Key': _idempotencyKey}),
       );
@@ -1293,6 +1307,42 @@ class _SplitPaySheetState extends ConsumerState<_SplitPaySheet> {
           method: m,
           value: _allocations[m]!,
           onChanged: (v) => setState(() => _allocations[m] = v),
+        ),
+        const SizedBox(height: 8),
+        // Tip row — matches the single-payment sheet at line ~1099. Without
+        // this the cashier had no way to record a tip on a split bill and
+        // any tip entered on the single sheet was lost when they switched.
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: copperAccent.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(children: [
+            const Icon(Icons.volunteer_activism_outlined,
+                color: copperAccent, size: 18),
+            const SizedBox(width: 10),
+            const Text('Tip ₹',
+                style: TextStyle(
+                    color: textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700)),
+            Expanded(
+              child: TextField(
+                controller: _tipCtrl,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                style: const TextStyle(color: textPrimary, fontSize: 14),
+                textAlign: TextAlign.right,
+                decoration: const InputDecoration(
+                  hintText: '0',
+                  hintStyle: TextStyle(color: textSecondary, fontSize: 14),
+                  border: InputBorder.none,
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+            ),
+          ]),
         ),
         const SizedBox(height: 14),
         Container(
