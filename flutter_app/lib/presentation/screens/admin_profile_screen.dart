@@ -550,7 +550,7 @@ class _AppearancePicker extends ConsumerWidget {
         ]),
         const SizedBox(height: 4),
         Text(
-            'Choose how Dine Ops looks. System follows your phone.',
+            'Choose how Dine Ops looks. Light mode is rolling out screen-by-screen; for now most pages stay dark.',
             style: TextStyle(color: bc.textLo, fontSize: 11)),
         const SizedBox(height: 12),
         Row(children: [

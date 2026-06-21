@@ -3870,7 +3870,16 @@ class _MenuItemCard extends ConsumerWidget {
     final tags = List<String>.from(item['tags'] ?? []);
     final imageUrl = item['imageUrl'] as String?;
     final glbUrl = item['glbUrl'] as String?;
-    final fullImageUrl = imageUrl != null ? '${AppConfig.baseUrl}$imageUrl' : null;
+    // Cache-buster: the backend keeps the image URL stable across
+    // uploads (`/menu/:id/image`), so CachedNetworkImage would keep
+    // serving the previously-cached body (often the 404 placeholder
+    // from an earlier attempt) forever. Appending ?v=updatedAt makes
+    // every upload land as a brand-new URL → fresh fetch.
+    final updatedAt = item['updatedAt'];
+    final v = updatedAt != null
+        ? (DateTime.tryParse(updatedAt.toString())?.millisecondsSinceEpoch ?? 0)
+        : 0;
+    final fullImageUrl = imageUrl != null ? '${AppConfig.baseUrl}$imageUrl?v=$v' : null;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
