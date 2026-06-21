@@ -1,6 +1,7 @@
-// â”€â”€â”€ Admin Portal â€” Complete Production-Grade Screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// Tabs: Overview Â· Analytics Â· Staff Â· Orders Â· Billing Â· Inventory Â· System
+// ─── Admin Portal — Complete Production-Grade Screen ─────────────────────────
+// Tabs: Overview · Analytics · Staff · Orders · Billing · Inventory · System
 
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -31,9 +32,9 @@ import 'admin_onboarding_screen.dart';
 /// on every tab switch. Reset on cold start.
 final Set<String> _onboardingShownFor = {};
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
 // PROVIDERS
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
 
 // Each provider is now a 2-line wrapper around an AdminApi method.
 // adminApiProvider rebuilds the Dio client when the token changes, so
@@ -95,12 +96,12 @@ final _profitMarginProvider =
     FutureProvider.autoDispose<Map<String, dynamic>>(
         (ref) => ref.watch(adminApiProvider).profitMargin());
 
-// â”€â”€ Cross-cutting audit feed (auth + RBAC + refund + inventory approvals) â”€â”€
+// ── Cross-cutting audit feed (auth + RBAC + refund + inventory approvals) ──
 //
 // Held as a single immutable filter object so widget rebuilds stay cheap
-// â€” Riverpod only re-fetches when the user actually changes a field.
+// — Riverpod only re-fetches when the user actually changes a field.
 class AuditFilter {
-  final String? type;     // empty string in dropdown â†’ null here
+  final String? type;     // empty string in dropdown → null here
   final String? actorId;  // free-form actor id / email substring
   final DateTime? from;
   final DateTime? to;
@@ -156,7 +157,7 @@ final _staffAnalyticsProvider =
   return ref.watch(adminApiProvider).staffPerformance(from: r.from, to: r.to);
 });
 
-// Cross-branch comparison â€” admin-only. Reuses the same analytics range
+// Cross-branch comparison — admin-only. Reuses the same analytics range
 // picker as the Analytics tab so changing the range there flows through
 // here too (and vice versa) without forcing the admin to re-pick.
 final _branchComparisonProvider =
@@ -165,22 +166,49 @@ final _branchComparisonProvider =
   return ref.watch(adminApiProvider).branchComparison(from: r.from, to: r.to);
 });
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// TAB 1 â€” OVERVIEW
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
+// TAB 1 — OVERVIEW
+// ═══════════════════════════════════════════════════════════════════════════════
 
-class AdminOverviewTab extends ConsumerWidget {
+class AdminOverviewTab extends ConsumerStatefulWidget {
   const AdminOverviewTab({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AdminOverviewTab> createState() => _AdminOverviewTabState();
+}
+
+class _AdminOverviewTabState extends ConsumerState<AdminOverviewTab> {
+  // 30-second auto-refresh so "Live Operations" stays live even if a
+  // WebSocket push drops or the user keeps the tab open through a Render
+  // cold-start. Pull-to-refresh still works for an immediate kick.
+  Timer? _refreshTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!mounted) return;
+      ref.invalidate(_systemHealthProvider);
+      ref.invalidate(_financialSummaryProvider);
+      ref.invalidate(_allOrdersProvider);
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final metrics = ref.watch(dashboardMetricsProvider);
     final orders = ref.watch(liveOrdersProvider);
     final healthAsync = ref.watch(_systemHealthProvider);
     final finAsync = ref.watch(_financialSummaryProvider);
     final branchesAsync = ref.watch(_branchesProvider);
 
-    // First-launch onboarding â€” when the admin has zero branches we
+    // First-launch onboarding — when the admin has zero branches we
     // push the wizard once after the first frame. The dialog flag stops
     // the same admin from being walked through every tab switch. Once
     // they finish (or kill the app and come back with branches
@@ -198,7 +226,7 @@ class AdminOverviewTab extends ConsumerWidget {
       }
     });
 
-    // Live data â€” refresh on relevant server pushes.
+    // Live data — refresh on relevant server pushes.
     ref.listen(wsEventsProvider, (_, next) {
       next.whenData((evt) {
         if (evt.event == 'order:updated' ||
@@ -225,7 +253,7 @@ class AdminOverviewTab extends ConsumerWidget {
           children: [
             _MetricCard('Active Orders', '${metrics.activeOrders}', Icons.receipt_outlined, copperAccent),
             _MetricCard('Occupied Tables', '${metrics.occupiedTables}/${metrics.totalTables}', Icons.table_restaurant_outlined, amber),
-            _MetricCard("Today's Revenue", 'â‚¹${metrics.revenue.toStringAsFixed(0)}', Icons.attach_money, emerald),
+            _MetricCard("Today's Revenue", '₹${metrics.revenue.toStringAsFixed(0)}', Icons.attach_money, emerald),
             _MetricCard('Total Orders', '${orders.length}', Icons.list_alt_outlined, roseGold),
           ],
         ),
@@ -276,14 +304,14 @@ class _FinancialSnapshot extends StatelessWidget {
           Row(children: [
             const Icon(Icons.today_outlined, color: emerald, size: 16),
             const SizedBox(width: 6),
-            Text("Today â€” ${data['date'] ?? ''}", style: const TextStyle(color: textSecondary, fontSize: 12)),
+            Text("Today — ${data['date'] ?? ''}", style: const TextStyle(color: textSecondary, fontSize: 12)),
           ]),
           const SizedBox(height: 12),
           Row(children: [
-            _FinStat('Gross', 'â‚¹${gross.toStringAsFixed(0)}', emerald),
-            _FinStat('Net', 'â‚¹${net.toStringAsFixed(0)}', copperAccent),
-            _FinStat('Refunded', 'â‚¹${refunded.toStringAsFixed(0)}', crimson),
-            _FinStat('Pending', 'â‚¹${pending.toStringAsFixed(0)}', amber),
+            _FinStat('Gross', '₹${gross.toStringAsFixed(0)}', emerald),
+            _FinStat('Net', '₹${net.toStringAsFixed(0)}', copperAccent),
+            _FinStat('Refunded', '₹${refunded.toStringAsFixed(0)}', crimson),
+            _FinStat('Pending', '₹${pending.toStringAsFixed(0)}', amber),
           ]),
         ],
       ),
@@ -367,9 +395,9 @@ class _OrderPipeline extends StatelessWidget {
   }
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// TAB 2 â€” ANALYTICS
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
+// TAB 2 — ANALYTICS
+// ═══════════════════════════════════════════════════════════════════════════════
 
 class AdminAnalyticsTab extends ConsumerWidget {
   const AdminAnalyticsTab({super.key});
@@ -456,7 +484,7 @@ class _AnalyticsRangePicker extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final range = ref.watch(analyticsRangeProvider);
     final label =
-        '${DateFormat('dd MMM').format(range.from)} â€“ ${DateFormat('dd MMM').format(range.to)}';
+        '${DateFormat('dd MMM').format(range.from)} – ${DateFormat('dd MMM').format(range.to)}';
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -600,9 +628,9 @@ class _ProfitCard extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         Row(children: [
-          _FinStat('Gross Rev', 'â‚¹${((data['grossRevenue'] ?? 0) as num).toStringAsFixed(0)}', textPrimary),
-          _FinStat('COGS', 'â‚¹${((data['estimatedCOGS'] ?? 0) as num).toStringAsFixed(0)}', crimson),
-          _FinStat('Profit', 'â‚¹${((data['grossProfit'] ?? 0) as num).toStringAsFixed(0)}', color),
+          _FinStat('Gross Rev', '₹${((data['grossRevenue'] ?? 0) as num).toStringAsFixed(0)}', textPrimary),
+          _FinStat('COGS', '₹${((data['estimatedCOGS'] ?? 0) as num).toStringAsFixed(0)}', crimson),
+          _FinStat('Profit', '₹${((data['grossProfit'] ?? 0) as num).toStringAsFixed(0)}', color),
         ]),
       ]),
     );
@@ -663,7 +691,7 @@ class _RevenueChart extends StatelessWidget {
         titlesData: FlTitlesData(
           leftTitles: AxisTitles(sideTitles: SideTitles(
             showTitles: true, reservedSize: 40,
-            getTitlesWidget: (v, _) => Text('â‚¹${v.toInt()}', style: const TextStyle(color: textSecondary, fontSize: 9)),
+            getTitlesWidget: (v, _) => Text('₹${v.toInt()}', style: const TextStyle(color: textSecondary, fontSize: 9)),
           )),
           bottomTitles: AxisTitles(sideTitles: SideTitles(
             showTitles: true,
@@ -745,15 +773,15 @@ class _TopItemRow extends StatelessWidget {
         Expanded(child: Text(item['name'] ?? '', style: const TextStyle(color: textPrimary, fontSize: 13, fontWeight: FontWeight.w600))),
         Text('$qty sold', style: const TextStyle(color: textSecondary, fontSize: 12)),
         const SizedBox(width: 12),
-        Text('â‚¹${revenue.toStringAsFixed(0)}', style: const TextStyle(color: copperAccent, fontSize: 13, fontWeight: FontWeight.w700)),
+        Text('₹${revenue.toStringAsFixed(0)}', style: const TextStyle(color: copperAccent, fontSize: 13, fontWeight: FontWeight.w700)),
       ]),
     );
   }
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// TAB â€” CROSS-BRANCH COMPARISON (admin only)
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
+// TAB — CROSS-BRANCH COMPARISON (admin only)
+// ═══════════════════════════════════════════════════════════════════════════════
 
 class AdminComparisonTab extends ConsumerWidget {
   const AdminComparisonTab({super.key});
@@ -873,7 +901,7 @@ class _BranchRevenueBars extends StatelessWidget {
                               fontSize: 12,
                               fontWeight: FontWeight.w600)),
                     ),
-                    Text('â‚¹${rev.toStringAsFixed(0)}',
+                    Text('₹${rev.toStringAsFixed(0)}',
                         style: const TextStyle(
                             color: copperAccent,
                             fontSize: 12,
@@ -942,12 +970,12 @@ class _BranchComparisonTable extends StatelessWidget {
               DataCell(Text(name,
                   style: const TextStyle(
                       color: textPrimary, fontWeight: FontWeight.w600))),
-              DataCell(Text('â‚¹${rev.toStringAsFixed(0)}',
+              DataCell(Text('₹${rev.toStringAsFixed(0)}',
                   style: const TextStyle(
                       color: copperAccent, fontWeight: FontWeight.w700))),
               DataCell(Text('$orders')),
-              DataCell(Text('â‚¹${avg.toStringAsFixed(0)}')),
-              DataCell(Text('â‚¹${gst.toStringAsFixed(0)}',
+              DataCell(Text('₹${avg.toStringAsFixed(0)}')),
+              DataCell(Text('₹${gst.toStringAsFixed(0)}',
                   style: const TextStyle(color: emerald))),
             ]);
           }).toList(),
@@ -957,9 +985,9 @@ class _BranchComparisonTable extends StatelessWidget {
   }
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// TAB 3 â€” STAFF MANAGEMENT
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
+// TAB 3 — STAFF MANAGEMENT
+// ═══════════════════════════════════════════════════════════════════════════════
 
 class AdminStaffTab extends ConsumerWidget {
   const AdminStaffTab({super.key});
@@ -1099,7 +1127,7 @@ class _AddStaffSheetState extends ConsumerState<_AddStaffSheet> {
               style: const TextStyle(color: textPrimary),
               decoration: _inputDec('Branch (optional)'),
               items: [
-                const DropdownMenuItem<String>(value: null, child: Text('â€” No branch â€”')),
+                const DropdownMenuItem<String>(value: null, child: Text('— No branch —')),
                 ...branches.map((b) => DropdownMenuItem<String>(
                       value: b['_id'] as String,
                       child: Text(b['name'] as String? ?? ''),
@@ -1110,7 +1138,7 @@ class _AddStaffSheetState extends ConsumerState<_AddStaffSheet> {
           ),
           const SizedBox(height: 16),
           _PrimaryButton(
-            label: _submitting ? 'Creatingâ€¦' : 'Create Account',
+            label: _submitting ? 'Creating…' : 'Create Account',
             onTap: _submitting ? () {} : _submit,
           ),
         ]),
@@ -1248,7 +1276,7 @@ class _StaffCard extends ConsumerWidget {
   }
 }
 
-// â”€â”€ Edit user sheet (was inline StatefulBuilder with leaking controllers) â”€â”€â”€â”€
+// ── Edit user sheet (was inline StatefulBuilder with leaking controllers) ────
 class _EditUserSheet extends ConsumerStatefulWidget {
   final Map<String, dynamic> user;
   const _EditUserSheet({required this.user});
@@ -1309,7 +1337,7 @@ class _EditUserSheetState extends ConsumerState<_EditUserSheet> {
     return Padding(
       padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 24),
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Edit â€” ${widget.user['name'] ?? ''}',
+        Text('Edit — ${widget.user['name'] ?? ''}',
             style: const TextStyle(color: textPrimary, fontSize: 15, fontWeight: FontWeight.w700)),
         const SizedBox(height: 16),
         _InputField(ctrl: _nameCtrl, label: 'Full Name'),
@@ -1345,7 +1373,7 @@ class _EditUserSheetState extends ConsumerState<_EditUserSheet> {
         ),
         const SizedBox(height: 16),
         _PrimaryButton(
-          label: _submitting ? 'Savingâ€¦' : 'Save Changes',
+          label: _submitting ? 'Saving…' : 'Save Changes',
           onTap: _submitting ? () {} : _save,
         ),
       ]),
@@ -1353,7 +1381,7 @@ class _EditUserSheetState extends ConsumerState<_EditUserSheet> {
   }
 }
 
-// â”€â”€ Reset password sheet â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Reset password sheet ─────────────────────────────────────────────────────
 class _ResetPasswordSheet extends ConsumerStatefulWidget {
   final String userId;
   final String userName;
@@ -1406,22 +1434,22 @@ class _ResetPasswordSheetState extends ConsumerState<_ResetPasswordSheet> {
   Widget build(BuildContext context) => Padding(
         padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 24),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Reset Password â€” ${widget.userName}',
+          Text('Reset Password — ${widget.userName}',
               style: const TextStyle(color: textPrimary, fontSize: 15, fontWeight: FontWeight.w700)),
           const SizedBox(height: 16),
           _InputField(ctrl: _ctrl, label: 'New Password (min 6 chars)', obscure: true),
           const SizedBox(height: 16),
           _PrimaryButton(
-            label: _submitting ? 'Resettingâ€¦' : 'Reset Password',
+            label: _submitting ? 'Resetting…' : 'Reset Password',
             onTap: _submitting ? () {} : _submit,
           ),
         ]),
       );
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// STAFF AVATAR â€” tappable, shows real photo or fallback letter
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
+// STAFF AVATAR — tappable, shows real photo or fallback letter
+// ═══════════════════════════════════════════════════════════════════════════════
 
 class _StaffAvatar extends ConsumerWidget {
   final Map<String, dynamic> user;
@@ -1468,9 +1496,9 @@ class _StaffAvatar extends ConsumerWidget {
   }
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// TAB 4 â€” ORDERS OVERSIGHT
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
+// TAB 4 — ORDERS OVERSIGHT
+// ═══════════════════════════════════════════════════════════════════════════════
 
 class AdminOrdersTab extends ConsumerWidget {
   const AdminOrdersTab({super.key});
@@ -1615,9 +1643,9 @@ class _AdminOrderCard extends ConsumerWidget {
   }
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// TAB 5 â€” BILLING & PAYMENTS
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
+// TAB 5 — BILLING & PAYMENTS
+// ═══════════════════════════════════════════════════════════════════════════════
 
 class AdminBillingTab extends ConsumerWidget {
   const AdminBillingTab({super.key});
@@ -1648,7 +1676,7 @@ class AdminBillingTab extends ConsumerWidget {
         const SizedBox(height: 20),
         const _TaxReportsCard(),
         const SizedBox(height: 20),
-        // Pending refund requests â€” surfaced above the log because they
+        // Pending refund requests — surfaced above the log because they
         // need an approve/deny decision from the manager (or admin).
         txAsync.when(
           loading: () => const SizedBox.shrink(),
@@ -1683,7 +1711,7 @@ class AdminBillingTab extends ConsumerWidget {
   }
 }
 
-// â”€â”€â”€ Tax Reports (GST CSV export) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Tax Reports (GST CSV export) ───────────────────────────────────────────
 //
 // Two DatePicker rows + an Export button. Hits /billing/reports/gst as bytes
 // so we can hand the same payload to a web Blob or a mobile share sheet
@@ -1746,7 +1774,7 @@ class _TaxReportsCardState extends ConsumerState<_TaxReportsCard> {
     setState(() => _busy = true);
     try {
       final dio = createDioClient(ref.read(authProvider).token);
-      // Span the full "to" day â€” server uses paidAt <= to.
+      // Span the full "to" day — server uses paidAt <= to.
       final toEnd = DateTime(_to.year, _to.month, _to.day, 23, 59, 59, 999);
       final fromStart = DateTime(_from.year, _from.month, _from.day);
       final resp = await dio.get<List<int>>(
@@ -1835,7 +1863,7 @@ class _TaxReportsCardState extends ConsumerState<_TaxReportsCard> {
                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
                   )
                 : const Icon(Icons.download_outlined, size: 16),
-            label: Text(_busy ? 'Exportingâ€¦' : 'Export CSV'),
+            label: Text(_busy ? 'Exporting…' : 'Export CSV'),
             style: ElevatedButton.styleFrom(
               backgroundColor: copperAccent,
               foregroundColor: Colors.black,
@@ -1930,7 +1958,7 @@ class _PendingRefundCard extends ConsumerWidget {
         ]),
         const SizedBox(height: 6),
         Row(children: [
-          Text('â‚¹${total.toStringAsFixed(2)}',
+          Text('₹${total.toStringAsFixed(2)}',
               style: const TextStyle(
                   color: copperAccent,
                   fontSize: 14,
@@ -2024,16 +2052,16 @@ class _EodSummaryCard extends StatelessWidget {
           Row(children: [
             const Icon(Icons.summarize_outlined, color: emerald, size: 16),
             const SizedBox(width: 6),
-            Text('EOD Summary â€” ${data['date'] ?? ''}',
+            Text('EOD Summary — ${data['date'] ?? ''}',
                 style: const TextStyle(color: textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
           ]),
           const SizedBox(height: 14),
-          _BillingRow('Gross Revenue', 'â‚¹${((data['grossRevenue'] ?? 0) as num).toStringAsFixed(2)}', emerald),
-          _BillingRow('Refunded', '-â‚¹${((data['refundedAmount'] ?? 0) as num).toStringAsFixed(2)}', crimson),
-          _BillingRow('GST Collected', 'â‚¹${((data['gstCollected'] ?? 0) as num).toStringAsFixed(2)}', amber),
-          _BillingRow('Discounts', '-â‚¹${((data['totalDiscounts'] ?? 0) as num).toStringAsFixed(2)}', roseGold),
+          _BillingRow('Gross Revenue', '₹${((data['grossRevenue'] ?? 0) as num).toStringAsFixed(2)}', emerald),
+          _BillingRow('Refunded', '-₹${((data['refundedAmount'] ?? 0) as num).toStringAsFixed(2)}', crimson),
+          _BillingRow('GST Collected', '₹${((data['gstCollected'] ?? 0) as num).toStringAsFixed(2)}', amber),
+          _BillingRow('Discounts', '-₹${((data['totalDiscounts'] ?? 0) as num).toStringAsFixed(2)}', roseGold),
           const Divider(color: dividerColor, height: 16),
-          _BillingRow('Net Revenue', 'â‚¹${((data['netRevenue'] ?? 0) as num).toStringAsFixed(2)}', copperAccent, bold: true),
+          _BillingRow('Net Revenue', '₹${((data['netRevenue'] ?? 0) as num).toStringAsFixed(2)}', copperAccent, bold: true),
           const SizedBox(height: 8),
           Row(children: [
             _SmallStat('Paid Orders', '${data['paidOrders'] ?? 0}', emerald),
@@ -2093,7 +2121,7 @@ class _TransactionCard extends ConsumerWidget {
             Text(DateFormat('dd MMM, HH:mm').format(paidAt),
                 style: const TextStyle(color: textSecondary, fontSize: 11)),
         ])),
-        Text('â‚¹${total.toStringAsFixed(2)}',
+        Text('₹${total.toStringAsFixed(2)}',
             style: const TextStyle(color: copperAccent, fontSize: 14, fontWeight: FontWeight.w800)),
         const SizedBox(width: 10),
         Container(
@@ -2152,9 +2180,9 @@ class _TransactionCard extends ConsumerWidget {
   }
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// TAB 6 â€” INVENTORY OVERSIGHT
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
+// TAB 6 — INVENTORY OVERSIGHT
+// ═══════════════════════════════════════════════════════════════════════════════
 
 class AdminInventoryTab extends ConsumerWidget {
   const AdminInventoryTab({super.key});
@@ -2246,8 +2274,7 @@ class AdminInventoryTab extends ConsumerWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           backgroundColor: emerald,
-          content: Text(
-              'Re-fired $fired low-stock alerts across $scanned items.'),
+          content: Text('Re-fired $fired low-stock alerts across $scanned items.'),
         ));
       }
     } catch (e) {
@@ -2287,7 +2314,7 @@ class AdminInventoryTab extends ConsumerWidget {
             Expanded(child: _InputField(ctrl: threshCtrl, label: 'Low Threshold', keyboardType: const TextInputType.numberWithOptions(decimal: true))),
           ]),
           const SizedBox(height: 10),
-          _InputField(ctrl: costCtrl, label: 'Cost per Unit (â‚¹)', keyboardType: const TextInputType.numberWithOptions(decimal: true)),
+          _InputField(ctrl: costCtrl, label: 'Cost per Unit (₹)', keyboardType: const TextInputType.numberWithOptions(decimal: true)),
           const SizedBox(height: 16),
           _PrimaryButton(
             label: 'Create Item',
@@ -2435,7 +2462,7 @@ class _AdminInventoryCard extends ConsumerWidget {
       builder: (ctx) => Padding(
         padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Adjust Stock â€” $name', style: const TextStyle(color: textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
+          Text('Adjust Stock — $name', style: const TextStyle(color: textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
           const SizedBox(height: 16),
           _InputField(ctrl: ctrl, label: 'Delta (e.g. +10 or -5)', keyboardType: const TextInputType.numberWithOptions(signed: true)),
           const SizedBox(height: 10),
@@ -2465,9 +2492,9 @@ class _AdminInventoryCard extends ConsumerWidget {
   }
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// TAB 7 â€” BRANCHES & FEATURE TOGGLES
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
+// TAB 7 — BRANCHES & FEATURE TOGGLES
+// ═══════════════════════════════════════════════════════════════════════════════
 
 class AdminBranchesTab extends ConsumerWidget {
   const AdminBranchesTab({super.key});
@@ -2495,7 +2522,7 @@ class AdminBranchesTab extends ConsumerWidget {
                       icon: Icons.store_outlined,
                       title: 'No branches yet',
                       subtitle:
-                          'Add your first branch to start onboarding managers, staff, and menus. Each branch is fully isolated â€” its own staff, inventory, orders, and reports.',
+                          'Add your first branch to start onboarding managers, staff, and menus. Each branch is fully isolated — its own staff, inventory, orders, and reports.',
                     ),
                   ],
                 );
@@ -2602,7 +2629,7 @@ class _AddBranchSheetState extends ConsumerState<_AddBranchSheet> {
           _InputField(ctrl: _addrCtrl, label: 'Address'),
           const SizedBox(height: 16),
           _PrimaryButton(
-            label: _submitting ? 'Creatingâ€¦' : 'Create Branch',
+            label: _submitting ? 'Creating…' : 'Create Branch',
             onTap: _submitting ? () {} : _submit,
           ),
         ]),
@@ -2758,7 +2785,7 @@ class _BranchCard extends ConsumerWidget {
   }
 }
 
-// â”€â”€ Edit branch sheet â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Edit branch sheet ────────────────────────────────────────────────────────
 class _EditBranchSheet extends ConsumerStatefulWidget {
   final String branchId;
   final Map<String, dynamic> branch;
@@ -2835,7 +2862,7 @@ class _EditBranchSheetState extends ConsumerState<_EditBranchSheet> {
   Widget build(BuildContext context) => Padding(
         padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 24),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Edit â€” ${widget.branch['name'] ?? ''}',
+          Text('Edit — ${widget.branch['name'] ?? ''}',
               style: const TextStyle(color: textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
           const SizedBox(height: 16),
           _InputField(ctrl: _nameCtrl, label: 'Branch Name'),
@@ -2862,7 +2889,7 @@ class _EditBranchSheetState extends ConsumerState<_EditBranchSheet> {
           // When on, head chefs on this branch can add ingredients and
           // set thresholds themselves. Chef-added items are flagged
           // pendingReview until a manager audits the values. Off by
-          // default â€” keeps the cleaner separation of duties.
+          // default — keeps the cleaner separation of duties.
           Row(children: [
             const Expanded(
               child: Text('Chef manages inventory',
@@ -2885,7 +2912,7 @@ class _EditBranchSheetState extends ConsumerState<_EditBranchSheet> {
           ),
           const SizedBox(height: 16),
           _PrimaryButton(
-            label: _submitting ? 'Savingâ€¦' : 'Save Changes',
+            label: _submitting ? 'Saving…' : 'Save Changes',
             onTap: _submitting ? () {} : _save,
           ),
         ]),
@@ -2911,9 +2938,9 @@ class _FeatureToggleRow extends StatelessWidget {
       ]);
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// TAB 8 â€” SYSTEM (Health Â· Audit Log Â· Menu Management)
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
+// TAB 8 — SYSTEM (Health · Audit Log · Menu Management)
+// ═══════════════════════════════════════════════════════════════════════════════
 
 class AdminSystemTab extends ConsumerStatefulWidget {
   const AdminSystemTab({super.key});
@@ -2968,7 +2995,7 @@ class _AdminSystemTabState extends ConsumerState<AdminSystemTab>
       ]);
 }
 
-// â”€â”€ System Health â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── System Health ─────────────────────────────────────────────────────────────
 
 class _SystemHealthTab extends ConsumerWidget {
   const _SystemHealthTab();
@@ -3017,7 +3044,7 @@ class _SystemHealthTab extends ConsumerWidget {
             ]),
           ),
           const SizedBox(height: 16),
-          // Wipe demo data â€” one-shot cleanup for the orders + bills
+          // Wipe demo data — one-shot cleanup for the orders + bills
           // pushed by seed.ts. Doesn't touch user accounts, the menu, or
           // tables (those are still useful even outside the demo).
           _WipeDemoCard(),
@@ -3128,7 +3155,7 @@ class _WipeDemoCardState extends ConsumerState<_WipeDemoCard> {
                     child: CircularProgressIndicator(
                         strokeWidth: 2, color: crimson))
                 : const Icon(Icons.delete_outline, size: 16),
-            label: Text(_busy ? 'Clearingâ€¦' : 'Clear demo data'),
+            label: Text(_busy ? 'Clearing…' : 'Clear demo data'),
             style: OutlinedButton.styleFrom(
               foregroundColor: crimson,
               side: BorderSide(color: crimson.withValues(alpha: 0.5)),
@@ -3171,7 +3198,7 @@ class _HealthStatusCard extends StatelessWidget {
   }
 }
 
-// â”€â”€ Audit Log â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Audit Log ─────────────────────────────────────────────────────────────────
 
 class _AuditLogTab extends ConsumerWidget {
   const _AuditLogTab();
@@ -3208,7 +3235,7 @@ class _AuditLogTab extends ConsumerWidget {
   }
 }
 
-// Filter row â€” type dropdown, actor search, date range pickers. Each
+// Filter row — type dropdown, actor search, date range pickers. Each
 // control writes back to auditFilterProvider; the FutureProvider above
 // re-runs whenever the filter object changes.
 class _AuditFilterBar extends ConsumerStatefulWidget {
@@ -3225,12 +3252,12 @@ class _AuditFilterBarState extends ConsumerState<_AuditFilterBar> {
   // with backend/src/modules/audit/audit-log.schema.ts.
   static const _types = <String, String>{
     '': 'All types',
-    'AUTH_LOGIN': 'Auth Â· login',
-    'AUTH_LOGOUT': 'Auth Â· logout',
-    'AUTH_FAILED': 'Auth Â· failed',
-    'RBAC_ROLE_CHANGED': 'RBAC Â· role changed',
-    'BILL_REFUNDED': 'Bill Â· refunded',
-    'INVENTORY_APPROVED': 'Inventory Â· approved',
+    'AUTH_LOGIN': 'Auth · login',
+    'AUTH_LOGOUT': 'Auth · logout',
+    'AUTH_FAILED': 'Auth · failed',
+    'RBAC_ROLE_CHANGED': 'RBAC · role changed',
+    'BILL_REFUNDED': 'Bill · refunded',
+    'INVENTORY_APPROVED': 'Inventory · approved',
   };
 
   @override
@@ -3435,7 +3462,7 @@ class _AuditEntry extends StatelessWidget {
     'RBAC_ROLE_CHANGED': amber,
     'BILL_REFUNDED': crimson,
     'INVENTORY_APPROVED': copperAccent,
-    // Legacy /admin/audit-log shapes â€” kept for the old order trail when
+    // Legacy /admin/audit-log shapes — kept for the old order trail when
     // the same widget is reused there.
     'FORCE_CLOSED': crimson,
     'DISCOUNT_APPLIED': amber,
@@ -3446,7 +3473,7 @@ class _AuditEntry extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Tolerate both new (/audit) and legacy (/admin/audit-log) shapes â€”
+    // Tolerate both new (/audit) and legacy (/admin/audit-log) shapes —
     // the AdminSystemTab now uses the new feed but the same widget might
     // be reused elsewhere.
     final type = (entry['type'] ?? entry['action']) as String? ?? '';
@@ -3461,7 +3488,7 @@ class _AuditEntry extends StatelessWidget {
     final meta = entry['meta'];
 
     final actorLine = actorEmail != null && actorEmail.isNotEmpty
-        ? '$actorEmail${actorRole != null ? ' Â· $actorRole' : ''}'
+        ? '$actorEmail${actorRole != null ? ' · $actorRole' : ''}'
         : 'by ${actorId ?? 'system'}';
 
     return Container(
@@ -3495,7 +3522,7 @@ class _AuditEntry extends StatelessWidget {
                     style: const TextStyle(
                         color: textSecondary, fontSize: 11)),
                 if (branchId != null && branchId.isNotEmpty)
-                  Text('branch Â· $branchId',
+                  Text('branch · $branchId',
                       style: const TextStyle(
                           color: textSecondary, fontSize: 10)),
                 if (meta is Map && meta.isNotEmpty)
@@ -3504,7 +3531,7 @@ class _AuditEntry extends StatelessWidget {
                     child: Text(
                       meta.entries
                           .map((e) => '${e.key}: ${e.value}')
-                          .join(' Â· '),
+                          .join(' · '),
                       style: const TextStyle(
                           color: textSecondary, fontSize: 10),
                       maxLines: 2,
@@ -3523,7 +3550,7 @@ class _AuditEntry extends StatelessWidget {
   }
 }
 
-// â”€â”€ Menu Management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Menu Management ───────────────────────────────────────────────────────────
 
 class _MenuManagementTab extends ConsumerStatefulWidget {
   const _MenuManagementTab();
@@ -3633,7 +3660,7 @@ class _MenuManagementTabState extends ConsumerState<_MenuManagementTab> {
     final tagsCtrl = TextEditingController(
         text: (existing?['tags'] as List?)?.join(', ') ?? '');
     bool isVeg = existing?['isVeg'] as bool? ?? false;
-    // Hold the raw bytes â€” not the path â€” so the same code works on web
+    // Hold the raw bytes — not the path — so the same code works on web
     // (where XFile.path is a blob URL that MultipartFile.fromFile can't open)
     // and on mobile. pickedImageName is just for the multipart filename hint.
     Uint8List? pickedImageBytes;
@@ -3650,7 +3677,7 @@ class _MenuManagementTabState extends ConsumerState<_MenuManagementTab> {
         builder: (ctx, setState) => SingleChildScrollView(
           padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(id == null ? 'Add Menu Item' : 'Edit â€” ${existing!['name']}',
+            Text(id == null ? 'Add Menu Item' : 'Edit — ${existing!['name']}',
                 style: const TextStyle(color: textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
             const SizedBox(height: 16),
             _InputField(ctrl: nameCtrl, label: 'Name'),
@@ -3660,7 +3687,7 @@ class _MenuManagementTabState extends ConsumerState<_MenuManagementTab> {
             _InputField(ctrl: catCtrl, label: 'Category (e.g. Starters)'),
             const SizedBox(height: 10),
             Row(children: [
-              Expanded(child: _InputField(ctrl: priceCtrl, label: 'Base Price (â‚¹)',
+              Expanded(child: _InputField(ctrl: priceCtrl, label: 'Base Price (₹)',
                   keyboardType: const TextInputType.numberWithOptions(decimal: true))),
               const SizedBox(width: 10),
               Expanded(child: _InputField(ctrl: prepCtrl, label: 'Prep Time (min)',
@@ -3710,7 +3737,7 @@ class _MenuManagementTabState extends ConsumerState<_MenuManagementTab> {
                       color: pickedImageBytes != null ? copperAccent : textSecondary, size: 18),
                   const SizedBox(width: 10),
                   Text(
-                    pickedImageBytes != null ? 'Photo selected âœ“' : 'Add Dish Photo (optional)',
+                    pickedImageBytes != null ? 'Photo selected ✓' : 'Add Dish Photo (optional)',
                     style: TextStyle(
                         color: pickedImageBytes != null ? copperAccent : textSecondary, fontSize: 13),
                   ),
@@ -3722,7 +3749,7 @@ class _MenuManagementTabState extends ConsumerState<_MenuManagementTab> {
             GestureDetector(
               onTap: () async {
                 // FileType.custom + allowedExtensions: ['glb'] makes Android
-                // resolve a MIME for .glb, which it doesn't know â€” picker
+                // resolve a MIME for .glb, which it doesn't know — picker
                 // throws. Use FileType.any and validate the extension here.
                 final result = await FilePicker.platform.pickFiles(
                   type: FileType.any,
@@ -3759,7 +3786,7 @@ class _MenuManagementTabState extends ConsumerState<_MenuManagementTab> {
                       color: pickedGlbBytes != null ? copperAccent : textSecondary, size: 18),
                   const SizedBox(width: 10),
                   Text(
-                    pickedGlbBytes != null ? '3D Model selected âœ“' : 'Add 3D Model (.glb) (optional)',
+                    pickedGlbBytes != null ? '3D Model selected ✓' : 'Add 3D Model (.glb) (optional)',
                     style: TextStyle(
                         color: pickedGlbBytes != null ? copperAccent : textSecondary, fontSize: 13),
                   ),
@@ -3798,10 +3825,10 @@ class _MenuManagementTabState extends ConsumerState<_MenuManagementTab> {
                     await dio.patch('/menu/$id', data: data,
                         options: Options(headers: {'Idempotency-Key': newIdempotencyKey('menu-edit-$id')}));
                   }
-                  // Upload photo if picked. Bytes-based upload â€” see comment
+                  // Upload photo if picked. Bytes-based upload — see comment
                   // on pickedImageBytes for why this isn't fromFile().
                   if (pickedImageBytes != null && savedId != null) {
-                    // Explicit MIME â€” without it Dio defaults to
+                    // Explicit MIME — without it Dio defaults to
                     // application/octet-stream which the backend stamps
                     // as the photo's mime, and browsers refuse to render
                     // the result as an image.
@@ -3894,11 +3921,11 @@ class _MenuItemCard extends ConsumerWidget {
                   _MediaBtn(icon: Icons.add_photo_alternate_outlined, label: 'Photo',
                       onTap: () => _uploadImage(context, ref, id)),
                   const SizedBox(width: 6),
-                  _MediaBtn(icon: Icons.view_in_ar_outlined, label: glbUrl != null ? '3D âœ“' : '3D',
+                  _MediaBtn(icon: Icons.view_in_ar_outlined, label: glbUrl != null ? '3D ✓' : '3D',
                       active: glbUrl != null,
                       onTap: () => _uploadGlb(context, ref, id)),
                   // Preview the uploaded GLB in the same AR/3D page the
-                  // customer sees. Only rendered when an upload exists â€”
+                  // customer sees. Only rendered when an upload exists —
                   // admin verifies "does this 3D model match the food?"
                   // without leaving the menu screen.
                   if (glbUrl != null) ...[
@@ -3926,7 +3953,7 @@ class _MenuItemCard extends ConsumerWidget {
                     color: (isVeg ? emerald : crimson).withValues(alpha: 0.9),
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: Text(isVeg ? 'ðŸŸ¢ VEG' : 'ðŸ”´ NON-VEG',
+                  child: Text(isVeg ? '🟢 VEG' : '🔴 NON-VEG',
                       style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700)),
                 ),
               ),
@@ -3939,7 +3966,7 @@ class _MenuItemCard extends ConsumerWidget {
             Row(children: [
               Expanded(child: Text(item['name'] ?? '',
                   style: const TextStyle(color: textPrimary, fontSize: 13, fontWeight: FontWeight.w700))),
-              Text('â‚¹${price.toStringAsFixed(0)}',
+              Text('₹${price.toStringAsFixed(0)}',
                   style: const TextStyle(color: copperAccent, fontSize: 14, fontWeight: FontWeight.w800)),
             ]),
             if ((item['description'] as String? ?? '').isNotEmpty) ...[
@@ -4121,7 +4148,7 @@ class _MenuItemCard extends ConsumerWidget {
     if (picked == null) return;
     try {
       final dio = createDioClient(ref.read(authProvider).token);
-      // Bytes-based upload â€” fromFile() can't open blob: URLs on web.
+      // Bytes-based upload — fromFile() can't open blob: URLs on web.
       final bytes = await picked.readAsBytes();
       final fn = picked.name.toLowerCase();
       final subtype = fn.endsWith('.png')
@@ -4174,9 +4201,9 @@ class _MediaBtn extends StatelessWidget {
       );
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
 // SHARED HELPERS & WIDGETS
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════════════════
 
 class _MetricCard extends StatelessWidget {
   final String label;
@@ -4222,7 +4249,7 @@ class _ChartSkeleton extends StatelessWidget {
       );
 }
 
-/// Reusable empty-state card. Used wherever the tab data is empty â€”
+/// Reusable empty-state card. Used wherever the tab data is empty —
 /// gives users orientation (what is this view?) and a next-step nudge
 /// instead of staring at a blank scroll area.
 class _EmptyView extends StatelessWidget {
