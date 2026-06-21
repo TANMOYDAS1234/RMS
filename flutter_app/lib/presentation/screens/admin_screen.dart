@@ -24,6 +24,12 @@ import '../../core/utils/idempotency.dart';
 import '../../data/api/admin_api.dart';
 import '../state/auth_provider.dart';
 import '../state/order_providers.dart';
+import 'admin_onboarding_screen.dart';
+
+/// Roles for which we have already pushed the first-launch wizard this
+/// session. Stops the same admin getting re-walked through onboarding
+/// on every tab switch. Reset on cold start.
+final Set<String> _onboardingShownFor = {};
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // PROVIDERS
@@ -172,6 +178,25 @@ class AdminOverviewTab extends ConsumerWidget {
     final orders = ref.watch(liveOrdersProvider);
     final healthAsync = ref.watch(_systemHealthProvider);
     final finAsync = ref.watch(_financialSummaryProvider);
+    final branchesAsync = ref.watch(_branchesProvider);
+
+    // First-launch onboarding — when the admin has zero branches we
+    // push the wizard once after the first frame. The dialog flag stops
+    // the same admin from being walked through every tab switch. Once
+    // they finish (or kill the app and come back with branches
+    // configured), the condition no longer fires.
+    branchesAsync.whenData((branches) {
+      if (branches.isEmpty && !_onboardingShownFor.contains('admin')) {
+        _onboardingShownFor.add('admin');
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!context.mounted) return;
+          Navigator.of(context).push(MaterialPageRoute(
+            fullscreenDialog: true,
+            builder: (_) => const AdminOnboardingScreen(),
+          )).then((_) => ref.invalidate(_branchesProvider));
+        });
+      }
+    });
 
     // Live data — refresh on relevant server pushes.
     ref.listen(wsEventsProvider, (_, next) {

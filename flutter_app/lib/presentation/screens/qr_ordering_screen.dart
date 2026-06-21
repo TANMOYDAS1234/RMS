@@ -2034,6 +2034,30 @@ class _CustomizeSheetState extends ConsumerState<_CustomizeSheet> {
             ]),
           ),
           const SizedBox(height: 14),
+          // Preview-in-3D button only renders when a model exists
+          // SOMEWHERE in the customisation pick — either the item's
+          // base GLB or a selected modifier's override. Picks the most
+          // specific one (last modifier with a model wins; modifier
+          // models trump the base item model). On web this opens
+          // /ar.html in a new tab; on mobile the button is hidden.
+          if (kIsWeb && _activeModelUrl() != null) ...[
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.view_in_ar, size: 16),
+                label: const Text('Preview in 3D / AR'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: copperAccent,
+                  side: BorderSide(color: copperAccent.withValues(alpha: 0.6)),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  textStyle: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w800),
+                ),
+                onPressed: _openAr,
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
@@ -2054,6 +2078,38 @@ class _CustomizeSheetState extends ConsumerState<_CustomizeSheet> {
         ]),
       ),
     );
+  }
+
+  /// Resolve the model to render in AR. Modifier overrides win over the
+  /// item's base model so a customer picking "extra cheese" with its own
+  /// GLB sees the cheesy version. Returns null when nothing is on file
+  /// — the button stays hidden.
+  String? _activeModelUrl() {
+    for (final i in _modifierIndices) {
+      final mod = widget.item.modifiers[i];
+      if ((mod.glbUrl ?? '').isNotEmpty) return mod.glbUrl;
+    }
+    return widget.item.glbUrl;
+  }
+
+  String? _activeIosModelUrl() {
+    for (final i in _modifierIndices) {
+      final mod = widget.item.modifiers[i];
+      if ((mod.usdzUrl ?? '').isNotEmpty) return mod.usdzUrl;
+    }
+    return widget.item.usdzUrl;
+  }
+
+  void _openAr() {
+    final glb = _activeModelUrl();
+    if (glb == null) return;
+    final usdz = _activeIosModelUrl();
+    final encodedName = Uri.encodeComponent(widget.item.name);
+    final encodedGlb = Uri.encodeComponent(glb);
+    final iosParam = (usdz != null && usdz.isNotEmpty)
+        ? '&iosModel=${Uri.encodeComponent(usdz)}'
+        : '';
+    openInNewTab('/ar.html?model=$encodedGlb&name=$encodedName$iosParam');
   }
 }
 

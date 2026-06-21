@@ -13,14 +13,25 @@ class MenuVariant {
 }
 
 /// Add-on modifier — extra cheese, no onion, etc. extraPrice is added on
-/// top of the base/variant price.
+/// top of the base/variant price. May also carry its own 3D model
+/// (`glbUrl` + `usdzUrl`) so the AR preview swaps when a customer
+/// toggles it. Falls back to the item's base model when null.
 class MenuModifier {
   final String name;
   final double extraPrice;
-  const MenuModifier({required this.name, required this.extraPrice});
+  final String? glbUrl;
+  final String? usdzUrl;
+  const MenuModifier({
+    required this.name,
+    required this.extraPrice,
+    this.glbUrl,
+    this.usdzUrl,
+  });
   factory MenuModifier.fromJson(Map<String, dynamic> j) => MenuModifier(
         name: j['name'] ?? '',
         extraPrice: (j['extraPrice'] ?? 0).toDouble(),
+        glbUrl: j['glbUrl'] as String?,
+        usdzUrl: j['usdzUrl'] as String?,
       );
 }
 
