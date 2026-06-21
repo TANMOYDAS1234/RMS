@@ -84,7 +84,6 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
     final ready = orders.where((o) => o.status == OrderStatus.ready).length;
 
     return Scaffold(
-      backgroundColor: slateBg,
       appBar: AppBar(
         title: const Text('KITCHEN DISPLAY'),
         bottom: PreferredSize(

@@ -74,10 +74,8 @@ class BillingScreen extends ConsumerWidget {
         .toList();
 
     return Scaffold(
-      backgroundColor: slateBg,
       appBar: AppBar(
         title: const Text('BILLING'),
-        backgroundColor: slateBg,
       ),
       body: RefreshIndicator(
         color: copperAccent,

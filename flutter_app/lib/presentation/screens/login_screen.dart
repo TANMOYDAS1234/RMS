@@ -20,7 +20,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
     return Scaffold(
-      backgroundColor: slateBg,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(28),

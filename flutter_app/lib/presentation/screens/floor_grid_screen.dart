@@ -48,10 +48,8 @@ class FloorGridScreen extends ConsumerWidget {
     );
 
     return Scaffold(
-      backgroundColor: slateBg,
       appBar: AppBar(
         title: const Text('FLOOR PLAN'),
-        backgroundColor: slateBg,
       ),
       body: RefreshIndicator(
         color: copperAccent,

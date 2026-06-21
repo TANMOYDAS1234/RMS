@@ -53,7 +53,6 @@ class DashboardScreen extends ConsumerWidget {
     };
 
     return Scaffold(
-      backgroundColor: slateBg,
       appBar: _buildAppBar(wsState),
       body: RefreshIndicator(
         color: copperAccent,
@@ -107,7 +106,6 @@ class DashboardScreen extends ConsumerWidget {
   }
 
   PreferredSizeWidget _buildAppBar(SocketState wsState) => AppBar(
-        backgroundColor: slateBg,
         elevation: 0,
         titleSpacing: 12,
         title: Row(

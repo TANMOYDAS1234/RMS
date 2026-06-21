@@ -32,10 +32,8 @@ class _NewOrderScreenState extends ConsumerState<NewOrderScreen> {
     final menuAsync = ref.watch(menuProvider(branchId));
 
     return Scaffold(
-      backgroundColor: slateBg,
       appBar: AppBar(
         title: const Text('New Order'),
-        backgroundColor: slateBg,
         actions: [
           if (_cart.isNotEmpty)
             Padding(

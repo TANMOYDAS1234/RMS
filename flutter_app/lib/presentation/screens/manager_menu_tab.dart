@@ -60,7 +60,6 @@ class _ManagerMenuTabState extends ConsumerState<ManagerMenuTab> {
 
     final menuAsync = ref.watch(_managerMenuProvider(branchId));
     return Scaffold(
-      backgroundColor: slateBg,
       body: RefreshIndicator(
         color: copperAccent,
         backgroundColor: slateCard,

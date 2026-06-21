@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/config/app_theme.dart';
+import '../../core/services/websocket_service.dart';
 import '../../core/utils/api_error.dart';
 import '../../core/utils/idempotency.dart';
 import '../../data/api/manager_api.dart';
@@ -27,6 +28,18 @@ class _ManagerInventoryTabState extends ConsumerState<ManagerInventoryTab> {
   @override
   Widget build(BuildContext context) {
     final invAsync = ref.watch(_managerInventoryProvider);
+
+    // Live sync: backend emits `inventory:updated` to branch:<branchId>
+    // whenever a chef adjusts stock, approves an item, or the manager
+    // mutates an ingredient. Listening here keeps this tab in sync with
+    // every device on the same branch without a manual pull-to-refresh.
+    ref.listen(wsEventsProvider, (_, next) {
+      next.whenData((evt) {
+        if (evt.event == 'inventory:updated') {
+          ref.invalidate(_managerInventoryProvider);
+        }
+      });
+    });
 
     return RefreshIndicator(
       color: copperAccent,

@@ -196,7 +196,9 @@ class _SplashScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: slateBg,
+      // No explicit backgroundColor — falls through to
+      // Theme.of(context).scaffoldBackgroundColor so the page bg flips
+      // between slateBg (Dark) and paperBg (Light).
       body: Stack(
         children: [
           // Layer 1: radial breath glow.
@@ -513,7 +515,9 @@ class _MainShellState extends ConsumerState<MainShell> {
     final isAdmin = widget.role == UserRole.admin;
 
     return Scaffold(
-      backgroundColor: slateBg,
+      // No explicit backgroundColor — falls through to
+      // Theme.of(context).scaffoldBackgroundColor so the page bg flips
+      // between slateBg (Dark) and paperBg (Light).
       appBar: isAdmin ? _buildAdminAppBar() : null,
       body: IndexedStack(
           index: _index, children: tabs.map((t) => t.screen).toList()),

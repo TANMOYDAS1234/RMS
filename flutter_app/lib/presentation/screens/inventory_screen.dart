@@ -79,7 +79,6 @@ class InventoryScreen extends ConsumerWidget {
         role == UserRole.chef;
 
     return Scaffold(
-      backgroundColor: slateBg,
       floatingActionButton: canAttemptAdd
           ? FloatingActionButton.extended(
               backgroundColor: copperAccent,
@@ -92,7 +91,6 @@ class InventoryScreen extends ConsumerWidget {
           : null,
       appBar: AppBar(
         title: const Text('INVENTORY'),
-        backgroundColor: slateBg,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh, color: textSecondary),

@@ -396,7 +396,6 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
   PreferredSizeWidget _buildAppBar() {
     final session = ref.watch(_sessionProvider);
     return AppBar(
-      backgroundColor: slateBg,
       title: Row(
         children: [
           Container(
@@ -1566,7 +1565,6 @@ class _LoadingView extends StatelessWidget {
   const _LoadingView();
   @override
   Widget build(BuildContext context) => const Scaffold(
-        backgroundColor: slateBg,
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1586,7 +1584,6 @@ class _ErrorView extends StatelessWidget {
   const _ErrorView({required this.error});
   @override
   Widget build(BuildContext context) => Scaffold(
-        backgroundColor: slateBg,
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(32),

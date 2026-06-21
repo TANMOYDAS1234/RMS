@@ -2175,6 +2175,19 @@ class AdminInventoryTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final invAsync = ref.watch(_inventoryAdminProvider);
 
+    // Real-time sync: when a chef adjusts stock or the manager
+    // approves a chef-added ingredient, the backend emits
+    // `inventory:updated` to role:admin (added in orders.gateway after
+    // we noticed admin lagged). Invalidate the provider so the tab
+    // re-fetches without a manual pull.
+    ref.listen(wsEventsProvider, (_, next) {
+      next.whenData((evt) {
+        if (evt.event == 'inventory:updated') {
+          ref.invalidate(_inventoryAdminProvider);
+        }
+      });
+    });
+
     return Stack(
       children: [
         invAsync.when(

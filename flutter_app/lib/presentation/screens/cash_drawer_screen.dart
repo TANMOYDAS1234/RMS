@@ -50,10 +50,8 @@ class CashDrawerScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final current = ref.watch(cashDrawerCurrentProvider);
     return Scaffold(
-      backgroundColor: slateBg,
       appBar: AppBar(
         title: const Text('CASH DRAWER'),
-        backgroundColor: slateBg,
       ),
       body: current.when(
         loading: () => const Center(
