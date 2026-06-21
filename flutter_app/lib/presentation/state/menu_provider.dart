@@ -16,6 +16,9 @@ class MenuItemModel {
   final String? imageUrl;
   /// Same shape — `/menu/<id>/glb` when a 3D model is on file.
   final String? glbUrl;
+  /// iOS-specific Quick Look variant. Apple's AR only accepts USDZ;
+  /// model-viewer's `ios-src` attribute will pick this on iPhones.
+  final String? usdzUrl;
 
   const MenuItemModel({
     required this.id,
@@ -27,6 +30,7 @@ class MenuItemModel {
     this.prepTimeMinutes = 0,
     this.imageUrl,
     this.glbUrl,
+    this.usdzUrl,
   });
 
   factory MenuItemModel.fromJson(Map<String, dynamic> j) => MenuItemModel(
@@ -39,6 +43,7 @@ class MenuItemModel {
         prepTimeMinutes: j['prepTimeMinutes'] ?? 0,
         imageUrl: j['imageUrl'] as String?,
         glbUrl: j['glbUrl'] as String?,
+        usdzUrl: j['usdzUrl'] as String?,
       );
 }
 

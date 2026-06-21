@@ -1,12 +1,15 @@
 // ─── Manager: Operations Tab ──────────────────────────────────────────────────
 import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/config/app_theme.dart';
+import '../../core/network/dio_client.dart';
 import '../../core/services/websocket_service.dart';
 import '../../core/utils/api_error.dart';
 import '../../core/utils/idempotency.dart';
+import '../state/auth_provider.dart';
 import '../../data/api/manager_api.dart';
 import '../../domain/entities/order_entity.dart';
 import '../state/order_providers.dart';
@@ -98,6 +101,11 @@ class ManagerOperationsTab extends ConsumerWidget {
               _RevenueRow(ops: ops),
             ]),
           ),
+
+          const SizedBox(height: 20),
+
+          // ── Branch settings (manager-editable on own branch) ─────────────
+          const _ManagerBranchSettings(),
 
           const SizedBox(height: 20),
 
@@ -642,4 +650,127 @@ void _snack(BuildContext context, String msg, Color color) {
     backgroundColor: color,
     behavior: SnackBarBehavior.floating,
   ));
+}
+
+/// Pulls the manager's branch document so the toggles below render the
+/// authoritative server state. Keyed on the branchId from authProvider —
+/// fetching once per session is enough; the manager can pull-to-refresh
+/// the parent tab to reload.
+final _ownBranchProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  final auth = ref.watch(authProvider);
+  final branchId = auth.user?.branchId ?? '';
+  if (branchId.isEmpty) return const {};
+  final dio = createDioClient(auth.token);
+  final res = await dio.get('/branches/$branchId');
+  return Map<String, dynamic>.from(res.data as Map);
+});
+
+/// Manager-side branch settings panel. Currently exposes the single
+/// chefCanManageInventory toggle — the same flag the admin sets from the
+/// Branches tab, but now reachable to the manager for their own branch.
+/// Backend already allowed PATCH /branches/:id for managers on their own
+/// branch (see branches.controller); this just gives them a UI for it.
+class _ManagerBranchSettings extends ConsumerWidget {
+  const _ManagerBranchSettings();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final branchAsync = ref.watch(_ownBranchProvider);
+    return branchAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (branch) {
+        if (branch.isEmpty) return const SizedBox.shrink();
+        final chefCanManage = branch['chefCanManageInventory'] == true;
+        return Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: slateCard,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: dividerColor),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: const [
+                Icon(Icons.tune, color: copperAccent, size: 16),
+                SizedBox(width: 8),
+                Text('Branch Settings',
+                    style: TextStyle(
+                        color: textPrimary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800)),
+              ]),
+              const SizedBox(height: 6),
+              const Text(
+                'Tunables you can change without bothering the admin.',
+                style: TextStyle(color: textSecondary, fontSize: 11),
+              ),
+              const SizedBox(height: 12),
+              Row(children: [
+                const Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Chef manages inventory',
+                            style: TextStyle(
+                                color: textPrimary,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700)),
+                        SizedBox(height: 2),
+                        Text(
+                          'When on, the chef can add ingredients + set low-stock thresholds. Their adds get a REVIEW badge until you audit them.',
+                          style: TextStyle(
+                              color: textSecondary,
+                              fontSize: 11,
+                              height: 1.3),
+                        ),
+                      ]),
+                ),
+                Switch(
+                  value: chefCanManage,
+                  activeThumbColor: copperAccent,
+                  inactiveThumbColor: textSecondary,
+                  inactiveTrackColor: slateSurface,
+                  onChanged: (v) => _toggleChefInventory(context, ref, branch, v),
+                ),
+              ]),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _toggleChefInventory(
+    BuildContext context,
+    WidgetRef ref,
+    Map<String, dynamic> branch,
+    bool value,
+  ) async {
+    final auth = ref.read(authProvider);
+    final branchId = auth.user?.branchId ?? '';
+    if (branchId.isEmpty) return;
+    try {
+      final dio = createDioClient(auth.token);
+      await dio.patch(
+        '/branches/$branchId',
+        data: {'chefCanManageInventory': value},
+        options: Options(headers: {
+          'Idempotency-Key': newIdempotencyKey('branch-chef-mgmt-$branchId'),
+        }),
+      );
+      ref.invalidate(_ownBranchProvider);
+      if (context.mounted) {
+        _snack(
+          context,
+          value ? 'Chef can now manage inventory.' : 'Chef inventory management turned off.',
+          emerald,
+        );
+      }
+    } catch (e) {
+      if (context.mounted) _snack(context, describeApiError(e), crimson);
+    }
+  }
 }

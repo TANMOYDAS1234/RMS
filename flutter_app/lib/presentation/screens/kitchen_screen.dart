@@ -109,19 +109,36 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
           ),
         ),
       ),
-      body: kitchenOrders.isEmpty
-          ? const _EmptyKitchen()
-          : GridView.builder(
-              padding: const EdgeInsets.all(12),
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 340,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                childAspectRatio: 0.62,
+      body: RefreshIndicator(
+        color: copperAccent,
+        backgroundColor: slateCard,
+        onRefresh: () async {
+          // Always-on polling already runs in liveOrdersProvider, but
+          // pulling explicitly gives chefs a "force sync" gesture when
+          // they think a WS event was missed.
+          await ref.read(liveOrdersProvider.notifier).refresh();
+        },
+        child: kitchenOrders.isEmpty
+            ? ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: const [
+                  SizedBox(height: 80),
+                  _EmptyKitchen(),
+                ],
+              )
+            : GridView.builder(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(12),
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 340,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 0.62,
+                ),
+                itemCount: kitchenOrders.length,
+                itemBuilder: (_, i) => _KitchenCard(order: kitchenOrders[i]),
               ),
-              itemCount: kitchenOrders.length,
-              itemBuilder: (_, i) => _KitchenCard(order: kitchenOrders[i]),
-            ),
+      ),
     );
   }
 }

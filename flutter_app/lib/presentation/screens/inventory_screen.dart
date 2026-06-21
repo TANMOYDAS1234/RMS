@@ -100,7 +100,11 @@ class InventoryScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: inventoryAsync.when(
+      body: RefreshIndicator(
+        color: copperAccent,
+        backgroundColor: slateCard,
+        onRefresh: () async => ref.invalidate(inventoryProvider),
+        child: inventoryAsync.when(
         loading: () => const Center(child: CircularProgressIndicator(color: copperAccent)),
         error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: crimson))),
         data: (items) {
@@ -163,6 +167,7 @@ class InventoryScreen extends ConsumerWidget {
             ],
           );
         },
+      ),
       ),
     );
   }

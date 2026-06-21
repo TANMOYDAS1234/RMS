@@ -949,9 +949,18 @@ class _PayNowBarState extends ConsumerState<_PayNowBar> {
         options: Options(headers: {'Idempotency-Key': verifyKey}),
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        backgroundColor: emerald,
-        content: const Text('Payment received — thank you!'),
+      // Replace the transient snackbar with a celebratory full-screen
+      // confirmation — gives the customer a clear "we got it" moment
+      // and shows the running total / payment method / table reference
+      // they can screenshot before walking out. Pushes a separate route
+      // so dismissing it leaves them back on the menu screen.
+      await Navigator.of(context).push(MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => _PaymentSuccessScreen(
+          amount: widget.outstanding,
+          paymentId: result.razorpayPaymentId,
+          tableLabel: ref.read(_sessionProvider)?['tableLabel']?.toString() ?? '',
+        ),
       ));
     } catch (e) {
       if (!mounted) return;
@@ -1075,7 +1084,11 @@ class _QrMenuTile extends StatelessWidget {
                     // GLBs uploaded, this will use item.glbUrl.
                     if (kIsWeb) ...[
                       const SizedBox(width: 8),
-                      _ArChip(itemName: item.name, glbUrl: item.glbUrl),
+                      _ArChip(
+                        itemName: item.name,
+                        glbUrl: item.glbUrl,
+                        usdzUrl: item.usdzUrl,
+                      ),
                     ],
                   ]),
                 ],
@@ -1188,7 +1201,10 @@ class _ArChip extends StatelessWidget {
   /// we fall back to the demo pizza so the chip still feels alive on
   /// brand-new branches that haven't uploaded any models yet.
   final String? glbUrl;
-  const _ArChip({required this.itemName, this.glbUrl});
+  /// iOS-specific USDZ. When set, model-viewer hands off to AR Quick
+  /// Look on iPhones; otherwise iOS falls back to in-page 3D only.
+  final String? usdzUrl;
+  const _ArChip({required this.itemName, this.glbUrl, this.usdzUrl});
 
   @override
   Widget build(BuildContext context) {
@@ -1201,7 +1217,13 @@ class _ArChip extends StatelessWidget {
             : '/models/pizza.glb';
         final encoded = Uri.encodeComponent(itemName);
         final modelEnc = Uri.encodeComponent(modelPath);
-        openInNewTab('/ar.html?model=$modelEnc&name=$encoded');
+        // Pass iosModel only when an explicit USDZ exists. ar.html falls
+        // back to deriving `.glb`→`.usdz` for the demo pizza so the iOS
+        // AR button works there too.
+        final iosParam = (usdzUrl != null && usdzUrl!.isNotEmpty)
+            ? '&iosModel=${Uri.encodeComponent(usdzUrl!)}'
+            : '';
+        openInNewTab('/ar.html?model=$modelEnc&name=$encoded$iosParam');
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -1662,6 +1684,153 @@ class _StepperButton extends StatelessWidget {
           child: Icon(icon, color: copperAccent, size: 26),
         ),
       ),
+    );
+  }
+}
+
+/// Celebratory full-screen confirmation pushed when the customer's
+/// Razorpay payment clears. Replaces the transient snackbar that the
+/// user could miss if they tabbed away. Shows amount, table, and the
+/// PSP payment id so they can screenshot it as their receipt.
+class _PaymentSuccessScreen extends StatelessWidget {
+  final double amount;
+  final String? paymentId;
+  final String tableLabel;
+  const _PaymentSuccessScreen({
+    required this.amount,
+    required this.paymentId,
+    required this.tableLabel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: Stack(children: [
+        const Positioned.fill(child: _AmbientBackdrop()),
+        SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+            child: Column(children: [
+              const Spacer(),
+              // Big copper check with a glow halo — celebratory but on-brand.
+              Container(
+                width: 130,
+                height: 130,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const RadialGradient(colors: [
+                    Color(0xFF2A1810),
+                    Color(0xFF150B07),
+                  ]),
+                  boxShadow: [
+                    BoxShadow(
+                      color: copperAccent.withValues(alpha: 0.55),
+                      blurRadius: 40,
+                      spreadRadius: 4,
+                    ),
+                  ],
+                ),
+                child:
+                    const Icon(Icons.check, color: copperAccent, size: 62),
+              )
+                  .animate()
+                  .scaleXY(
+                      begin: 0.4,
+                      end: 1.0,
+                      duration: 600.ms,
+                      curve: Curves.elasticOut),
+              const SizedBox(height: 24),
+              const Text('PAYMENT RECEIVED',
+                  style: TextStyle(
+                      color: textPrimary,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 4))
+                  .animate()
+                  .fadeIn(delay: 300.ms, duration: 400.ms),
+              const SizedBox(height: 8),
+              Text('Thank you — see you again soon.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: copperAccent.withValues(alpha: 0.85),
+                      fontSize: 12,
+                      letterSpacing: 2))
+                  .animate()
+                  .fadeIn(delay: 500.ms, duration: 400.ms),
+              const SizedBox(height: 36),
+              // Summary card with amount + table + payment id.
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: slateCard,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                      color: copperAccent.withValues(alpha: 0.4), width: 1),
+                ),
+                child: Column(children: [
+                  Text('₹${amount.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                          color: copperAccent,
+                          fontSize: 36,
+                          fontWeight: FontWeight.w900)),
+                  if (tableLabel.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(tableLabel,
+                        style: const TextStyle(
+                            color: textSecondary, fontSize: 12)),
+                  ],
+                  if (paymentId != null && paymentId!.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: slateSurface,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(paymentId!,
+                          style: const TextStyle(
+                              color: textSecondary,
+                              fontSize: 11,
+                              fontFamily: 'monospace')),
+                    ),
+                  ],
+                ]),
+              )
+                  .animate()
+                  .fadeIn(delay: 700.ms, duration: 500.ms)
+                  .slideY(
+                      begin: 0.2,
+                      end: 0,
+                      delay: 700.ms,
+                      duration: 500.ms,
+                      curve: Curves.easeOutCubic),
+              const Spacer(),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: copperAccent,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    textStyle: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 2),
+                  ),
+                  child: const Text('DONE'),
+                ),
+              )
+                  .animate()
+                  .fadeIn(delay: 900.ms, duration: 400.ms),
+            ]),
+          ),
+        ),
+      ]),
     );
   }
 }

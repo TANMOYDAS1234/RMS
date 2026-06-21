@@ -1462,21 +1462,27 @@ class AdminOrdersTab extends ConsumerWidget {
       });
     });
 
-    return ordersAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator(color: copperAccent)),
-      error: (e, _) => Center(child: _ErrorText('$e')),
-      data: (orders) => ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // Summary row
-          Row(children: [
-            _SmallStat('Total', '${orders.length}', copperAccent),
-            _SmallStat('Active', '${orders.where((o) => !['closed', 'paid'].contains(o['status'])).length}', amber),
-            _SmallStat('Paid', '${orders.where((o) => o['status'] == 'paid').length}', emerald),
-          ]),
-          const SizedBox(height: 16),
-          ...orders.map((o) => _AdminOrderCard(order: o)),
-        ],
+    return RefreshIndicator(
+      color: copperAccent,
+      backgroundColor: slateCard,
+      onRefresh: () async => ref.invalidate(_allOrdersProvider),
+      child: ordersAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator(color: copperAccent)),
+        error: (e, _) => Center(child: _ErrorText('$e')),
+        data: (orders) => ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16),
+          children: [
+            // Summary row
+            Row(children: [
+              _SmallStat('Total', '${orders.length}', copperAccent),
+              _SmallStat('Active', '${orders.where((o) => !['closed', 'paid'].contains(o['status'])).length}', amber),
+              _SmallStat('Paid', '${orders.where((o) => o['status'] == 'paid').length}', emerald),
+            ]),
+            const SizedBox(height: 16),
+            ...orders.map((o) => _AdminOrderCard(order: o)),
+          ],
+        ),
       ),
     );
   }
@@ -2407,13 +2413,35 @@ class AdminBranchesTab extends ConsumerWidget {
 
     return Stack(
       children: [
-        branchesAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator(color: copperAccent)),
-          error: (e, _) => Center(child: _ErrorText('$e')),
-          data: (branches) => ListView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-            itemCount: branches.length,
-            itemBuilder: (_, i) => _BranchCard(branch: branches[i]),
+        RefreshIndicator(
+          color: copperAccent,
+          backgroundColor: slateCard,
+          onRefresh: () async => ref.invalidate(_branchesProvider),
+          child: branchesAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator(color: copperAccent)),
+            error: (e, _) => Center(child: _ErrorText('$e')),
+            data: (branches) {
+              if (branches.isEmpty) {
+                return ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: const [
+                    SizedBox(height: 80),
+                    _EmptyView(
+                      icon: Icons.store_outlined,
+                      title: 'No branches yet',
+                      subtitle:
+                          'Add your first branch to start onboarding managers, staff, and menus. Each branch is fully isolated — its own staff, inventory, orders, and reports.',
+                    ),
+                  ],
+                );
+              }
+              return ListView.builder(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+                itemCount: branches.length,
+                itemBuilder: (_, i) => _BranchCard(branch: branches[i]),
+              );
+            },
           ),
         ),
         Positioned(
@@ -3986,6 +4014,49 @@ class _ChartSkeleton extends StatelessWidget {
         decoration: BoxDecoration(color: slateCard, borderRadius: BorderRadius.circular(14)),
         child: const Center(child: CircularProgressIndicator(color: copperAccent, strokeWidth: 2)),
       );
+}
+
+/// Reusable empty-state card. Used wherever the tab data is empty —
+/// gives users orientation (what is this view?) and a next-step nudge
+/// instead of staring at a blank scroll area.
+class _EmptyView extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  const _EmptyView({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 64, color: textSecondary.withValues(alpha: 0.4)),
+            const SizedBox(height: 18),
+            Text(title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    color: textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800)),
+            const SizedBox(height: 6),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                  color: textSecondary, fontSize: 13, height: 1.4),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _ErrorText extends StatelessWidget {

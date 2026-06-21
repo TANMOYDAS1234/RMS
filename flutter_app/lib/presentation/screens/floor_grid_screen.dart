@@ -8,10 +8,29 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/config/app_theme.dart';
+import '../../core/network/dio_client.dart';
 import '../../core/utils/api_error.dart';
 import '../../domain/entities/order_entity.dart';
+import '../state/auth_provider.dart';
 import '../state/order_providers.dart';
 import '../state/tables_provider.dart';
+
+/// One row of multi-party capacity per table. Backed by
+/// /sessions/branch/:branchId/seats which the backend computes in a
+/// single round trip. Keyed by tableId for O(1) lookup from the tile.
+final _branchSeatsProvider =
+    FutureProvider.autoDispose<Map<String, Map<String, dynamic>>>((ref) async {
+  final token = ref.watch(authProvider).token;
+  final branchId = ref.watch(authProvider).user?.branchId;
+  if (branchId == null || branchId.isEmpty) return const {};
+  final dio = createDioClient(token);
+  final res = await dio.get('/sessions/branch/$branchId/seats');
+  final list = (res.data as List).cast<Map<String, dynamic>>();
+  return {
+    for (final row in list)
+      (row['tableId'] as String? ?? ''): row,
+  };
+});
 
 class FloorGridScreen extends ConsumerWidget {
   const FloorGridScreen({super.key});
@@ -20,6 +39,13 @@ class FloorGridScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tablesAsync = ref.watch(tablesProvider);
     final orders = ref.watch(liveOrdersProvider);
+    // Best-effort multi-party occupancy. If the call fails we render the
+    // legacy single-party fallback rather than blocking the whole grid.
+    final seatsAsync = ref.watch(_branchSeatsProvider);
+    final seatsByTable = seatsAsync.maybeWhen(
+      data: (m) => m,
+      orElse: () => const <String, Map<String, dynamic>>{},
+    );
 
     return Scaffold(
       backgroundColor: slateBg,
@@ -32,6 +58,7 @@ class FloorGridScreen extends ConsumerWidget {
         backgroundColor: slateCard,
         onRefresh: () async {
           ref.invalidate(tablesProvider);
+          ref.invalidate(_branchSeatsProvider);
           ref.read(liveOrdersProvider.notifier).refresh();
         },
         child: tablesAsync.when(
@@ -83,6 +110,7 @@ class FloorGridScreen extends ConsumerWidget {
                               o?.status != OrderStatus.closed,
                           orElse: () => null,
                         ),
+                    seats: seatsByTable[tables[i].id],
                   ),
                 ),
               ],
@@ -166,7 +194,12 @@ class _LegendChip extends StatelessWidget {
 class _TableTile extends StatelessWidget {
   final TableModel table;
   final OrderEntity? activeOrder;
-  const _TableTile({required this.table, this.activeOrder});
+  /// Multi-party occupancy data for this table from
+  /// /sessions/branch/:branchId/seats. Null when the call hasn't loaded
+  /// yet or the table is empty — we fall back to the legacy "one party
+  /// per occupied table" rendering in that case.
+  final Map<String, dynamic>? seats;
+  const _TableTile({required this.table, this.activeOrder, this.seats});
 
   Color get _statusColor {
     switch (table.status) {
@@ -186,6 +219,11 @@ class _TableTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasOrder = activeOrder != null;
+    final parties = (seats?['activeParties'] as List?)
+            ?.cast<Map<String, dynamic>>() ??
+        const [];
+    final occupied = (seats?['occupied'] as num?)?.toInt() ?? 0;
+    final capacity = (seats?['capacity'] as num?)?.toInt() ?? table.capacity;
     return Container(
       decoration: BoxDecoration(
         color: slateCard,
@@ -215,9 +253,15 @@ class _TableTile extends StatelessWidget {
                     fontWeight: FontWeight.w800,
                     letterSpacing: 1)),
             const Spacer(),
-            Text('${table.capacity}p',
-                style: const TextStyle(
-                    color: textSecondary, fontSize: 10)),
+            // Seat fraction — "3/4 seats" when we have multi-party data,
+            // otherwise the simple capacity tag.
+            Text(
+              parties.isNotEmpty || occupied > 0
+                  ? '$occupied/$capacity'
+                  : '${table.capacity}p',
+              style: const TextStyle(
+                  color: textSecondary, fontSize: 10),
+            ),
           ]),
         ),
         Expanded(
@@ -232,7 +276,26 @@ class _TableTile extends StatelessWidget {
                           fontSize: 18,
                           fontWeight: FontWeight.w800)),
                   const SizedBox(height: 4),
-                  if (hasOrder) ...[
+                  // Multi-party rendering — each active party shows as a
+                  // small pill with its label + size, billPending tinted
+                  // amber. Falls through to the legacy single-order block
+                  // when there's no party data yet.
+                  if (parties.isNotEmpty)
+                    Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: [
+                        for (final p in parties)
+                          _PartyPill(
+                            label: (p['partyLabel'] as String? ?? '').isEmpty
+                                ? '?'
+                                : (p['partyLabel'] as String),
+                            size: (p['partySize'] as num?)?.toInt() ?? 1,
+                            billPending: p['billPending'] == true,
+                          ),
+                      ],
+                    )
+                  else if (hasOrder) ...[
                     Row(children: [
                       const Icon(Icons.receipt_long_outlined,
                           color: copperAccent, size: 12),
@@ -257,6 +320,42 @@ class _TableTile extends StatelessWidget {
                 ]),
           ),
         ),
+      ]),
+    );
+  }
+}
+
+class _PartyPill extends StatelessWidget {
+  final String label;
+  final int size;
+  final bool billPending;
+  const _PartyPill({
+    required this.label,
+    required this.size,
+    required this.billPending,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = billPending ? amber : copperAccent;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.5), width: 0.8),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Text(label,
+            style: TextStyle(
+                color: color, fontSize: 9, fontWeight: FontWeight.w800)),
+        const SizedBox(width: 3),
+        Text('· $size',
+            style: TextStyle(color: color, fontSize: 9)),
+        if (billPending) ...[
+          const SizedBox(width: 2),
+          Icon(Icons.receipt_outlined, color: color, size: 9),
+        ],
       ]),
     );
   }
