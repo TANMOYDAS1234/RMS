@@ -2,6 +2,28 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/network/dio_client.dart';
 import '../state/auth_provider.dart';
 
+/// One sizing/portion option for a menu item — e.g. "Regular" / "Large".
+/// Pricing is absolute: picking the variant replaces basePrice.
+class MenuVariant {
+  final String name;
+  final double price;
+  const MenuVariant({required this.name, required this.price});
+  factory MenuVariant.fromJson(Map<String, dynamic> j) =>
+      MenuVariant(name: j['name'] ?? '', price: (j['price'] ?? 0).toDouble());
+}
+
+/// Add-on modifier — extra cheese, no onion, etc. extraPrice is added on
+/// top of the base/variant price.
+class MenuModifier {
+  final String name;
+  final double extraPrice;
+  const MenuModifier({required this.name, required this.extraPrice});
+  factory MenuModifier.fromJson(Map<String, dynamic> j) => MenuModifier(
+        name: j['name'] ?? '',
+        extraPrice: (j['extraPrice'] ?? 0).toDouble(),
+      );
+}
+
 class MenuItemModel {
   final String id;
   final String name;
@@ -19,6 +41,8 @@ class MenuItemModel {
   /// iOS-specific Quick Look variant. Apple's AR only accepts USDZ;
   /// model-viewer's `ios-src` attribute will pick this on iPhones.
   final String? usdzUrl;
+  final List<MenuVariant> variants;
+  final List<MenuModifier> modifiers;
 
   const MenuItemModel({
     required this.id,
@@ -31,6 +55,8 @@ class MenuItemModel {
     this.imageUrl,
     this.glbUrl,
     this.usdzUrl,
+    this.variants = const [],
+    this.modifiers = const [],
   });
 
   factory MenuItemModel.fromJson(Map<String, dynamic> j) => MenuItemModel(
@@ -44,6 +70,12 @@ class MenuItemModel {
         imageUrl: j['imageUrl'] as String?,
         glbUrl: j['glbUrl'] as String?,
         usdzUrl: j['usdzUrl'] as String?,
+        variants: (j['variants'] as List? ?? [])
+            .map((v) => MenuVariant.fromJson(Map<String, dynamic>.from(v)))
+            .toList(),
+        modifiers: (j['modifiers'] as List? ?? [])
+            .map((m) => MenuModifier.fromJson(Map<String, dynamic>.from(m)))
+            .toList(),
       );
 }
 

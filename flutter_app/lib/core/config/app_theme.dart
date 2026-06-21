@@ -80,6 +80,60 @@ const Color paperBorder = Color(0xFFE2DCCF);
 const Color inkPrimary = Color(0xFF1F1B16);
 const Color inkSecondary = Color(0xFF6B6357);
 
+/// Theme-aware brand colour accessor.
+///
+/// New screens (and refactored old ones) read brand surfaces through
+/// `BrandColors.of(context)` instead of the dark-only top-level
+/// constants. In Light mode the page bg flips to paper, cards to white,
+/// text to ink. Copper accents stay copper either way so the brand
+/// reads consistently across the two modes.
+///
+/// We keep the top-level dark consts (`slateBg`, `slateCard`, etc.)
+/// alive so existing code keeps compiling — incremental migration is
+/// cheaper than a 50-file refactor in one go.
+class BrandColors {
+  final Color bg;
+  final Color card;
+  final Color surface;
+  final Color textHi;
+  final Color textLo;
+  final Color divider;
+  const BrandColors({
+    required this.bg,
+    required this.card,
+    required this.surface,
+    required this.textHi,
+    required this.textLo,
+    required this.divider,
+  });
+
+  static BrandColors of(BuildContext context) {
+    final isLight = Theme.of(context).brightness == Brightness.light;
+    if (isLight) {
+      return const BrandColors(
+        bg: paperBg,
+        card: paperCard,
+        surface: Color(0xFFEFE9DD),
+        textHi: inkPrimary,
+        textLo: inkSecondary,
+        divider: paperBorder,
+      );
+    }
+    // Refer to the top-level dark constants by name. Naming the fields
+    // textHi/textLo (instead of textPrimary/textSecondary) avoids the
+    // shadow that would otherwise make the const initialiser refer to
+    // the instance field rather than the top-level const.
+    return const BrandColors(
+      bg: slateBg,
+      card: slateCard,
+      surface: slateSurface,
+      textHi: textPrimary,
+      textLo: textSecondary,
+      divider: dividerColor,
+    );
+  }
+}
+
 ThemeData buildLightTheme() => ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,

@@ -1037,6 +1037,23 @@ class _QrMenuTile extends StatelessWidget {
     required this.onRemove,
   });
 
+  /// True when the backend ships customisation options on this item —
+  /// renders the Customize CTA inline so the customer notices it exists.
+  bool get _hasOptions =>
+      item.variants.isNotEmpty || item.modifiers.isNotEmpty;
+
+  void _showCustomizeSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: slateCard,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _CustomizeSheet(item: item),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => Container(
         margin: const EdgeInsets.only(bottom: 8),
@@ -1049,11 +1066,14 @@ class _QrMenuTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Photo thumbnail — only rendered when the menu item has one
-            // uploaded. Falls back to a copper-tinted utensil placeholder
-            // so the layout stays consistent across items with/without
-            // photos. 60×60 keeps the row compact on phones.
-            _MenuPhotoThumb(item: item),
+            // Photo thumbnail — tap opens the customization / details sheet
+            // when options exist. Otherwise it's just decorative.
+            GestureDetector(
+              onTap: _hasOptions
+                  ? () => _showCustomizeSheet(context)
+                  : null,
+              child: _MenuPhotoThumb(item: item),
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -1831,6 +1851,257 @@ class _PaymentSuccessScreen extends StatelessWidget {
           ),
         ),
       ]),
+    );
+  }
+}
+
+/// Customer-facing customization sheet. Renders the menu item's variants
+/// (single-select — sizing/portion) and modifiers (multi-select — extras).
+/// Live total recomputes as the customer toggles options. Hitting "Send
+/// to waiter" fires the existing call-waiter endpoint with the choices
+/// as the reason so the waiter brings the customised order to the
+/// kitchen — no cart refactor needed for the MVP, and it matches how
+/// most restaurants actually take custom orders today.
+class _CustomizeSheet extends ConsumerStatefulWidget {
+  final MenuItemModel item;
+  const _CustomizeSheet({required this.item});
+
+  @override
+  ConsumerState<_CustomizeSheet> createState() => _CustomizeSheetState();
+}
+
+class _CustomizeSheetState extends ConsumerState<_CustomizeSheet> {
+  int? _variantIndex;
+  final Set<int> _modifierIndices = {};
+
+  double get _total {
+    final base = _variantIndex == null
+        ? widget.item.basePrice
+        : widget.item.variants[_variantIndex!].price;
+    final addons = _modifierIndices.fold<double>(
+      0,
+      (sum, i) => sum + widget.item.modifiers[i].extraPrice,
+    );
+    return base + addons;
+  }
+
+  String _renderChoices() {
+    final parts = <String>[];
+    if (_variantIndex != null) {
+      parts.add(widget.item.variants[_variantIndex!].name);
+    }
+    if (_modifierIndices.isNotEmpty) {
+      parts.add(_modifierIndices
+          .map((i) => widget.item.modifiers[i].name)
+          .join(', '));
+    }
+    return parts.join(' · ');
+  }
+
+  Future<void> _send() async {
+    final session = ref.read(_sessionProvider);
+    if (session == null) {
+      Navigator.pop(context);
+      return;
+    }
+    final sessionId = (session['_id'] ?? session['id'])?.toString() ?? '';
+    final choices = _renderChoices();
+    final reason = choices.isEmpty
+        ? '${widget.item.name} — custom request'
+        : '${widget.item.name}: $choices  (₹${_total.toStringAsFixed(2)})';
+    try {
+      final dio = createDioClient(null);
+      await dio.post(
+        '/sessions/$sessionId/call-waiter',
+        data: {'reason': reason},
+        options: Options(headers: {
+          'Idempotency-Key': newIdempotencyKey('customize-${widget.item.id}'),
+        }),
+      );
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        backgroundColor: emerald,
+        content: const Text('Waiter notified — bringing your custom order!'),
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        backgroundColor: crimson,
+        content: Text(describeApiError(e)),
+      ));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final item = widget.item;
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+            22, 16, 22, MediaQuery.of(context).viewInsets.bottom + 22),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            width: 36, height: 4,
+            decoration: BoxDecoration(
+              color: textSecondary.withValues(alpha: 0.4),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(item.name,
+              style: const TextStyle(
+                  color: textPrimary,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800)),
+          if ((item.description ?? '').isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(item.description!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: textSecondary, fontSize: 12)),
+          ],
+          const SizedBox(height: 18),
+          if (item.variants.isNotEmpty) ...[
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text('CHOOSE A SIZE',
+                  style: TextStyle(
+                      color: textSecondary,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.5)),
+            ),
+            const SizedBox(height: 8),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              for (var i = 0; i < item.variants.length; i++)
+                _OptionPill(
+                  label: item.variants[i].name,
+                  trailing: '₹${item.variants[i].price.toStringAsFixed(0)}',
+                  active: _variantIndex == i,
+                  onTap: () => setState(() => _variantIndex = i),
+                ),
+            ]),
+            const SizedBox(height: 18),
+          ],
+          if (item.modifiers.isNotEmpty) ...[
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text('ADD EXTRAS',
+                  style: TextStyle(
+                      color: textSecondary,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.5)),
+            ),
+            const SizedBox(height: 8),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              for (var i = 0; i < item.modifiers.length; i++)
+                _OptionPill(
+                  label: item.modifiers[i].name,
+                  trailing:
+                      '+₹${item.modifiers[i].extraPrice.toStringAsFixed(0)}',
+                  active: _modifierIndices.contains(i),
+                  onTap: () => setState(() {
+                    if (_modifierIndices.contains(i)) {
+                      _modifierIndices.remove(i);
+                    } else {
+                      _modifierIndices.add(i);
+                    }
+                  }),
+                ),
+            ]),
+            const SizedBox(height: 18),
+          ],
+          // Live total
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: copperAccent.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(children: [
+              const Text('Total',
+                  style: TextStyle(
+                      color: textSecondary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700)),
+              const Spacer(),
+              Text('₹${_total.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                      color: copperAccent,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900)),
+            ]),
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.send, size: 16),
+              label: const Text('Send custom order to waiter'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: copperAccent,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+                textStyle: const TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w800),
+              ),
+              onPressed: _send,
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+class _OptionPill extends StatelessWidget {
+  final String label;
+  final String trailing;
+  final bool active;
+  final VoidCallback onTap;
+  const _OptionPill({
+    required this.label,
+    required this.trailing,
+    required this.active,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: active ? copperAccent.withValues(alpha: 0.18) : slateSurface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+              color: active ? copperAccent : dividerColor, width: 1),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(
+              active
+                  ? Icons.check_circle
+                  : Icons.radio_button_unchecked,
+              color: active ? copperAccent : textSecondary,
+              size: 14),
+          const SizedBox(width: 6),
+          Text(label,
+              style: TextStyle(
+                  color: active ? copperAccent : textPrimary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700)),
+          const SizedBox(width: 6),
+          Text(trailing,
+              style: TextStyle(
+                  color: active ? copperAccent : textSecondary,
+                  fontSize: 11)),
+        ]),
+      ),
     );
   }
 }
