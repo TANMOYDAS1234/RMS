@@ -64,3 +64,49 @@ ThemeData buildAppTheme() => ThemeData(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
     );
+
+// ── Light theme ─────────────────────────────────────────────────────────────
+//
+// Hybrid look — paper-white page backgrounds with the copper-on-slate
+// cards preserved. Same primary palette so the brand stays consistent
+// across the two modes. The dark slate cards still ship from their own
+// const colors above; only the Scaffold + AppBar + Material dialogs and
+// inputs follow the brightness flip. That makes the switch land
+// instantly for the OS-controlled chrome without forcing every custom
+// widget to refactor against Theme.of(context).
+const Color paperBg = Color(0xFFF7F4EE);
+const Color paperCard = Color(0xFFFFFFFF);
+const Color paperBorder = Color(0xFFE2DCCF);
+const Color inkPrimary = Color(0xFF1F1B16);
+const Color inkSecondary = Color(0xFF6B6357);
+
+ThemeData buildLightTheme() => ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.light,
+      scaffoldBackgroundColor: paperBg,
+      colorScheme: const ColorScheme.light(
+        primary: copperAccent,
+        secondary: roseGold,
+        surface: paperCard,
+        onPrimary: Colors.white,
+        onSurface: inkPrimary,
+      ),
+      fontFamily: 'SF Pro Display',
+      appBarTheme: const AppBarTheme(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        titleTextStyle: TextStyle(
+          color: inkPrimary,
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 2,
+        ),
+        iconTheme: IconThemeData(color: inkPrimary),
+      ),
+      cardTheme: CardThemeData(
+        color: paperCard,
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      ),
+      dividerColor: paperBorder,
+    );

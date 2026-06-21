@@ -10,13 +10,16 @@
 //
 // Items are grouped by category with a sticky-style category header.
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/config/app_config.dart';
 import '../../core/config/app_theme.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/utils/api_error.dart';
 import '../../core/utils/idempotency.dart';
+import '../../core/utils/web_window.dart';
 import '../state/auth_provider.dart';
 
 // Branch-scoped admin view: includes unavailable items so the manager can
@@ -230,6 +233,11 @@ class _MenuRow extends StatelessWidget {
     final price = (item['basePrice'] as num? ?? 0).toDouble();
     final prep = (item['prepTimeMinutes'] as num? ?? 0).toInt();
     final isVeg = item['isVeg'] == true;
+    final imageUrl = item['imageUrl'] as String?;
+    final glbUrl = item['glbUrl'] as String?;
+    final fullImageUrl = (imageUrl != null && imageUrl.isNotEmpty)
+        ? '${AppConfig.baseUrl}$imageUrl'
+        : null;
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -243,6 +251,35 @@ class _MenuRow extends StatelessWidget {
         ),
       ),
       child: Row(children: [
+        // Photo thumbnail — same pattern as the customer tile, gives the
+        // manager a visual cue per item without taking too much vertical
+        // space. Falls back to the utensil icon when no photo uploaded.
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            width: 44,
+            height: 44,
+            color: slateSurface,
+            child: fullImageUrl != null
+                ? CachedNetworkImage(
+                    imageUrl: fullImageUrl,
+                    width: 44,
+                    height: 44,
+                    fit: BoxFit.cover,
+                    placeholder: (_, __) => const Icon(
+                        Icons.restaurant_outlined,
+                        color: copperAccent,
+                        size: 18),
+                    errorWidget: (_, __, ___) => const Icon(
+                        Icons.restaurant_outlined,
+                        color: copperAccent,
+                        size: 18),
+                  )
+                : const Icon(Icons.restaurant_outlined,
+                    color: copperAccent, size: 18),
+          ),
+        ),
+        const SizedBox(width: 10),
         // Veg/non-veg dot
         Container(
           width: 10, height: 10,
@@ -293,6 +330,21 @@ class _MenuRow extends StatelessWidget {
                 ]),
               ]),
         ),
+        // View-in-3D shortcut — only when an actual GLB is on file.
+        // Opens the same /ar.html page the customer sees so the manager
+        // can spot a wrong/missing model from the menu list directly.
+        if (glbUrl != null && glbUrl.isNotEmpty)
+          IconButton(
+            tooltip: 'View 3D',
+            icon: const Icon(Icons.view_in_ar_outlined,
+                color: copperAccent, size: 18),
+            onPressed: () {
+              final name = Uri.encodeComponent(
+                  (item['name'] as String?) ?? 'Item');
+              final model = Uri.encodeComponent(glbUrl);
+              openInNewTab('/ar.html?model=$model&name=$name');
+            },
+          ),
         Switch(
           value: available,
           activeThumbColor: emerald,

@@ -3,6 +3,7 @@
 // Handles: session resume, feature-flag check, menu browse, order placement, tracking
 
 import 'dart:async';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +11,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
+import '../../core/config/app_config.dart';
 import '../../core/config/app_theme.dart';
 import '../../core/utils/web_window.dart';
 import '../../core/utils/razorpay_checkout.dart';
@@ -1038,6 +1040,12 @@ class _QrMenuTile extends StatelessWidget {
         ),
         child: Row(
           children: [
+            // Photo thumbnail — only rendered when the menu item has one
+            // uploaded. Falls back to a copper-tinted utensil placeholder
+            // so the layout stays consistent across items with/without
+            // photos. 60×60 keeps the row compact on phones.
+            _MenuPhotoThumb(item: item),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1067,7 +1075,7 @@ class _QrMenuTile extends StatelessWidget {
                     // GLBs uploaded, this will use item.glbUrl.
                     if (kIsWeb) ...[
                       const SizedBox(width: 8),
-                      _ArChip(itemName: item.name),
+                      _ArChip(itemName: item.name, glbUrl: item.glbUrl),
                     ],
                   ]),
                 ],
@@ -1131,18 +1139,69 @@ class _QrMenuTile extends StatelessWidget {
 /// hands off to Scene Viewer for true AR. On iOS it falls back to
 /// drag-to-rotate 3D (Quick Look needs USDZ — we only have GLB for
 /// the demo). Only rendered on web; on mobile this is unreachable.
+/// Square photo thumbnail for a menu tile. Renders the uploaded item
+/// photo when one exists; otherwise shows a copper-tinted utensil
+/// icon on a slate background so the row layout stays stable. The
+/// `?v=` cache-buster wasn't worth it here — menu item images change
+/// infrequently and CachedNetworkImage already keys on the full URL.
+class _MenuPhotoThumb extends StatelessWidget {
+  final MenuItemModel item;
+  const _MenuPhotoThumb({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final url = item.imageUrl;
+    final fullUrl = url != null && url.isNotEmpty
+        ? '${AppConfig.baseUrl}$url'
+        : null;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        width: 60,
+        height: 60,
+        color: slateSurface,
+        child: fullUrl != null
+            ? CachedNetworkImage(
+                imageUrl: fullUrl,
+                width: 60,
+                height: 60,
+                fit: BoxFit.cover,
+                placeholder: (_, __) => const Icon(
+                    Icons.restaurant_outlined,
+                    color: copperAccent,
+                    size: 22),
+                errorWidget: (_, __, ___) => const Icon(
+                    Icons.restaurant_outlined,
+                    color: copperAccent,
+                    size: 22),
+              )
+            : const Icon(Icons.restaurant_outlined,
+                color: copperAccent, size: 22),
+      ),
+    );
+  }
+}
+
 class _ArChip extends StatelessWidget {
   final String itemName;
-  const _ArChip({required this.itemName});
+  /// Server path of the item's GLB (e.g. `/menu/<id>/glb`). When null
+  /// we fall back to the demo pizza so the chip still feels alive on
+  /// brand-new branches that haven't uploaded any models yet.
+  final String? glbUrl;
+  const _ArChip({required this.itemName, this.glbUrl});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () {
-        // Demo: every item uses the pizza GLB. Real items will use
-        // /api/menu/<id>/glb once the upload flow is wired in.
+        // Use the item's own GLB when uploaded; otherwise fall back to
+        // the demo pizza so the chip remains tappable.
+        final modelPath = (glbUrl != null && glbUrl!.isNotEmpty)
+            ? glbUrl!
+            : '/models/pizza.glb';
         final encoded = Uri.encodeComponent(itemName);
-        openInNewTab('/ar.html?model=/models/pizza.glb&name=$encoded');
+        final modelEnc = Uri.encodeComponent(modelPath);
+        openInNewTab('/ar.html?model=$modelEnc&name=$encoded');
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),

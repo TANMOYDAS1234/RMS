@@ -13,6 +13,7 @@ import 'core/services/fcm_bg_handler_io.dart'
 import 'core/config/app_config.dart';
 import 'core/config/app_theme.dart';
 import 'core/config/system_config_provider.dart';
+import 'core/config/theme_mode_provider.dart';
 import 'core/observability/sentry_bootstrap.dart';
 import 'core/services/sync_engine.dart';
 import 'core/services/websocket_service.dart';
@@ -122,11 +123,17 @@ class _RmsAppState extends ConsumerState<RmsApp> {
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
+    // Pull the user's saved theme preference. Defaults to ThemeMode.dark
+    // so the brand experience hits on first launch; user can flip to
+    // System or Light from the Profile screen.
+    final mode = ref.watch(themeModeProvider);
 
     if (auth.isRestoring) {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
-        theme: buildAppTheme(),
+        theme: buildLightTheme(),
+        darkTheme: buildAppTheme(),
+        themeMode: mode,
         scaffoldMessengerKey: FcmService.messengerKey,
         home: const _SplashScreen(),
       );
@@ -140,7 +147,9 @@ class _RmsAppState extends ConsumerState<RmsApp> {
       return MaterialApp(
         title: 'DINE OPS',
         debugShowCheckedModeBanner: false,
-        theme: buildAppTheme(),
+        theme: buildLightTheme(),
+        darkTheme: buildAppTheme(),
+        themeMode: mode,
         scaffoldMessengerKey: FcmService.messengerKey,
         home: QrOrderingScreen(tableId: tableId, branchId: branchId),
       );
@@ -157,7 +166,9 @@ class _RmsAppState extends ConsumerState<RmsApp> {
     return MaterialApp(
       title: 'DINE OPS',
       debugShowCheckedModeBanner: false,
-      theme: buildAppTheme(),
+      theme: buildLightTheme(),
+      darkTheme: buildAppTheme(),
+      themeMode: mode,
       scaffoldMessengerKey: FcmService.messengerKey,
       home: auth.isAuthenticated
           ? MainShell(role: auth.user!.role, jumpToTab: jumpTo)

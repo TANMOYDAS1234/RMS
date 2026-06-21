@@ -16,6 +16,7 @@ import '../../core/config/app_config.dart';
 import '../../core/config/app_theme.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/services/websocket_service.dart';
+import '../../core/utils/web_window.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../core/utils/api_error.dart';
 import '../../core/utils/file_download.dart';
@@ -3672,6 +3673,25 @@ class _MenuItemCard extends ConsumerWidget {
                   _MediaBtn(icon: Icons.view_in_ar_outlined, label: glbUrl != null ? '3D ✓' : '3D',
                       active: glbUrl != null,
                       onTap: () => _uploadGlb(context, ref, id)),
+                  // Preview the uploaded GLB in the same AR/3D page the
+                  // customer sees. Only rendered when an upload exists —
+                  // admin verifies "does this 3D model match the food?"
+                  // without leaving the menu screen.
+                  if (glbUrl != null) ...[
+                    const SizedBox(width: 6),
+                    _MediaBtn(
+                      icon: Icons.preview_outlined,
+                      label: 'View',
+                      active: true,
+                      onTap: () {
+                        final name = Uri.encodeComponent(
+                            (item['name'] as String?) ?? 'Item');
+                        final model = Uri.encodeComponent(glbUrl);
+                        openInNewTab(
+                            '/ar.html?model=$model&name=$name');
+                      },
+                    ),
+                  ],
                 ]),
               ),
               Positioned(

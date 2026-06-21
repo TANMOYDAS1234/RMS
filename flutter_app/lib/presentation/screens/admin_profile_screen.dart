@@ -8,6 +8,7 @@ import '../../core/config/app_theme.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/utils/api_error.dart';
 import '../../core/utils/idempotency.dart';
+import '../../core/config/theme_mode_provider.dart';
 import '../state/auth_provider.dart';
 import 'admin_screen.dart' show adminStaffProvider;
 import 'manager_staff_tab.dart' show managerStaffProvider;
@@ -148,6 +149,12 @@ class _ProfileBody extends ConsumerWidget {
           onTap: () => _showPasswordSheet(context, ref),
           secondary: true,
         ),
+        const SizedBox(height: 24),
+
+        // Appearance / theme switcher. Default is dark; user can flip
+        // to System (follow OS) or Light. Persisted in SharedPreferences
+        // via theme_mode_provider.
+        const _AppearancePicker(),
       ],
     );
   }
@@ -485,4 +492,107 @@ class _ChangePasswordSheetState extends ConsumerState<_ChangePasswordSheet> {
           ),
         ]),
       );
+}
+
+/// Compact three-way picker for app appearance. Sits below the password
+/// change button on every profile screen (admin, manager, chef, waiter,
+/// cashier — they all share this file). Reads + writes the persisted
+/// ThemeMode via theme_mode_provider.
+class _AppearancePicker extends ConsumerWidget {
+  const _AppearancePicker();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final current = ref.watch(themeModeProvider);
+    final notifier = ref.read(themeModeProvider.notifier);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: slateCard,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: const [
+          Icon(Icons.palette_outlined, color: copperAccent, size: 16),
+          SizedBox(width: 8),
+          Text('Appearance',
+              style: TextStyle(
+                  color: textPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700)),
+        ]),
+        const SizedBox(height: 4),
+        const Text(
+            'Choose how Dine Ops looks. System follows your phone.',
+            style: TextStyle(color: textSecondary, fontSize: 11)),
+        const SizedBox(height: 12),
+        Row(children: [
+          Expanded(
+            child: _ModeTile(
+              icon: Icons.brightness_auto_outlined,
+              label: 'System',
+              active: current == ThemeMode.system,
+              onTap: () => notifier.set(ThemeMode.system),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _ModeTile(
+              icon: Icons.light_mode_outlined,
+              label: 'Light',
+              active: current == ThemeMode.light,
+              onTap: () => notifier.set(ThemeMode.light),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _ModeTile(
+              icon: Icons.dark_mode_outlined,
+              label: 'Dark',
+              active: current == ThemeMode.dark,
+              onTap: () => notifier.set(ThemeMode.dark),
+            ),
+          ),
+        ]),
+      ]),
+    );
+  }
+}
+
+class _ModeTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+  const _ModeTile({
+    required this.icon,
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: active ? copperAccent.withValues(alpha: 0.18) : slateSurface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+              color: active ? copperAccent : dividerColor, width: 1),
+        ),
+        child: Column(children: [
+          Icon(icon, color: active ? copperAccent : textSecondary, size: 18),
+          const SizedBox(height: 6),
+          Text(label,
+              style: TextStyle(
+                  color: active ? copperAccent : textSecondary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700)),
+        ]),
+      ),
+    );
+  }
 }

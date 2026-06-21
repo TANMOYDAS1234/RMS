@@ -10,6 +10,12 @@ class MenuItemModel {
   final bool isAvailable;
   final String? description;
   final int prepTimeMinutes;
+  /// Backend sets this to `/menu/<id>/image` after the admin/manager
+  /// uploads a photo. Null until that happens. Combine with
+  /// `AppConfig.baseUrl` to build a full URL.
+  final String? imageUrl;
+  /// Same shape — `/menu/<id>/glb` when a 3D model is on file.
+  final String? glbUrl;
 
   const MenuItemModel({
     required this.id,
@@ -19,6 +25,8 @@ class MenuItemModel {
     required this.isAvailable,
     this.description,
     this.prepTimeMinutes = 0,
+    this.imageUrl,
+    this.glbUrl,
   });
 
   factory MenuItemModel.fromJson(Map<String, dynamic> j) => MenuItemModel(
@@ -29,6 +37,8 @@ class MenuItemModel {
         isAvailable: j['isAvailable'] ?? true,
         description: j['description'],
         prepTimeMinutes: j['prepTimeMinutes'] ?? 0,
+        imageUrl: j['imageUrl'] as String?,
+        glbUrl: j['glbUrl'] as String?,
       );
 }
 
