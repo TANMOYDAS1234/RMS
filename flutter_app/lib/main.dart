@@ -449,6 +449,7 @@ class _MainShellState extends ConsumerState<MainShell> {
         UserRole.admin => [
             const _TabDef('Overview',  Icons.dashboard_outlined,    Icons.dashboard,    AdminOverviewTab()),
             const _TabDef('Analytics', Icons.bar_chart_outlined,    Icons.bar_chart,    AdminAnalyticsTab()),
+            const _TabDef('Compare',   Icons.compare_arrows_outlined, Icons.compare_arrows, AdminComparisonTab()),
             const _TabDef('Staff',     Icons.people_outline,        Icons.people,       AdminStaffTab()),
             const _TabDef('Orders',    Icons.receipt_outlined,      Icons.receipt,      AdminOrdersTab()),
             const _TabDef('Billing',   Icons.payments_outlined,     Icons.payments,     AdminBillingTab()),

@@ -110,6 +110,15 @@ final _staffAnalyticsProvider =
   return ref.watch(adminApiProvider).staffPerformance(from: r.from, to: r.to);
 });
 
+// Cross-branch comparison — admin-only. Reuses the same analytics range
+// picker as the Analytics tab so changing the range there flows through
+// here too (and vice versa) without forcing the admin to re-pick.
+final _branchComparisonProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+  final r = ref.watch(analyticsRangeProvider);
+  return ref.watch(adminApiProvider).branchComparison(from: r.from, to: r.to);
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // TAB 1 — OVERVIEW
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -673,6 +682,181 @@ class _TopItemRow extends StatelessWidget {
         const SizedBox(width: 12),
         Text('₹${revenue.toStringAsFixed(0)}', style: const TextStyle(color: copperAccent, fontSize: 13, fontWeight: FontWeight.w700)),
       ]),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TAB — CROSS-BRANCH COMPARISON (admin only)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class AdminComparisonTab extends ConsumerWidget {
+  const AdminComparisonTab({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final dataAsync = ref.watch(_branchComparisonProvider);
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const _AnalyticsRangePicker(),
+        const SizedBox(height: 20),
+        const _SectionTitle('Branch Comparison'),
+        const SizedBox(height: 12),
+        dataAsync.when(
+          loading: () => const _ChartSkeleton(height: 220),
+          error: (e, _) => _ErrorText('$e'),
+          data: (rows) {
+            if (rows.isEmpty) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(
+                  child: Text('No paid bills in this range',
+                      style: TextStyle(color: textSecondary)),
+                ),
+              );
+            }
+            return Column(
+              children: [
+                _BranchRevenueBars(rows: rows),
+                const SizedBox(height: 20),
+                _BranchComparisonTable(rows: rows),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _BranchRevenueBars extends StatelessWidget {
+  final List<Map<String, dynamic>> rows;
+  const _BranchRevenueBars({required this.rows});
+
+  @override
+  Widget build(BuildContext context) {
+    final maxRev = rows.fold<double>(
+        0, (m, r) {
+      final v = (r['revenue'] as num? ?? 0).toDouble();
+      return v > m ? v : m;
+    });
+    if (maxRev == 0) {
+      return const SizedBox.shrink();
+    }
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: slateCard,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Revenue by Branch',
+              style: TextStyle(
+                  color: textSecondary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600)),
+          const SizedBox(height: 12),
+          ...rows.map((r) {
+            final name = (r['branchName'] as String?) ?? 'Unknown';
+            final rev = (r['revenue'] as num? ?? 0).toDouble();
+            final pct = (rev / maxRev).clamp(0.0, 1.0);
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    Expanded(
+                      child: Text(name,
+                          style: const TextStyle(
+                              color: textPrimary,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600)),
+                    ),
+                    Text('₹${rev.toStringAsFixed(0)}',
+                        style: const TextStyle(
+                            color: copperAccent,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700)),
+                  ]),
+                  const SizedBox(height: 4),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: pct,
+                      backgroundColor: slateSurface,
+                      valueColor:
+                          const AlwaysStoppedAnimation<Color>(copperAccent),
+                      minHeight: 8,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
+
+class _BranchComparisonTable extends StatelessWidget {
+  final List<Map<String, dynamic>> rows;
+  const _BranchComparisonTable({required this.rows});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: slateCard,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          headingRowColor:
+              WidgetStateProperty.all(slateSurface),
+          dataRowColor: WidgetStateProperty.all(Colors.transparent),
+          columnSpacing: 24,
+          horizontalMargin: 16,
+          headingTextStyle: const TextStyle(
+              color: textSecondary,
+              fontSize: 11,
+              fontWeight: FontWeight.w700),
+          dataTextStyle:
+              const TextStyle(color: textPrimary, fontSize: 12),
+          columns: const [
+            DataColumn(label: Text('Branch')),
+            DataColumn(label: Text('Revenue'), numeric: true),
+            DataColumn(label: Text('Orders'), numeric: true),
+            DataColumn(label: Text('Avg Order'), numeric: true),
+            DataColumn(label: Text('GST'), numeric: true),
+          ],
+          rows: rows.map((r) {
+            final name = (r['branchName'] as String?) ?? 'Unknown';
+            final rev = (r['revenue'] as num? ?? 0).toDouble();
+            final orders = (r['orderCount'] as num? ?? 0).toInt();
+            final avg = (r['avgOrderValue'] as num? ?? 0).toDouble();
+            final gst = (r['gstCollected'] as num? ?? 0).toDouble();
+            return DataRow(cells: [
+              DataCell(Text(name,
+                  style: const TextStyle(
+                      color: textPrimary, fontWeight: FontWeight.w600))),
+              DataCell(Text('₹${rev.toStringAsFixed(0)}',
+                  style: const TextStyle(
+                      color: copperAccent, fontWeight: FontWeight.w700))),
+              DataCell(Text('$orders')),
+              DataCell(Text('₹${avg.toStringAsFixed(0)}')),
+              DataCell(Text('₹${gst.toStringAsFixed(0)}',
+                  style: const TextStyle(color: emerald))),
+            ]);
+          }).toList(),
+        ),
+      ),
     );
   }
 }
