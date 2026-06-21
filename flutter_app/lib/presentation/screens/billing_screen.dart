@@ -761,6 +761,17 @@ class _QuickPaySheet extends ConsumerStatefulWidget {
 
 class _QuickPaySheetState extends ConsumerState<_QuickPaySheet> {
   bool _busy = false;
+  // Tip is captured at payment time and recorded separately from the bill
+  // total — the server stores it on bill.tipAmount.
+  final TextEditingController _tipCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _tipCtrl.dispose();
+    super.dispose();
+  }
+
+  double get _tipAmount => double.tryParse(_tipCtrl.text) ?? 0;
 
   Future<void> _payCash() async => _record('cash');
 
@@ -807,6 +818,7 @@ class _QuickPaySheetState extends ConsumerState<_QuickPaySheet> {
         '/billing/${widget.bill.id}/pay',
         data: {
           'paymentMethod': method,
+          if (_tipAmount > 0) 'tipAmount': _tipAmount,
           if (razorpay != null) ...razorpay,
         },
         options: Options(headers: {'Idempotency-Key': key}),
@@ -847,6 +859,43 @@ class _QuickPaySheetState extends ConsumerState<_QuickPaySheet> {
               const Text('Razorpay is in sandbox mode — no real money moves.',
                   style: TextStyle(color: textSecondary, fontSize: 11)),
               const SizedBox(height: 16),
+              // Optional tip — recorded separately from the bill total so
+              // the server can report it on staff payouts.
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                decoration: BoxDecoration(
+                  color: slateSurface,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: copperAccent.withValues(alpha: 0.3)),
+                ),
+                child: Row(children: [
+                  const Icon(Icons.volunteer_activism_outlined,
+                      color: copperAccent, size: 18),
+                  const SizedBox(width: 10),
+                  const Text('Tip ₹',
+                      style: TextStyle(
+                          color: textPrimary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700)),
+                  Expanded(
+                    child: TextField(
+                      controller: _tipCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true),
+                      style: const TextStyle(color: textPrimary, fontSize: 14),
+                      textAlign: TextAlign.right,
+                      decoration: const InputDecoration(
+                        hintText: '0',
+                        hintStyle:
+                            TextStyle(color: textSecondary, fontSize: 14),
+                        border: InputBorder.none,
+                      ),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ),
+                ]),
+              ),
+              const SizedBox(height: 12),
               _PayTile(
                 icon: Icons.payments_outlined,
                 label: 'CASH',

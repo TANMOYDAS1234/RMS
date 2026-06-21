@@ -22,6 +22,7 @@ class PaymentDto {
   @IsOptional() @IsString() razorpayPaymentId?: string;
   @IsOptional() @IsString() razorpayOrderId?: string;
   @IsOptional() @IsString() razorpaySignature?: string;
+  @IsOptional() @IsNumber() @Min(0) tipAmount?: number;
 }
 
 @Controller('billing')
@@ -99,6 +100,7 @@ export class BillingController {
         razorpayPaymentId: dto.razorpayPaymentId,
         razorpayOrderId: dto.razorpayOrderId,
       },
+      dto.tipAmount,
     );
   }
 }
