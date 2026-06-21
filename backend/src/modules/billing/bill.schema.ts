@@ -40,10 +40,27 @@ export class Bill {
   // generation time; tips are captured at payment and reported separately.
   @Prop({ default: 0, min: 0 }) tipAmount: number;
 
-  // Refund tracking (admin only)
+  // Refund tracking. Two layers:
+  //   * isRefunded / refundedAt / refundedBy — terminal state after a manager
+  //     (or admin) approves and the gateway returns success. Stamped exactly
+  //     once, only on APPROVED.
+  //   * refundStatus / refundReason / refundReference / refundRequestedBy /
+  //     refundApprovedBy / refundDeniedBy / refundRequestedAt /
+  //     refundResolvedAt — request lifecycle so a cashier can flag a bill for
+  //     refund with a reason and a manager can approve or deny. PENDING means
+  //     awaiting a decision; APPROVED means refund executed; DENIED means the
+  //     manager rejected the request.
   @Prop({ default: false }) isRefunded: boolean;
   @Prop() refundedAt?: Date;
   @Prop() refundedBy?: string;
+  @Prop() refundReason?: string;
+  @Prop() refundReference?: string;
+  @Prop({ enum: ['PENDING', 'APPROVED', 'DENIED'], default: null }) refundStatus?: 'PENDING' | 'APPROVED' | 'DENIED';
+  @Prop() refundRequestedBy?: string;
+  @Prop() refundApprovedBy?: string;
+  @Prop() refundDeniedBy?: string;
+  @Prop() refundRequestedAt?: Date;
+  @Prop() refundResolvedAt?: Date;
 
   // Razorpay sandbox references. Stored for later reconciliation against
   // the Razorpay dashboard — not used to authorize anything server-side.

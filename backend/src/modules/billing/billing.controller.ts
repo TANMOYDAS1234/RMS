@@ -26,6 +26,11 @@ class PaymentDto {
   @IsOptional() @IsNumber() @Min(0) tipAmount?: number;
 }
 
+class RequestRefundDto {
+  @IsString() reason: string;
+  @IsOptional() @IsString() reference?: string;
+}
+
 @Controller('billing')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class BillingController {
@@ -115,6 +120,34 @@ export class BillingController {
   @Roles('admin', 'manager', 'cashier')
   generate(@Param('orderId') orderId: string, @Body() dto: GenerateBillDto) {
     return this.billingService.generateBill(orderId, dto.discountPercent ?? 0);
+  }
+
+  // ── Refund workflow ───────────────────────────────────────────────────────
+  //
+  // Cashier files the request with a reason; manager (or admin) approves
+  // (executes the PSP refund) or denies. The legacy PATCH /admin/billing/:id
+  // /refund endpoint still works for admin-only quick refunds.
+
+  @Post(':id/request-refund')
+  @Roles('admin', 'manager', 'cashier')
+  requestRefund(
+    @Param('id') id: string,
+    @Body() dto: RequestRefundDto,
+    @Request() req: any,
+  ) {
+    return this.billingService.requestRefund(id, req.user, dto.reason, dto.reference);
+  }
+
+  @Post(':id/approve-refund')
+  @Roles('admin', 'manager')
+  approveRefund(@Param('id') id: string, @Request() req: any) {
+    return this.billingService.approveRefund(id, req.user);
+  }
+
+  @Post(':id/deny-refund')
+  @Roles('admin', 'manager')
+  denyRefund(@Param('id') id: string, @Request() req: any) {
+    return this.billingService.denyRefund(id, req.user);
   }
 
   @Post(':id/pay')

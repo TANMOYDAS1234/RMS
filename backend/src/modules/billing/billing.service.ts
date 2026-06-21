@@ -1,11 +1,12 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Bill, BillDocument, PaymentMethod } from './bill.schema';
 import { OrdersService } from '../orders/orders.service';
 import { OrderStatus } from '../orders/order.schema';
 import { NotificationsService, NotificationType } from '../notifications/notifications.service';
-import { AuthUser, assertOwnsBranch, scopeFilter } from '../../common/scope/branch-scope';
+import { AuthUser, assertOwnsBranch, scopeFilter, roleOf } from '../../common/scope/branch-scope';
+import { PAYMENT_GATEWAY, PaymentGateway } from './payment-gateway/payment-gateway.interface';
 
 @Injectable()
 export class BillingService {
@@ -13,6 +14,7 @@ export class BillingService {
     @InjectModel(Bill.name) private billModel: Model<BillDocument>,
     private ordersService: OrdersService,
     private notifications: NotificationsService,
+    @Inject(PAYMENT_GATEWAY) private paymentGateway: PaymentGateway,
   ) {}
 
   async generateBill(orderId: string, discountPercent = 0) {
@@ -114,6 +116,133 @@ export class BillingService {
     const filter: any = { ...sf };
     if (isPaid !== undefined) filter.isPaid = isPaid;
     return this.billModel.find(filter).sort({ createdAt: -1 }).lean();
+  }
+
+  // ── Refund workflow ────────────────────────────────────────────────────────
+  //
+  // Three-step state machine:
+  //   request → PENDING    (cashier|manager|admin) — captures reason
+  //   approve → APPROVED   (manager|admin)         — fires the PSP refund and
+  //                                                  stamps isRefunded
+  //   deny    → DENIED     (manager|admin)         — closes the request out
+  //
+  // Branch-scoped throughout: a cashier can only request against their own
+  // branch's bills, and a manager can only approve/deny within their branch.
+
+  /**
+   * Cashier (or manager/admin) flags a paid bill for refund. Records the
+   * reason and optional reference (e.g. a customer complaint ticket id) and
+   * pushes the request to manager+admin for approval.
+   */
+  async requestRefund(
+    billId: string,
+    user: AuthUser,
+    reason: string,
+    reference?: string,
+  ) {
+    if (!reason || !reason.trim()) {
+      throw new BadRequestException('Refund reason is required');
+    }
+    const bill = await this.billModel.findById(billId);
+    if (!bill) throw new NotFoundException('Bill not found');
+    assertOwnsBranch(user, bill as any);
+    if (!bill.isPaid) throw new BadRequestException('Bill is not paid');
+    if ((bill as any).isRefunded) throw new BadRequestException('Already refunded');
+    if ((bill as any).refundStatus === 'PENDING') {
+      throw new BadRequestException('Refund already requested');
+    }
+    if ((bill as any).refundStatus === 'APPROVED') {
+      throw new BadRequestException('Refund already approved');
+    }
+
+    (bill as any).refundStatus = 'PENDING';
+    (bill as any).refundReason = reason.trim();
+    if (reference) (bill as any).refundReference = reference.trim();
+    (bill as any).refundRequestedBy = user._id?.toString?.() ?? String(user._id);
+    (bill as any).refundRequestedAt = new Date();
+    // Clear any previous denial so the request restarts cleanly.
+    (bill as any).refundDeniedBy = undefined;
+    (bill as any).refundResolvedAt = undefined;
+
+    const saved = await bill.save();
+
+    if ((saved as any).branchId) {
+      this.notifications.send(
+        { roles: ['manager', 'admin'], branchId: (saved as any).branchId },
+        {
+          type: NotificationType.REFUND_REQUESTED,
+          title: 'Refund requested',
+          body: `${saved.tableLabel} — ₹${saved.total.toFixed(0)} • ${reason.trim()}`,
+          data: {
+            billId: saved._id.toString(),
+            orderId: saved.orderId.toString(),
+            tableLabel: saved.tableLabel,
+            branchId: (saved as any).branchId,
+            amount: saved.total.toString(),
+            reason: reason.trim(),
+            requestedBy: roleOf(user),
+          },
+        },
+      );
+    }
+
+    return saved;
+  }
+
+  /**
+   * Manager (or admin) approves a PENDING refund. Fires the PSP refund and,
+   * on success, stamps the bill as refunded. We DO NOT mark the bill as
+   * refunded if the PSP call fails — that would orphan the money on the
+   * customer's card. Mirrors AdminService.processRefund but operates inside
+   * the request/approve/deny state machine.
+   */
+  async approveRefund(billId: string, user: AuthUser) {
+    const bill = await this.billModel.findById(billId);
+    if (!bill) throw new NotFoundException('Bill not found');
+    assertOwnsBranch(user, bill as any);
+    if (!bill.isPaid) throw new BadRequestException('Bill is not paid');
+    if ((bill as any).isRefunded) throw new BadRequestException('Already refunded');
+    if ((bill as any).refundStatus !== 'PENDING') {
+      throw new BadRequestException('No pending refund request to approve');
+    }
+
+    const chargeId = (bill as any).paymentChargeId ?? '';
+    const psp = await this.paymentGateway.refund(
+      chargeId,
+      bill.total,
+      `Bill ${bill._id.toString()} refund approved by ${user._id}`,
+    );
+
+    (bill as any).isRefunded = true;
+    (bill as any).refundedAt = new Date();
+    (bill as any).refundedBy = user._id?.toString?.() ?? String(user._id);
+    (bill as any).refundId = psp.refundId;
+    (bill as any).refundProvider = psp.provider;
+    (bill as any).refundProviderStatus = psp.status;
+    (bill as any).refundStatus = 'APPROVED';
+    (bill as any).refundApprovedBy = user._id?.toString?.() ?? String(user._id);
+    (bill as any).refundResolvedAt = new Date();
+
+    return bill.save();
+  }
+
+  /**
+   * Manager (or admin) denies a PENDING refund. Records who denied and when;
+   * does NOT touch the PSP or isRefunded so the bill stays paid.
+   */
+  async denyRefund(billId: string, user: AuthUser) {
+    const bill = await this.billModel.findById(billId);
+    if (!bill) throw new NotFoundException('Bill not found');
+    assertOwnsBranch(user, bill as any);
+    if ((bill as any).refundStatus !== 'PENDING') {
+      throw new BadRequestException('No pending refund request to deny');
+    }
+
+    (bill as any).refundStatus = 'DENIED';
+    (bill as any).refundDeniedBy = user._id?.toString?.() ?? String(user._id);
+    (bill as any).refundResolvedAt = new Date();
+
+    return bill.save();
   }
 
   async getDailyRevenue(scope?: AuthUser) {

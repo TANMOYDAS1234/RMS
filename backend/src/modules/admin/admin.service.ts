@@ -154,7 +154,14 @@ export class AdminService {
     (bill as any).refundedBy = adminId.toString();
     (bill as any).refundId = psp.refundId;
     (bill as any).refundProvider = psp.provider;
-    (bill as any).refundStatus = psp.status;
+    // Two layers: PSP-status (succeeded/pending from the gateway) is kept on
+    // refundProviderStatus, while refundStatus now tracks the request lifecycle
+    // shared with /billing/:id/request-refund. Admin-initiated direct refunds
+    // skip the PENDING step and jump straight to APPROVED.
+    (bill as any).refundProviderStatus = psp.status;
+    (bill as any).refundStatus = 'APPROVED';
+    (bill as any).refundApprovedBy = adminId.toString();
+    (bill as any).refundResolvedAt = new Date();
     await bill.save();
 
     if ((bill as any).orderId) {
