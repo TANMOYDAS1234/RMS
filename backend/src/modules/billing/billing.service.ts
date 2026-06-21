@@ -126,4 +126,51 @@ export class BillingService {
     ]);
     return result[0] ?? { total: 0, count: 0 };
   }
+
+  /**
+   * GST / tax CSV export. Walks paid bills in the [from, to] window,
+   * branch-scoped so a manager only exports their own branch's takings.
+   *
+   * Output columns line up with what most India-side accountants want for
+   * a GSTR-3B reconciliation — bill ref, paid timestamp (ISO 8601 so
+   * Excel/Sheets won't mangle DD/MM), subtotal, discount, GST collected,
+   * total, payment method, branchId.
+   */
+  async generateGstCsv(from: Date, to: Date, scope?: AuthUser): Promise<string> {
+    const sf = scope ? scopeFilter(scope) : {};
+    const bills = await this.billModel
+      .find({
+        ...sf,
+        isPaid: true,
+        paidAt: { $gte: from, $lte: to },
+      })
+      .sort({ paidAt: 1 })
+      .lean();
+
+    const header =
+      'billId,paidAt,subtotal,discountAmount,gstAmount,total,paymentMethod,branchId';
+    const escape = (v: any) => {
+      const s = v === null || v === undefined ? '' : String(v);
+      // Quote anything containing comma, quote, or newline; double up quotes.
+      return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+
+    const rows = bills.map((b: any) => {
+      const paidAt = b.paidAt ? new Date(b.paidAt).toISOString() : '';
+      return [
+        b._id?.toString() ?? '',
+        paidAt,
+        (b.subtotal ?? 0).toFixed(2),
+        (b.discountAmount ?? 0).toFixed(2),
+        (b.gstAmount ?? 0).toFixed(2),
+        (b.total ?? 0).toFixed(2),
+        b.paymentMethod ?? '',
+        b.branchId ?? '',
+      ]
+        .map(escape)
+        .join(',');
+    });
+
+    return [header, ...rows].join('\n') + '\n';
+  }
 }
