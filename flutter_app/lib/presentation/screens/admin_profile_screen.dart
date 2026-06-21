@@ -26,17 +26,18 @@ class AdminProfileScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profileAsync = ref.watch(_profileProvider);
+    final bc = BrandColors.of(context);
 
     return Scaffold(
-      backgroundColor: slateBg,
+      backgroundColor: bc.bg,
       appBar: AppBar(
-        backgroundColor: slateCard,
-        title: const Text('My Profile',
-            style: TextStyle(color: textPrimary, fontSize: 15, fontWeight: FontWeight.w700)),
-        iconTheme: const IconThemeData(color: textSecondary),
+        backgroundColor: bc.card,
+        title: Text('My Profile',
+            style: TextStyle(color: bc.textHi, fontSize: 15, fontWeight: FontWeight.w700)),
+        iconTheme: IconThemeData(color: bc.textLo),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
-          child: Container(height: 1, color: dividerColor),
+          child: Container(height: 1, color: bc.divider),
         ),
       ),
       body: profileAsync.when(
@@ -54,6 +55,7 @@ class _ProfileBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final bc = BrandColors.of(context);
     final photoUrl = profile['photoUrl'] as String?;
     // Cache-buster: backend keeps the photo URL stable across uploads,
     // so we tack on updatedAt to force CachedNetworkImage to refetch.
@@ -97,7 +99,7 @@ class _ProfileBody extends ConsumerWidget {
                     width: 28, height: 28,
                     decoration: BoxDecoration(
                       color: copperAccent, shape: BoxShape.circle,
-                      border: Border.all(color: slateBg, width: 2),
+                      border: Border.all(color: bc.bg, width: 2),
                     ),
                     child: const Icon(Icons.camera_alt, size: 14, color: Colors.white),
                   ),
@@ -108,10 +110,10 @@ class _ProfileBody extends ConsumerWidget {
         ),
         const SizedBox(height: 16),
         Center(child: Text(name,
-            style: const TextStyle(color: textPrimary, fontSize: 18, fontWeight: FontWeight.w800))),
+            style: TextStyle(color: bc.textHi, fontSize: 18, fontWeight: FontWeight.w800))),
         const SizedBox(height: 4),
         Center(child: Text(email,
-            style: const TextStyle(color: textSecondary, fontSize: 13))),
+            style: TextStyle(color: bc.textLo, fontSize: 13))),
         const SizedBox(height: 8),
         Center(
           child: Container(
@@ -165,21 +167,22 @@ class _ProfileBody extends ConsumerWidget {
       );
 
   Future<void> _pickAndUploadPhoto(BuildContext context, WidgetRef ref, String id) async {
+    final bc = BrandColors.of(context);
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
-      backgroundColor: slateCard,
+      backgroundColor: bc.card,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) => SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           const SizedBox(height: 12),
           ListTile(
             leading: const Icon(Icons.camera_alt_outlined, color: copperAccent),
-            title: const Text('Camera', style: TextStyle(color: textPrimary)),
+            title: Text('Camera', style: TextStyle(color: bc.textHi)),
             onTap: () => Navigator.pop(context, ImageSource.camera),
           ),
           ListTile(
             leading: const Icon(Icons.photo_library_outlined, color: copperAccent),
-            title: const Text('Gallery', style: TextStyle(color: textPrimary)),
+            title: Text('Gallery', style: TextStyle(color: bc.textHi)),
             onTap: () => Navigator.pop(context, ImageSource.gallery),
           ),
           const SizedBox(height: 8),
@@ -195,8 +198,24 @@ class _ProfileBody extends ConsumerWidget {
       final dio = createDioClient(ref.read(authProvider).token);
       // Bytes-based upload — fromFile() can't open blob: URLs on web.
       final bytes = await picked.readAsBytes();
+      // Send an explicit image MIME. Without this Dio defaults to
+      // application/octet-stream → backend stamps that as photoMime →
+      // browsers can't render it and the avatar falls back to the
+      // initials placeholder forever. Derive the MIME from the
+      // filename extension; jpeg fallback covers iOS HEIC (image_picker
+      // already transcodes those to JPEG when quality is set).
+      final lower = picked.name.toLowerCase();
+      final subtype = lower.endsWith('.png')
+          ? 'png'
+          : lower.endsWith('.webp')
+              ? 'webp'
+              : 'jpeg';
       final formData = FormData.fromMap({
-        'photo': MultipartFile.fromBytes(bytes, filename: picked.name),
+        'photo': MultipartFile.fromBytes(
+          bytes,
+          filename: picked.name,
+          contentType: DioMediaType('image', subtype),
+        ),
       });
       // /users/me/photo (not /users/:id/photo) — the :id variant is
       // admin/manager only and was 403-ing for waiter/chef/cashier on
@@ -232,7 +251,7 @@ class _ProfileBody extends ConsumerWidget {
   void _showEditSheet(BuildContext context, WidgetRef ref, Map<String, dynamic> profile) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: slateCard,
+      backgroundColor: BrandColors.of(context).card,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (_) => _EditProfileSheet(profile: profile),
@@ -242,7 +261,7 @@ class _ProfileBody extends ConsumerWidget {
   void _showPasswordSheet(BuildContext context, WidgetRef ref) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: slateCard,
+      backgroundColor: BrandColors.of(context).card,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (_) => const _ChangePasswordSheet(),
@@ -264,20 +283,23 @@ class _InfoRow extends StatelessWidget {
   const _InfoRow({required this.icon, required this.label, required this.value, this.valueColor});
 
   @override
-  Widget build(BuildContext context) => Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(color: slateCard, borderRadius: BorderRadius.circular(12)),
-        child: Row(children: [
-          Icon(icon, color: textSecondary, size: 16),
-          const SizedBox(width: 12),
-          Text(label, style: const TextStyle(color: textSecondary, fontSize: 13)),
-          const Spacer(),
-          Text(value,
-              style: TextStyle(
-                  color: valueColor ?? textPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
-        ]),
-      );
+  Widget build(BuildContext context) {
+    final bc = BrandColors.of(context);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(color: bc.card, borderRadius: BorderRadius.circular(12)),
+      child: Row(children: [
+        Icon(icon, color: bc.textLo, size: 16),
+        const SizedBox(width: 12),
+        Text(label, style: TextStyle(color: bc.textLo, fontSize: 13)),
+        const Spacer(),
+        Text(value,
+            style: TextStyle(
+                color: valueColor ?? bc.textHi, fontSize: 13, fontWeight: FontWeight.w600)),
+      ]),
+    );
+  }
 }
 
 class _Field extends StatelessWidget {
@@ -288,21 +310,24 @@ class _Field extends StatelessWidget {
   const _Field({required this.ctrl, required this.label, this.obscure = false, this.keyboardType});
 
   @override
-  Widget build(BuildContext context) => TextField(
-        controller: ctrl,
-        obscureText: obscure,
-        keyboardType: keyboardType,
-        style: const TextStyle(color: textPrimary),
-        decoration: InputDecoration(
-          labelText: label,
-          labelStyle: const TextStyle(color: textSecondary, fontSize: 13),
-          filled: true,
-          fillColor: slateSurface,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: dividerColor)),
-          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: dividerColor)),
-          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: copperAccent)),
-        ),
-      );
+  Widget build(BuildContext context) {
+    final bc = BrandColors.of(context);
+    return TextField(
+      controller: ctrl,
+      obscureText: obscure,
+      keyboardType: keyboardType,
+      style: TextStyle(color: bc.textHi),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: TextStyle(color: bc.textLo, fontSize: 13),
+        filled: true,
+        fillColor: bc.surface,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: bc.divider)),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: bc.divider)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: copperAccent)),
+      ),
+    );
+  }
 }
 
 class _PrimaryBtn extends StatelessWidget {
@@ -312,28 +337,29 @@ class _PrimaryBtn extends StatelessWidget {
   const _PrimaryBtn({required this.label, required this.onTap, this.secondary = false});
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
-        onTap: onTap,
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          decoration: BoxDecoration(
-            gradient: secondary
-                ? null
-                : copperGradient,
-            color: secondary ? slateSurface : null,
-            borderRadius: BorderRadius.circular(12),
-            border: secondary ? Border.all(color: dividerColor) : null,
-          ),
-          child: Center(
-            child: Text(label,
-                style: TextStyle(
-                    color: secondary ? textSecondary : Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14)),
-          ),
+  Widget build(BuildContext context) {
+    final bc = BrandColors.of(context);
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          gradient: secondary ? null : copperGradient,
+          color: secondary ? bc.surface : null,
+          borderRadius: BorderRadius.circular(12),
+          border: secondary ? Border.all(color: bc.divider) : null,
         ),
-      );
+        child: Center(
+          child: Text(label,
+              style: TextStyle(
+                  color: secondary ? bc.textLo : Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14)),
+        ),
+      ),
+    );
+  }
 }
 
 // ── Edit profile sheet ───────────────────────────────────────────────────────
@@ -405,8 +431,8 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
   Widget build(BuildContext context) => Padding(
         padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 24),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Edit Profile',
-              style: TextStyle(color: textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
+          Text('Edit Profile',
+              style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 16, fontWeight: FontWeight.w700)),
           const SizedBox(height: 16),
           _Field(ctrl: _nameCtrl, label: 'Full Name'),
           const SizedBox(height: 10),
@@ -481,8 +507,8 @@ class _ChangePasswordSheetState extends ConsumerState<_ChangePasswordSheet> {
   Widget build(BuildContext context) => Padding(
         padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 24),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Change Password',
-              style: TextStyle(color: textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
+          Text('Change Password',
+              style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 16, fontWeight: FontWeight.w700)),
           const SizedBox(height: 16),
           _Field(ctrl: _ctrl, label: 'New Password (min 6 chars)', obscure: true),
           const SizedBox(height: 16),
@@ -505,26 +531,27 @@ class _AppearancePicker extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final current = ref.watch(themeModeProvider);
     final notifier = ref.read(themeModeProvider.notifier);
+    final bc = BrandColors.of(context);
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: bc.card,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: const [
-          Icon(Icons.palette_outlined, color: copperAccent, size: 16),
-          SizedBox(width: 8),
+        Row(children: [
+          const Icon(Icons.palette_outlined, color: copperAccent, size: 16),
+          const SizedBox(width: 8),
           Text('Appearance',
               style: TextStyle(
-                  color: textPrimary,
+                  color: bc.textHi,
                   fontSize: 13,
                   fontWeight: FontWeight.w700)),
         ]),
         const SizedBox(height: 4),
-        const Text(
+        Text(
             'Choose how Dine Ops looks. System follows your phone.',
-            style: TextStyle(color: textSecondary, fontSize: 11)),
+            style: TextStyle(color: bc.textLo, fontSize: 11)),
         const SizedBox(height: 12),
         Row(children: [
           Expanded(
@@ -573,22 +600,23 @@ class _ModeTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bc = BrandColors.of(context);
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
-          color: active ? copperAccent.withValues(alpha: 0.18) : slateSurface,
+          color: active ? copperAccent.withValues(alpha: 0.18) : bc.surface,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-              color: active ? copperAccent : dividerColor, width: 1),
+              color: active ? copperAccent : bc.divider, width: 1),
         ),
         child: Column(children: [
-          Icon(icon, color: active ? copperAccent : textSecondary, size: 18),
+          Icon(icon, color: active ? copperAccent : bc.textLo, size: 18),
           const SizedBox(height: 6),
           Text(label,
               style: TextStyle(
-                  color: active ? copperAccent : textSecondary,
+                  color: active ? copperAccent : bc.textLo,
                   fontSize: 11,
                   fontWeight: FontWeight.w700)),
         ]),

@@ -2976,8 +2976,128 @@ class _SystemHealthTab extends ConsumerWidget {
               ),
             ]),
           ),
+          const SizedBox(height: 16),
+          // Wipe demo data — one-shot cleanup for the orders + bills
+          // pushed by seed.ts. Doesn't touch user accounts, the menu, or
+          // tables (those are still useful even outside the demo).
+          _WipeDemoCard(),
         ],
       ),
+    );
+  }
+}
+
+class _WipeDemoCard extends ConsumerStatefulWidget {
+  @override
+  ConsumerState<_WipeDemoCard> createState() => _WipeDemoCardState();
+}
+
+class _WipeDemoCardState extends ConsumerState<_WipeDemoCard> {
+  bool _busy = false;
+
+  Future<void> _wipe() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: slateCard,
+        title: const Text('Clear demo orders + bills?',
+            style: TextStyle(color: textPrimary, fontSize: 15)),
+        content: const Text(
+          'Removes the canned orders and bills the seed script pushed for first-launch demos. Your real transactions and the user accounts, menu, and tables stay.',
+          style: TextStyle(color: textSecondary, fontSize: 12),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel',
+                style: TextStyle(color: textSecondary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Clear demo data',
+                style: TextStyle(color: crimson)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    setState(() => _busy = true);
+    try {
+      final dio = createDioClient(ref.read(authProvider).token);
+      final res = await dio.post(
+        '/admin/wipe-demo-data',
+        options: Options(headers: {
+          'Idempotency-Key': newIdempotencyKey('wipe-demo'),
+        }),
+      );
+      final orders = res.data['deletedOrders'] ?? 0;
+      final bills = res.data['deletedBills'] ?? 0;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          backgroundColor: emerald,
+          content: Text('Cleared $orders demo orders and $bills bills.'),
+        ));
+      }
+      ref.invalidate(_systemHealthProvider);
+      ref.invalidate(_allOrdersProvider);
+      ref.invalidate(_transactionsProvider);
+      ref.invalidate(_financialSummaryProvider);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          backgroundColor: crimson,
+          content: Text(describeApiError(e)),
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: slateCard,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: crimson.withValues(alpha: 0.3)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: const [
+          Icon(Icons.cleaning_services_outlined, color: crimson, size: 16),
+          SizedBox(width: 8),
+          Text('Clear demo seed data',
+              style: TextStyle(
+                  color: textPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700)),
+        ]),
+        const SizedBox(height: 4),
+        const Text(
+          'Remove the canned orders + bills the first-launch seed inserted. Keeps users, menu, and tables.',
+          style: TextStyle(color: textSecondary, fontSize: 11, height: 1.4),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            icon: _busy
+                ? const SizedBox(
+                    width: 12, height: 12,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: crimson))
+                : const Icon(Icons.delete_outline, size: 16),
+            label: Text(_busy ? 'Clearing…' : 'Clear demo data'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: crimson,
+              side: BorderSide(color: crimson.withValues(alpha: 0.5)),
+              padding: const EdgeInsets.symmetric(vertical: 10),
+            ),
+            onPressed: _busy ? null : _wipe,
+          ),
+        ),
+      ]),
     );
   }
 }
@@ -3641,10 +3761,21 @@ class _MenuManagementTabState extends ConsumerState<_MenuManagementTab> {
                   // Upload photo if picked. Bytes-based upload — see comment
                   // on pickedImageBytes for why this isn't fromFile().
                   if (pickedImageBytes != null && savedId != null) {
+                    // Explicit MIME — without it Dio defaults to
+                    // application/octet-stream which the backend stamps
+                    // as the photo's mime, and browsers refuse to render
+                    // the result as an image.
+                    final fn = (pickedImageName ?? 'dish.jpg').toLowerCase();
+                    final subtype = fn.endsWith('.png')
+                        ? 'png'
+                        : fn.endsWith('.webp')
+                            ? 'webp'
+                            : 'jpeg';
                     final formData = FormData.fromMap({
                       'image': MultipartFile.fromBytes(
                         pickedImageBytes!,
                         filename: pickedImageName ?? 'dish.jpg',
+                        contentType: DioMediaType('image', subtype),
                       ),
                     });
                     await dio.post(
@@ -3952,8 +4083,18 @@ class _MenuItemCard extends ConsumerWidget {
       final dio = createDioClient(ref.read(authProvider).token);
       // Bytes-based upload — fromFile() can't open blob: URLs on web.
       final bytes = await picked.readAsBytes();
+      final fn = picked.name.toLowerCase();
+      final subtype = fn.endsWith('.png')
+          ? 'png'
+          : fn.endsWith('.webp')
+              ? 'webp'
+              : 'jpeg';
       final formData = FormData.fromMap({
-        'image': MultipartFile.fromBytes(bytes, filename: picked.name),
+        'image': MultipartFile.fromBytes(
+          bytes,
+          filename: picked.name,
+          contentType: DioMediaType('image', subtype),
+        ),
       });
       await dio.post(
         '/menu/$id/image',
