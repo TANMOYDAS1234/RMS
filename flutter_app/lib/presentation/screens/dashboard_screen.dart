@@ -36,6 +36,7 @@ class DashboardScreen extends ConsumerWidget {
       webSocketServiceProvider.select((s) => s.state),
     );
     final filter = ref.watch(dashboardFilterProvider);
+    final bc = BrandColors.of(context);
 
     final filtered = switch (filter) {
       1 => orders
@@ -53,11 +54,11 @@ class DashboardScreen extends ConsumerWidget {
     };
 
     return Scaffold(
-      backgroundColor: slateBg,
-      appBar: _buildAppBar(wsState),
+      backgroundColor: bc.bg,
+      appBar: _buildAppBar(context, wsState, bc),
       body: RefreshIndicator(
         color: copperAccent,
-        backgroundColor: slateCard,
+        backgroundColor: bc.card,
         onRefresh: () => ref.read(liveOrdersProvider.notifier).refresh(),
         child: CustomScrollView(
           slivers: [
@@ -74,7 +75,7 @@ class DashboardScreen extends ConsumerWidget {
             // when the dining room is quiet.
             const SliverToBoxAdapter(child: WaiterInbox()),
             SliverToBoxAdapter(
-              child: _buildSectionHeader(orders, filtered),
+              child: _buildSectionHeader(orders, filtered, bc),
             ),
             if (filtered.isEmpty)
               const SliverToBoxAdapter(child: _EmptyFiltered())
@@ -86,7 +87,7 @@ class DashboardScreen extends ConsumerWidget {
                     (ctx, i) => OrderCard(
                       order: filtered[i],
                       onStatusTap: () =>
-                          _showStatusSheet(context, ref, filtered[i]),
+                          _showStatusSheet(context, ref, filtered[i], bc),
                     ),
                     childCount: filtered.length,
                   ),
@@ -101,13 +102,15 @@ class DashboardScreen extends ConsumerWidget {
       // Hiding the FAB cluster for those roles cleans up the UI and
       // prevents accidental order creation by the wrong staff.
       floatingActionButton: ref.watch(authProvider).user?.role == UserRole.waiter
-          ? _buildFAB(context)
+          ? _buildFAB(context, bc)
           : null,
     );
   }
 
-  PreferredSizeWidget _buildAppBar(SocketState wsState) => AppBar(
-        backgroundColor: slateBg,
+  PreferredSizeWidget _buildAppBar(
+          BuildContext context, SocketState wsState, BrandColors bc) =>
+      AppBar(
+        backgroundColor: bc.bg,
         elevation: 0,
         titleSpacing: 12,
         title: Row(
@@ -127,9 +130,9 @@ class DashboardScreen extends ConsumerWidget {
               child: const Icon(Icons.restaurant, color: Colors.white, size: 16),
             ),
             const SizedBox(width: 8),
-            const Text('DINE OPS',
+            Text('DINE OPS',
                 style: TextStyle(
-                  color: textPrimary,
+                  color: bc.textHi,
                   fontSize: 16,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 2,
@@ -149,67 +152,82 @@ class DashboardScreen extends ConsumerWidget {
                   ? user!.name.substring(0, 1).toUpperCase()
                   : 'A';
               return PopupMenuButton(
-              color: slateCard,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: CircleAvatar(
-                radius: 15,
-                backgroundColor: copperAccent.withValues(alpha: 0.2),
-                child: photoFullUrl != null
-                    ? ClipOval(
-                        child: CachedNetworkImage(
-                          imageUrl: photoFullUrl,
-                          width: 30,
-                          height: 30,
-                          fit: BoxFit.cover,
-                          placeholder: (_, __) => Text(initial,
-                              style: const TextStyle(color: copperAccent, fontSize: 12, fontWeight: FontWeight.w700)),
-                          errorWidget: (_, __, ___) => Text(initial,
-                              style: const TextStyle(color: copperAccent, fontSize: 12, fontWeight: FontWeight.w700)),
-                        ),
-                      )
-                    : Text(initial,
-                        style: const TextStyle(color: copperAccent, fontSize: 12, fontWeight: FontWeight.w700)),
-              ),
-              itemBuilder: (_) => <PopupMenuEntry<dynamic>>[
-                // Quick profile readout — name + role — non-clickable.
-                PopupMenuItem(
-                  enabled: false,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(user?.name ?? 'Staff',
+                color: bc.card,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: CircleAvatar(
+                  radius: 15,
+                  backgroundColor: copperAccent.withValues(alpha: 0.2),
+                  child: photoFullUrl != null
+                      ? ClipOval(
+                          child: CachedNetworkImage(
+                            imageUrl: photoFullUrl,
+                            width: 30,
+                            height: 30,
+                            fit: BoxFit.cover,
+                            placeholder: (_, __) => Text(initial,
+                                style: const TextStyle(
+                                    color: copperAccent,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700)),
+                            errorWidget: (_, __, ___) => Text(initial,
+                                style: const TextStyle(
+                                    color: copperAccent,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700)),
+                          ),
+                        )
+                      : Text(initial,
                           style: const TextStyle(
-                              color: textPrimary,
-                              fontSize: 13,
+                              color: copperAccent,
+                              fontSize: 12,
                               fontWeight: FontWeight.w700)),
-                      Text((user?.role.name ?? '').toUpperCase(),
-                          style: const TextStyle(
-                              color: textSecondary, fontSize: 10)),
-                    ],
+                ),
+                itemBuilder: (_) => <PopupMenuEntry<dynamic>>[
+                  // Quick profile readout — name + role — non-clickable.
+                  PopupMenuItem(
+                    enabled: false,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(user?.name ?? 'Staff',
+                            style: TextStyle(
+                                color: bc.textHi,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700)),
+                        Text((user?.role.name ?? '').toUpperCase(),
+                            style: TextStyle(
+                                color: bc.textLo, fontSize: 10)),
+                      ],
+                    ),
                   ),
-                ),
-                const PopupMenuDivider(),
-                PopupMenuItem(
-                  child: const Row(children: [
-                    Icon(Icons.person_outline, color: copperAccent, size: 16),
-                    SizedBox(width: 8),
-                    Text('My Profile', style: TextStyle(color: textPrimary)),
-                  ]),
-                  onTap: () {
-                    // PopupMenuItem closes the menu before the onTap fires,
-                    // so the Navigator.push has to be deferred a frame.
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      Navigator.of(ctx).push(MaterialPageRoute(
-                          builder: (_) => const AdminProfileScreen()));
-                    });
-                  },
-                ),
-                PopupMenuItem(
-                  child: const Row(children: [Icon(Icons.logout, color: crimson, size: 16), SizedBox(width: 8), Text('Logout', style: TextStyle(color: crimson))]),
-                  onTap: () => ref.read(authProvider.notifier).logout(),
-                ),
-              ],
-            );
+                  const PopupMenuDivider(),
+                  PopupMenuItem(
+                    child: Row(children: [
+                      const Icon(Icons.person_outline,
+                          color: copperAccent, size: 16),
+                      const SizedBox(width: 8),
+                      Text('My Profile',
+                          style: TextStyle(color: bc.textHi)),
+                    ]),
+                    onTap: () {
+                      // PopupMenuItem closes the menu before the onTap fires,
+                      // so the Navigator.push has to be deferred a frame.
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        Navigator.of(ctx).push(MaterialPageRoute(
+                            builder: (_) => const AdminProfileScreen()));
+                      });
+                    },
+                  ),
+                  PopupMenuItem(
+                    child: const Row(children: [
+                      Icon(Icons.logout, color: crimson, size: 16),
+                      SizedBox(width: 8),
+                      Text('Logout', style: TextStyle(color: crimson))
+                    ]),
+                    onTap: () => ref.read(authProvider.notifier).logout(),
+                  ),
+                ],
+              );
             },
           ),
           const SizedBox(width: 8),
@@ -217,15 +235,15 @@ class DashboardScreen extends ConsumerWidget {
       );
 
   Widget _buildSectionHeader(
-          List<OrderEntity> allOrders, List<OrderEntity> visible) =>
+          List<OrderEntity> allOrders, List<OrderEntity> visible, BrandColors bc) =>
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
         child: Row(
           children: [
-            const Text(
+            Text(
               'Live Orders',
               style: TextStyle(
-                color: textPrimary,
+                color: bc.textHi,
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
               ),
@@ -253,7 +271,7 @@ class DashboardScreen extends ConsumerWidget {
         ),
       );
 
-  Widget _buildFAB(BuildContext context) => Column(
+  Widget _buildFAB(BuildContext context, BrandColors bc) => Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
@@ -261,7 +279,7 @@ class DashboardScreen extends ConsumerWidget {
             // Unique tag — when multiple FABs are mounted (other tabs in
             // an IndexedStack), Flutter's default tag collides.
             heroTag: 'waiter_qr_scan_fab',
-            backgroundColor: slateCard,
+            backgroundColor: bc.card,
             foregroundColor: copperAccent,
             tooltip: 'Scan table QR',
             onPressed: () => Navigator.push(
@@ -287,10 +305,10 @@ class DashboardScreen extends ConsumerWidget {
       ).animate().scale(delay: 600.ms, duration: 300.ms);
 
   void _showStatusSheet(
-      BuildContext context, WidgetRef ref, OrderEntity order) {
+      BuildContext context, WidgetRef ref, OrderEntity order, BrandColors bc) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: slateCard,
+      backgroundColor: bc.card,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -306,10 +324,11 @@ class _WsIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bc = BrandColors.of(context);
     final (color, label) = switch (state) {
       SocketState.connected => (emerald, 'Live'),
       SocketState.connecting => (amber, 'Connecting'),
-      SocketState.disconnected => (textSecondary, 'Offline'),
+      SocketState.disconnected => (bc.textLo, 'Offline'),
       SocketState.error => (crimson, 'Error'),
     };
     return Container(
@@ -345,6 +364,7 @@ class _FilterChips extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final selected = ref.watch(dashboardFilterProvider);
+    final bc = BrandColors.of(context);
     return Row(
       children: List.generate(_filters.length, (i) {
         final active = selected == i;
@@ -357,7 +377,7 @@ class _FilterChips extends ConsumerWidget {
             decoration: BoxDecoration(
               color: active
                   ? copperAccent.withValues(alpha: 0.2)
-                  : slateSurface,
+                  : bc.surface,
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
                 color: active ? copperAccent : Colors.transparent,
@@ -366,7 +386,7 @@ class _FilterChips extends ConsumerWidget {
             child: Text(
               _filters[i],
               style: TextStyle(
-                color: active ? copperAccent : textSecondary,
+                color: active ? copperAccent : bc.textLo,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
               ),
@@ -382,18 +402,21 @@ class _FilterChips extends ConsumerWidget {
 class _EmptyFiltered extends StatelessWidget {
   const _EmptyFiltered();
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 40),
-        child: Center(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.inbox_outlined,
-                size: 36, color: textSecondary.withValues(alpha: 0.5)),
-            const SizedBox(height: 8),
-            const Text('No orders match this filter',
-                style: TextStyle(color: textSecondary, fontSize: 12)),
-          ]),
-        ),
-      );
+  Widget build(BuildContext context) {
+    final bc = BrandColors.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 40),
+      child: Center(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.inbox_outlined,
+              size: 36, color: bc.textLo.withValues(alpha: 0.5)),
+          const SizedBox(height: 8),
+          Text('No orders match this filter',
+              style: TextStyle(color: bc.textLo, fontSize: 12)),
+        ]),
+      ),
+    );
+  }
 }
 
 // ── Status update bottom sheet ────────────────────────────────────────────────
@@ -405,6 +428,7 @@ class _StatusUpdateSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bc = BrandColors.of(context);
     final nextStatuses = OrderStatus.values
         .where((s) => order.status.canTransitionTo(s))
         .toList();
@@ -423,8 +447,8 @@ class _StatusUpdateSheet extends StatelessWidget {
             children: [
               Text(
                 'Update Order #${order.id}',
-                style: const TextStyle(
-                    color: textPrimary,
+                style: TextStyle(
+                    color: bc.textHi,
                     fontSize: 16,
                     fontWeight: FontWeight.w700),
               ),
@@ -435,7 +459,7 @@ class _StatusUpdateSheet extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             order.tableLabel,
-            style: const TextStyle(color: textSecondary, fontSize: 13),
+            style: TextStyle(color: bc.textLo, fontSize: 13),
           ),
           const SizedBox(height: 20),
           if (canAmend) ...[
@@ -455,7 +479,7 @@ class _StatusUpdateSheet extends StatelessWidget {
                 showModalBottomSheet(
                   context: context,
                   isScrollControlled: true,
-                  backgroundColor: slateCard,
+                  backgroundColor: bc.card,
                   shape: const RoundedRectangleBorder(
                       borderRadius:
                           BorderRadius.vertical(top: Radius.circular(20))),
@@ -466,8 +490,8 @@ class _StatusUpdateSheet extends StatelessWidget {
             const SizedBox(height: 14),
           ],
           if (nextStatuses.isEmpty)
-            const Text('No further transitions available.',
-                style: TextStyle(color: textSecondary))
+            Text('No further transitions available.',
+                style: TextStyle(color: bc.textLo))
           else
             ...nextStatuses.map(
               (s) => _ActionButton(
@@ -564,6 +588,7 @@ class _AmendItemsSheetState extends ConsumerState<_AmendItemsSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final bc = BrandColors.of(context);
     final entries = widget.order.items.toList();
     return Padding(
       padding: EdgeInsets.fromLTRB(
@@ -572,18 +597,18 @@ class _AmendItemsSheetState extends ConsumerState<_AmendItemsSheet> {
         Container(
           width: 36, height: 4,
           decoration: BoxDecoration(
-            color: textSecondary.withValues(alpha: 0.4),
+            color: bc.textLo.withValues(alpha: 0.4),
             borderRadius: BorderRadius.circular(2),
           ),
         ),
         const SizedBox(height: 14),
         Text('Amend items — ${widget.order.tableLabel}',
-            style: const TextStyle(
-                color: textPrimary, fontSize: 16, fontWeight: FontWeight.w800)),
+            style: TextStyle(
+                color: bc.textHi, fontSize: 16, fontWeight: FontWeight.w800)),
         const SizedBox(height: 4),
-        const Text(
+        Text(
             'Adjust quantities; set to 0 to remove. New items must be added via "New Order" — to add a brand-new dish, cancel this and place a separate order.',
-            style: TextStyle(color: textSecondary, fontSize: 11)),
+            style: TextStyle(color: bc.textLo, fontSize: 11)),
         const SizedBox(height: 16),
         ConstrainedBox(
           constraints: const BoxConstraints(maxHeight: 320),
@@ -595,7 +620,7 @@ class _AmendItemsSheetState extends ConsumerState<_AmendItemsSheet> {
                   margin: const EdgeInsets.only(bottom: 8),
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   decoration: BoxDecoration(
-                    color: slateSurface,
+                    color: bc.surface,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(children: [
@@ -604,8 +629,8 @@ class _AmendItemsSheetState extends ConsumerState<_AmendItemsSheet> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(item.name,
-                                style: const TextStyle(
-                                    color: textPrimary,
+                                style: TextStyle(
+                                    color: bc.textHi,
                                     fontSize: 13,
                                     fontWeight: FontWeight.w600)),
                             Text('₹${item.unitPrice.toStringAsFixed(2)}',
@@ -614,7 +639,7 @@ class _AmendItemsSheetState extends ConsumerState<_AmendItemsSheet> {
                           ]),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.remove, color: textSecondary, size: 18),
+                      icon: Icon(Icons.remove, color: bc.textLo, size: 18),
                       onPressed: () => setState(() {
                         final q = (_cart[item.id] ?? 0) - 1;
                         if (q <= 0) {
@@ -625,8 +650,8 @@ class _AmendItemsSheetState extends ConsumerState<_AmendItemsSheet> {
                       }),
                     ),
                     Text('${_cart[item.id] ?? 0}',
-                        style: const TextStyle(
-                            color: textPrimary,
+                        style: TextStyle(
+                            color: bc.textHi,
                             fontSize: 14,
                             fontWeight: FontWeight.w700)),
                     IconButton(

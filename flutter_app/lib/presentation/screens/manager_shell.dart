@@ -96,23 +96,24 @@ class _ManagerShellState extends ConsumerState<ManagerShell> {
 
   @override
   Widget build(BuildContext context) {
+    final bc = BrandColors.of(context);
     return Scaffold(
       key: _scaffoldKey,
-      backgroundColor: slateBg,
-      appBar: _buildAppBar(),
-      drawer: _buildDrawer(),
+      backgroundColor: bc.bg,
+      appBar: _buildAppBar(bc),
+      drawer: _buildDrawer(bc),
       body: IndexedStack(index: _index, children: _screens),
-      bottomNavigationBar: _buildBottomNav(),
+      bottomNavigationBar: _buildBottomNav(bc),
     );
   }
 
   // ── AppBar ─────────────────────────────────────────────────────────────────
-  PreferredSizeWidget _buildAppBar() => AppBar(
-        backgroundColor: slateCard,
+  PreferredSizeWidget _buildAppBar(BrandColors bc) => AppBar(
+        backgroundColor: bc.card,
         elevation: 0,
         titleSpacing: 16,
         leading: IconButton(
-          icon: const Icon(Icons.menu, color: textSecondary, size: 22),
+          icon: Icon(Icons.menu, color: bc.textLo, size: 22),
           onPressed: () => _scaffoldKey.currentState?.openDrawer(),
         ),
         title: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -130,8 +131,8 @@ class _ManagerShellState extends ConsumerState<ManagerShell> {
           ),
           const SizedBox(width: 8),
           Text(_currentTitle,
-              style: const TextStyle(
-                  color: textPrimary, fontSize: 15, fontWeight: FontWeight.w800)),
+              style: TextStyle(
+                  color: bc.textHi, fontSize: 15, fontWeight: FontWeight.w800)),
           const SizedBox(width: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
@@ -154,7 +155,7 @@ class _ManagerShellState extends ConsumerState<ManagerShell> {
                 ? user!.name.substring(0, 1).toUpperCase()
                 : 'M';
             return PopupMenuButton<String>(
-              color: slateSurface,
+              color: bc.surface,
               offset: const Offset(0, 48),
               padding: const EdgeInsets.symmetric(horizontal: 8),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -195,7 +196,7 @@ class _ManagerShellState extends ConsumerState<ManagerShell> {
                   }(),
                 ),
                 const SizedBox(width: 4),
-                const Icon(Icons.keyboard_arrow_down, color: textSecondary, size: 16),
+                Icon(Icons.keyboard_arrow_down, color: bc.textLo, size: 16),
                 const SizedBox(width: 8),
               ]),
               itemBuilder: (_) => [
@@ -203,19 +204,19 @@ class _ManagerShellState extends ConsumerState<ManagerShell> {
                   enabled: false,
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text(user?.name ?? 'Manager',
-                        style: const TextStyle(
-                            color: textPrimary, fontSize: 13, fontWeight: FontWeight.w700)),
+                        style: TextStyle(
+                            color: bc.textHi, fontSize: 13, fontWeight: FontWeight.w700)),
                     Text(user?.email ?? '',
-                        style: const TextStyle(color: textSecondary, fontSize: 11)),
-                    const Divider(color: dividerColor, height: 16),
+                        style: TextStyle(color: bc.textLo, fontSize: 11)),
+                    Divider(color: bc.divider, height: 16),
                   ]),
                 ),
                 PopupMenuItem(
                   value: 'profile',
-                  child: const Row(children: [
-                    Icon(Icons.account_circle_outlined, color: roseGold, size: 16),
-                    SizedBox(width: 10),
-                    Text('My Profile', style: TextStyle(color: textPrimary, fontWeight: FontWeight.w600)),
+                  child: Row(children: [
+                    const Icon(Icons.account_circle_outlined, color: roseGold, size: 16),
+                    const SizedBox(width: 10),
+                    Text('My Profile', style: TextStyle(color: bc.textHi, fontWeight: FontWeight.w600)),
                   ]),
                   onTap: () => Future.microtask(() => Navigator.push(
                     ctx,
@@ -237,15 +238,15 @@ class _ManagerShellState extends ConsumerState<ManagerShell> {
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
-          child: Container(height: 1, color: dividerColor),
+          child: Container(height: 1, color: bc.divider),
         ),
       );
 
   // ── Bottom Nav (5 items) ───────────────────────────────────────────────────
-  Widget _buildBottomNav() => Container(
+  Widget _buildBottomNav(BrandColors bc) => Container(
         decoration: BoxDecoration(
-          color: slateCard,
-          border: Border(top: BorderSide(color: dividerColor, width: 1)),
+          color: bc.card,
+          border: Border(top: BorderSide(color: bc.divider, width: 1)),
         ),
         child: SafeArea(
           child: SizedBox(
@@ -292,8 +293,8 @@ class _ManagerShellState extends ConsumerState<ManagerShell> {
       );
 
   // ── Drawer (4 secondary items) ─────────────────────────────────────────────
-  Widget _buildDrawer() => Drawer(
-        backgroundColor: slateCard,
+  Widget _buildDrawer(BrandColors bc) => Drawer(
+        backgroundColor: bc.card,
         child: SafeArea(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             // Header
@@ -309,20 +310,20 @@ class _ManagerShellState extends ConsumerState<ManagerShell> {
                   child: const Icon(Icons.restaurant, color: Colors.white, size: 20),
                 ),
                 const SizedBox(height: 12),
-                const Text('DINE OPS',
+                Text('DINE OPS',
                     style: TextStyle(
-                        color: textPrimary, fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: 2)),
-                const Text('Manager Panel',
-                    style: TextStyle(color: textSecondary, fontSize: 12)),
+                        color: bc.textHi, fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: 2)),
+                Text('Manager Panel',
+                    style: TextStyle(color: bc.textLo, fontSize: 12)),
               ]),
             ),
-            const Divider(color: dividerColor, height: 1),
+            Divider(color: bc.divider, height: 1),
             const SizedBox(height: 8),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
               child: Text('MORE SECTIONS',
                   style: TextStyle(
-                      color: textSecondary, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1.5)),
+                      color: bc.textLo, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1.5)),
             ),
             ..._drawerItems.map((item) => _DrawerTile(
                   key: ValueKey(item.index),
@@ -331,11 +332,11 @@ class _ManagerShellState extends ConsumerState<ManagerShell> {
                   onTap: () => _select(item.index),
                 )),
             const Spacer(),
-            const Divider(color: dividerColor, height: 1),
+            Divider(color: bc.divider, height: 1),
             Consumer(builder: (ctx, ref, _) => ListTile(
               leading: const Icon(Icons.account_circle_outlined, color: roseGold, size: 20),
-              title: const Text('My Profile',
-                  style: TextStyle(color: textPrimary, fontWeight: FontWeight.w600, fontSize: 13)),
+              title: Text('My Profile',
+                  style: TextStyle(color: bc.textHi, fontWeight: FontWeight.w600, fontSize: 13)),
               onTap: () {
                 Navigator.pop(ctx);
                 Navigator.push(ctx, MaterialPageRoute(
@@ -370,41 +371,44 @@ class _NavItem extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => Expanded(
-        child: GestureDetector(
-          onTap: onTap,
-          behavior: HitTestBehavior.opaque,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                decoration: BoxDecoration(
-                  color: selected ? copperAccent.withValues(alpha: 0.15) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  selected ? activeIcon : icon,
-                  color: selected ? copperAccent : textSecondary,
-                  size: 22,
-                ),
+  Widget build(BuildContext context) {
+    final bc = BrandColors.of(context);
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              decoration: BoxDecoration(
+                color: selected ? copperAccent.withValues(alpha: 0.15) : Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
               ),
-              const SizedBox(height: 3),
-              Text(
-                label,
-                style: TextStyle(
-                  color: selected ? copperAccent : textSecondary,
-                  fontSize: 10,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                ),
-                overflow: TextOverflow.ellipsis,
+              child: Icon(
+                selected ? activeIcon : icon,
+                color: selected ? copperAccent : bc.textLo,
+                size: 22,
               ),
-            ]),
-          ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              label,
+              style: TextStyle(
+                color: selected ? copperAccent : bc.textLo,
+                fontSize: 10,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ]),
         ),
-      );
+      ),
+    );
+  }
 }
 
 // ── Drawer tile ───────────────────────────────────────────────────────────────
@@ -423,23 +427,26 @@ class _DrawerTile extends StatelessWidget {
   const _DrawerTile({required super.key, required this.item, required this.selected, required this.onTap});
 
   @override
-  Widget build(BuildContext context) => ListTile(
-        leading: Icon(
-          selected ? item.activeIcon : item.icon,
-          color: selected ? copperAccent : textSecondary,
-          size: 22,
+  Widget build(BuildContext context) {
+    final bc = BrandColors.of(context);
+    return ListTile(
+      leading: Icon(
+        selected ? item.activeIcon : item.icon,
+        color: selected ? copperAccent : bc.textLo,
+        size: 22,
+      ),
+      title: Text(
+        item.label,
+        style: TextStyle(
+          color: selected ? copperAccent : bc.textHi,
+          fontSize: 13,
+          fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
         ),
-        title: Text(
-          item.label,
-          style: TextStyle(
-            color: selected ? copperAccent : textPrimary,
-            fontSize: 13,
-            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-          ),
-        ),
-        tileColor: selected ? copperAccent.withValues(alpha: 0.08) : Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
-        onTap: onTap,
-      );
+      ),
+      tileColor: selected ? copperAccent.withValues(alpha: 0.08) : Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
+      onTap: onTap,
+    );
+  }
 }

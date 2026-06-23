@@ -19,8 +19,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
+    final bc = BrandColors.of(context);
     return Scaffold(
-      backgroundColor: slateBg,
+      // No explicit backgroundColor — theme.scaffoldBackgroundColor
+      // drives it so Light mode actually paints paperBg.
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(28),
@@ -28,9 +30,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 40),
-              _buildLogo(),
+              _buildLogo(bc),
               const SizedBox(height: 48),
-              _buildForm(authState),
+              _buildForm(authState, bc),
             ],
           ),
         ),
@@ -38,7 +40,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
-  Widget _buildLogo() => Column(
+  Widget _buildLogo(BrandColors bc) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
@@ -55,24 +57,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             child: const Icon(Icons.restaurant, color: Colors.white, size: 28),
           ).animate().scale(duration: 500.ms, curve: Curves.elasticOut),
           const SizedBox(height: 20),
-          const Text(
+          Text(
             'DINE OPS',
             style: TextStyle(
-              color: textPrimary,
+              color: bc.textHi,
               fontSize: 28,
               fontWeight: FontWeight.w800,
               letterSpacing: 4,
             ),
           ).animate().fadeIn(delay: 200.ms),
           const SizedBox(height: 6),
-          const Text(
+          Text(
             'Restaurant Management System',
-            style: TextStyle(color: textSecondary, fontSize: 14),
+            style: TextStyle(color: bc.textLo, fontSize: 14),
           ).animate().fadeIn(delay: 300.ms),
         ],
       );
 
-  Widget _buildForm(AuthState authState) => Column(
+  Widget _buildForm(AuthState authState, BrandColors bc) => Column(
         children: [
           _InputField(
             controller: _emailCtrl,
@@ -89,7 +91,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             suffix: IconButton(
               icon: Icon(
                 _obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                color: textSecondary,
+                color: bc.textLo,
                 size: 20,
               ),
               onPressed: () => setState(() => _obscure = !_obscure),
@@ -123,9 +125,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               .animate()
               .fadeIn(delay: 600.ms),
           const SizedBox(height: 20),
-          const Text(
+          Text(
             'Demo: admin@dineops.com / Admin@123',
-            style: TextStyle(color: textSecondary, fontSize: 11),
+            style: TextStyle(color: bc.textLo, fontSize: 11),
             textAlign: TextAlign.center,
           ),
         ],
@@ -164,32 +166,35 @@ class _InputField extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => TextField(
-        controller: controller,
-        obscureText: obscure,
-        keyboardType: keyboardType,
-        style: const TextStyle(color: textPrimary, fontSize: 14),
-        decoration: InputDecoration(
-          labelText: label,
-          labelStyle: const TextStyle(color: textSecondary, fontSize: 13),
-          prefixIcon: Icon(icon, color: textSecondary, size: 20),
-          suffixIcon: suffix,
-          filled: true,
-          fillColor: slateCard,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: const BorderSide(color: dividerColor),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: const BorderSide(color: dividerColor),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: const BorderSide(color: copperAccent, width: 1.5),
-          ),
+  Widget build(BuildContext context) {
+    final bc = BrandColors.of(context);
+    return TextField(
+      controller: controller,
+      obscureText: obscure,
+      keyboardType: keyboardType,
+      style: TextStyle(color: bc.textHi, fontSize: 14),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: TextStyle(color: bc.textLo, fontSize: 13),
+        prefixIcon: Icon(icon, color: bc.textLo, size: 20),
+        suffixIcon: suffix,
+        filled: true,
+        fillColor: bc.card,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: bc.divider),
         ),
-      );
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: bc.divider),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: copperAccent, width: 1.5),
+        ),
+      ),
+    );
+  }
 }
 
 class _LoginButton extends StatelessWidget {
