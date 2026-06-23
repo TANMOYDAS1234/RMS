@@ -60,6 +60,11 @@ dependencies:
   # ships transitively but the analyzer needs it as a direct dep to resolve
   # `package:js/js_util.dart` for static checks.
   js: ^0.6.7
+  # Inline 3D preview on the admin menu card. Loads the existing
+  # /ar.html (model-viewer) inside a WebView so the admin sees the
+  # uploaded GLB rotating on the card itself instead of having to
+  # tap "View" and open a new tab. Adds ~5MB to the Android APK.
+  webview_flutter: ^4.10.0
 
 dev_dependencies:
   flutter_test:

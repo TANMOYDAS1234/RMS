@@ -163,6 +163,7 @@ class _TableQrSheetState extends ConsumerState<TableQrSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final bc = BrandColors.of(context);
     return Padding(
       padding: EdgeInsets.fromLTRB(
           20, 20, 20, MediaQuery.of(context).viewInsets.bottom + 24),
@@ -170,20 +171,20 @@ class _TableQrSheetState extends ConsumerState<TableQrSheet> {
         Container(
           width: 36, height: 4,
           decoration: BoxDecoration(
-            color: textSecondary.withValues(alpha: 0.4),
+            color: bc.textLo.withValues(alpha: 0.4),
             borderRadius: BorderRadius.circular(2),
           ),
         ),
         const SizedBox(height: 14),
         Text('Table ${widget.tableLabel} QR',
-            style: const TextStyle(
-                color: textPrimary,
+            style: TextStyle(
+                color: bc.textHi,
                 fontSize: 18,
                 fontWeight: FontWeight.w800)),
         const SizedBox(height: 4),
-        const Text(
+        Text(
             'Print this and stick it on the table. Customers scan with their phone camera — no app install required.',
-            style: TextStyle(color: textSecondary, fontSize: 12),
+            style: TextStyle(color: bc.textLo, fontSize: 12),
             textAlign: TextAlign.center),
         const SizedBox(height: 20),
         // RepaintBoundary so we can render the white-on-black QR to PNG
@@ -212,14 +213,14 @@ class _TableQrSheetState extends ConsumerState<TableQrSheet> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: slateSurface,
+            color: bc.surface,
             borderRadius: BorderRadius.circular(10),
           ),
           child: Row(children: [
             Expanded(
               child: Text(_url,
-                  style: const TextStyle(
-                      color: textSecondary, fontSize: 11),
+                  style: TextStyle(
+                      color: bc.textLo, fontSize: 11),
                   overflow: TextOverflow.ellipsis),
             ),
             IconButton(
@@ -237,8 +238,8 @@ class _TableQrSheetState extends ConsumerState<TableQrSheet> {
               icon: const Icon(Icons.share_outlined, size: 16),
               label: const Text('Share PNG'),
               style: OutlinedButton.styleFrom(
-                foregroundColor: textPrimary,
-                side: BorderSide(color: textSecondary.withValues(alpha: 0.5)),
+                foregroundColor: bc.textHi,
+                side: BorderSide(color: bc.textLo.withValues(alpha: 0.5)),
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 textStyle: const TextStyle(
                     fontSize: 12, fontWeight: FontWeight.w800),

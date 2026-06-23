@@ -13,6 +13,7 @@ import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 import '../../core/config/app_config.dart';
 import '../../core/config/app_theme.dart';
 import '../../core/network/dio_client.dart';
@@ -4430,6 +4431,12 @@ class _MenuItemCard extends ConsumerWidget {
         : 0;
     final fullImageUrl = imageUrl != null ? '${AppConfig.baseUrl}$imageUrl?v=$v' : null;
 
+    // Full URL for the GLB model — the inline 3D preview WebView (added
+    // below the photo when glbUrl is set) needs the absolute URL because
+    // /ar.html, model-viewer, and the GLB serve are all reached over the
+    // same backend origin.
+    final fullGlbUrl = glbUrl != null ? '${AppConfig.baseUrl}$glbUrl' : null;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
@@ -4447,14 +4454,27 @@ class _MenuItemCard extends ConsumerWidget {
                   ? CachedNetworkImage(
                       imageUrl: fullImageUrl, height: 130, width: double.infinity, fit: BoxFit.cover,
                       placeholder: (_, __) => Container(height: 130, color: slateSurface),
+                      // Show the no-photo placeholder if the GET fails —
+                      // happens when the backend has imageUrl set but
+                      // imageData is missing/corrupt, or during a Render
+                      // cold start. Tapping Photo re-uploads.
                       errorWidget: (_, __, ___) => _placeholder(),
                     )
                   : _placeholder(),
               Positioned(
                 bottom: 8, right: 8,
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  _MediaBtn(icon: Icons.add_photo_alternate_outlined, label: 'Photo',
-                      onTap: () => _uploadImage(context, ref, id)),
+                  // Photo button — turns copper-filled with "Photo ✓"
+                  // when an imageUrl is on file so admin sees at a glance
+                  // whether the upload landed. Re-tap to replace.
+                  _MediaBtn(
+                    icon: imageUrl != null
+                        ? Icons.check_circle
+                        : Icons.add_photo_alternate_outlined,
+                    label: imageUrl != null ? 'Photo ✓' : 'Photo',
+                    active: imageUrl != null,
+                    onTap: () => _uploadImage(context, ref, id),
+                  ),
                   const SizedBox(width: 6),
                   _MediaBtn(icon: Icons.view_in_ar_outlined, label: glbUrl != null ? '3D ✓' : '3D',
                       active: glbUrl != null,
@@ -4495,6 +4515,16 @@ class _MenuItemCard extends ConsumerWidget {
             ],
           ),
         ),
+        // Inline 3D preview — only renders when a glb upload exists.
+        // Loads /ar.html (model-viewer) inside a WebView with autoplay
+        // rotation so the admin can verify the uploaded model without
+        // having to tap a button or leave the screen. Same content the
+        // customer eventually sees from the QR menu.
+        if (fullGlbUrl != null)
+          _Inline3dPreview(
+            modelUrl: fullGlbUrl,
+            itemName: (item['name'] as String?) ?? 'Item',
+          ),
         Padding(
           padding: const EdgeInsets.all(12),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -4619,8 +4649,18 @@ class _MenuItemCard extends ConsumerWidget {
   }
 
   Widget _placeholder() => Container(
-        height: 130, width: double.infinity, color: slateSurface,
-        child: const Icon(Icons.restaurant_outlined, color: textSecondary, size: 36),
+        height: 130,
+        width: double.infinity,
+        color: slateSurface,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: const [
+            Icon(Icons.add_a_photo_outlined, color: copperAccent, size: 32),
+            SizedBox(height: 6),
+            Text("No photo yet — tap 'Photo' to upload",
+                style: TextStyle(color: textSecondary, fontSize: 11)),
+          ],
+        ),
       );
 
   Future<void> _uploadGlb(BuildContext context, WidgetRef ref, String id) async {
@@ -4708,6 +4748,81 @@ class _MenuItemCard extends ConsumerWidget {
     } catch (e) {
       if (context.mounted) _showError(context, describeApiError(e));
     }
+  }
+}
+
+/// Inline WebView that loads /ar.html for the supplied GLB. Used on
+/// the admin menu card so the uploaded 3D model renders directly under
+/// the photo instead of forcing the admin into a separate AR-viewer
+/// tab. The ar.html page already wraps a <model-viewer> element and
+/// auto-rotates when ?model=… is supplied, so the WebView is a thin
+/// shell — no JS bridge needed.
+class _Inline3dPreview extends StatefulWidget {
+  final String modelUrl;
+  final String itemName;
+  const _Inline3dPreview({required this.modelUrl, required this.itemName});
+
+  @override
+  State<_Inline3dPreview> createState() => _Inline3dPreviewState();
+}
+
+class _Inline3dPreviewState extends State<_Inline3dPreview> {
+  late final WebViewController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    final encodedModel = Uri.encodeComponent(widget.modelUrl);
+    final encodedName = Uri.encodeComponent(widget.itemName);
+    final viewerUrl = '${AppConfig.baseUrl}/ar.html'
+        '?model=$encodedModel&name=$encodedName&autoplay=1';
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(slateBg)
+      ..loadRequest(Uri.parse(viewerUrl));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 220,
+      decoration: BoxDecoration(
+        color: slateBg,
+        border: Border(
+          top: BorderSide(color: dividerColor),
+          bottom: BorderSide(color: dividerColor),
+        ),
+      ),
+      child: Stack(children: [
+        // The model-viewer page paints its own bg; the wrapper colour
+        // matches so the load gap isn't a jarring colour flash.
+        WebViewWidget(controller: _controller),
+        // Small "3D PREVIEW" pill so it's obvious what the embedded
+        // canvas represents — without it the rotating model looks like
+        // an oddly-placed image.
+        Positioned(
+          top: 8,
+          left: 8,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.55),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: const Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.view_in_ar, size: 11, color: copperAccent),
+              SizedBox(width: 4),
+              Text('3D PREVIEW',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1)),
+            ]),
+          ),
+        ),
+      ]),
+    );
   }
 }
 
