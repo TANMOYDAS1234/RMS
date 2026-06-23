@@ -2544,6 +2544,97 @@ class _OrphanItemsFixState extends ConsumerState<_OrphanItemsFix> {
   }
 }
 
+// Spawned by the Add Branch flow's success snackbar — lets the admin
+// seed the new branch with its head manager immediately rather than
+// having to navigate to the Staff tab and re-find the branch in a
+// dropdown. Manager only (role-locked); admin can add other roles
+// from the Staff tab.
+class _InviteManagerSheet extends ConsumerStatefulWidget {
+  final String branchId;
+  final String branchName;
+  const _InviteManagerSheet({required this.branchId, required this.branchName});
+  @override
+  ConsumerState<_InviteManagerSheet> createState() => _InviteManagerSheetState();
+}
+
+class _InviteManagerSheetState extends ConsumerState<_InviteManagerSheet> {
+  final _nameCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  final _pwdCtrl = TextEditingController();
+  late final String _idempotencyKey = newIdempotencyKey(
+      'invite-mgr-${widget.branchId}');
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _emailCtrl.dispose();
+    _pwdCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final name = _nameCtrl.text.trim();
+    final email = _emailCtrl.text.trim();
+    final pwd = _pwdCtrl.text;
+    if (name.isEmpty || email.isEmpty || pwd.length < 6) {
+      _showError(context, 'Name, email, and a 6+ char password are required.');
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      final dio = createDioClient(ref.read(authProvider).token);
+      await dio.post('/users', data: {
+        'name': name,
+        'email': email,
+        'password': pwd,
+        'role': 'manager',
+        'branchId': widget.branchId,
+      }, options: Options(headers: {'Idempotency-Key': _idempotencyKey}));
+      ref.invalidate(adminStaffProvider);
+      if (mounted) {
+        Navigator.pop(context);
+        _showSuccess(context,
+            'Manager "$name" invited to ${widget.branchName}.');
+      }
+    } catch (e) {
+      if (mounted) _showError(context, describeApiError(e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: EdgeInsets.fromLTRB(
+            24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 24),
+        child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Invite manager to ${widget.branchName}',
+                  style: const TextStyle(
+                      color: textPrimary,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700)),
+              const SizedBox(height: 16),
+              _InputField(ctrl: _nameCtrl, label: 'Full Name'),
+              const SizedBox(height: 10),
+              _InputField(
+                  ctrl: _emailCtrl,
+                  label: 'Email',
+                  keyboardType: TextInputType.emailAddress),
+              const SizedBox(height: 10),
+              _InputField(ctrl: _pwdCtrl, label: 'Initial Password', obscure: true),
+              const SizedBox(height: 16),
+              _PrimaryButton(
+                label: _busy ? 'Inviting…' : 'Send invite',
+                onTap: _busy ? () {} : _submit,
+              ),
+            ]),
+      );
+}
+
 class _BranchPickerSkeleton extends StatelessWidget {
   const _BranchPickerSkeleton();
   @override
@@ -2814,8 +2905,15 @@ class _AddBranchSheetState extends ConsumerState<_AddBranchSheet> {
   late final TextEditingController _nameCtrl;
   late final TextEditingController _slugCtrl;
   late final TextEditingController _addrCtrl;
+  late final TextEditingController _gstCtrl;
+  late final TextEditingController _overdueCtrl;
   late final String _idempotencyKey;
   bool _submitting = false;
+  // Local validation errors per field so the user sees the issue inline
+  // instead of a vague 400 / Server hiccup bubbling up from the API.
+  String? _nameError;
+  String? _slugError;
+  String? _addrError;
 
   @override
   void initState() {
@@ -2823,6 +2921,8 @@ class _AddBranchSheetState extends ConsumerState<_AddBranchSheet> {
     _nameCtrl = TextEditingController();
     _slugCtrl = TextEditingController();
     _addrCtrl = TextEditingController();
+    _gstCtrl = TextEditingController(text: '18');
+    _overdueCtrl = TextEditingController(text: '15');
     _idempotencyKey = newIdempotencyKey('create-branch');
   }
 
@@ -2831,15 +2931,43 @@ class _AddBranchSheetState extends ConsumerState<_AddBranchSheet> {
     _nameCtrl.dispose();
     _slugCtrl.dispose();
     _addrCtrl.dispose();
+    _gstCtrl.dispose();
+    _overdueCtrl.dispose();
     super.dispose();
+  }
+
+  // Slugs end up in QR URLs; we keep them URL-safe by rejecting any
+  // character outside lowercase alphanumerics + dashes. Cheaper to fail
+  // here than to ship a non-routable QR.
+  static final _slugRe = RegExp(r'^[a-z0-9-]+$');
+
+  bool _validate() {
+    setState(() {
+      _nameError = _nameCtrl.text.trim().isEmpty ? 'Name is required.' : null;
+      _addrError = _addrCtrl.text.trim().isEmpty ? 'Address is required.' : null;
+      final slug = _slugCtrl.text.trim();
+      if (slug.isEmpty) {
+        _slugError = 'Slug is required.';
+      } else if (!_slugRe.hasMatch(slug)) {
+        _slugError = 'Use lowercase letters, numbers, and dashes only.';
+      } else {
+        _slugError = null;
+      }
+    });
+    return _nameError == null && _slugError == null && _addrError == null;
   }
 
   Future<void> _submit() async {
     if (_submitting) return;
+    if (!_validate()) return;
     setState(() => _submitting = true);
     try {
       final dio = createDioClient(ref.read(authProvider).token);
-      await dio.post(
+      // Backend's create DTO accepts only name/address/slug today, so
+      // we post those first and then PATCH the optional GST + overdue
+      // values to avoid widening the DTO before the BE catches up.
+      // Two-step is fine because both calls are idempotent.
+      final res = await dio.post(
         '/branches',
         data: {
           'name': _nameCtrl.text.trim(),
@@ -2848,13 +2976,67 @@ class _AddBranchSheetState extends ConsumerState<_AddBranchSheet> {
         },
         options: Options(headers: {'Idempotency-Key': _idempotencyKey}),
       );
+      final newBranchId = (res.data['_id'] ?? res.data['id'])?.toString() ?? '';
+
+      final gstPct = double.tryParse(_gstCtrl.text);
+      final overdue = int.tryParse(_overdueCtrl.text);
+      if (newBranchId.isNotEmpty && (gstPct != null || overdue != null)) {
+        try {
+          await dio.patch(
+            '/branches/$newBranchId',
+            data: {
+              if (gstPct != null) 'gstRate': gstPct / 100,
+              if (overdue != null) 'overdueAfterMinutes': overdue,
+            },
+            options: Options(headers: {
+              'Idempotency-Key': '$_idempotencyKey-tune',
+            }),
+          );
+        } catch (_) {
+          // Tunables aren't critical — the branch exists; admin can
+          // fix the rate via Edit if this second hop hit a glitch.
+        }
+      }
+
       ref.invalidate(_branchesProvider);
-      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        Navigator.pop(context);
+        // Success confirmation + "Add manager?" action so the admin
+        // can immediately seed the new branch with its head manager.
+        final messenger = ScaffoldMessenger.of(context);
+        messenger.showSnackBar(SnackBar(
+          backgroundColor: emerald,
+          duration: const Duration(seconds: 6),
+          content: Text('Branch "${_nameCtrl.text.trim()}" created.'),
+          action: SnackBarAction(
+            label: 'Add manager',
+            textColor: Colors.white,
+            onPressed: () {
+              messenger.hideCurrentSnackBar();
+              _openInviteManagerSheet(newBranchId, _nameCtrl.text.trim());
+            },
+          ),
+        ));
+      }
     } catch (e) {
       if (mounted) _showError(context, describeApiError(e));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  void _openInviteManagerSheet(String branchId, String branchName) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: slateCard,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (_) => _InviteManagerSheet(
+        branchId: branchId,
+        branchName: branchName,
+      ),
+    );
   }
 
   @override
@@ -2863,11 +3045,19 @@ class _AddBranchSheetState extends ConsumerState<_AddBranchSheet> {
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Text('Add Branch', style: TextStyle(color: textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
           const SizedBox(height: 16),
-          _InputField(ctrl: _nameCtrl, label: 'Branch Name'),
+          _InputField(ctrl: _nameCtrl, label: 'Branch Name', errorText: _nameError),
           const SizedBox(height: 10),
-          _InputField(ctrl: _slugCtrl, label: 'Slug (e.g. main-branch)'),
+          _InputField(ctrl: _slugCtrl, label: 'Slug (e.g. main-branch)', errorText: _slugError),
           const SizedBox(height: 10),
-          _InputField(ctrl: _addrCtrl, label: 'Address'),
+          _InputField(ctrl: _addrCtrl, label: 'Address', errorText: _addrError),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(child: _InputField(ctrl: _gstCtrl, label: 'GST Rate (%)',
+                keyboardType: const TextInputType.numberWithOptions(decimal: true))),
+            const SizedBox(width: 10),
+            Expanded(child: _InputField(ctrl: _overdueCtrl, label: 'Overdue after (min)',
+                keyboardType: TextInputType.number)),
+          ]),
           const SizedBox(height: 16),
           _PrimaryButton(
             label: _submitting ? 'Creating…' : 'Create Branch',
@@ -2920,35 +3110,7 @@ class _BranchCard extends ConsumerWidget {
           ),
           const SizedBox(width: 4),
           GestureDetector(
-            onTap: () => showDialog(
-              context: context,
-              builder: (_) => AlertDialog(
-                backgroundColor: slateCard,
-                title: const Text('Delete Branch?', style: TextStyle(color: textPrimary)),
-                content: Text('Permanently delete "${branch['name'] ?? ''}". This cannot be undone.',
-                    style: const TextStyle(color: textSecondary)),
-                actions: [
-                  TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel', style: TextStyle(color: textSecondary))),
-                  TextButton(
-                    onPressed: () async {
-                      Navigator.pop(context);
-                      try {
-                        final dio = createDioClient(ref.read(authProvider).token);
-                        await dio.delete(
-                          '/branches/$id',
-                          options: Options(headers: {'Idempotency-Key': newIdempotencyKey('del-branch-$id')}),
-                        );
-                        ref.invalidate(_branchesProvider);
-                        if (context.mounted) _showSuccess(context, 'Branch deleted');
-                      } catch (e) {
-                        if (context.mounted) _showError(context, describeApiError(e));
-                      }
-                    },
-                    child: const Text('Delete', style: TextStyle(color: crimson, fontWeight: FontWeight.w700)),
-                  ),
-                ],
-              ),
-            ),
+            onTap: () => _confirmAndDelete(context, ref, id, branch['name'] ?? ''),
             child: Container(
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(color: crimson.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(8)),
@@ -3023,6 +3185,136 @@ class _BranchCard extends ConsumerWidget {
     } catch (e) {
       if (context.mounted) _showError(context, describeApiError(e));
     }
+  }
+
+  // Two-step delete: first hit GET /deletion-preview to count dependent
+  // users/menu/tables/orders/bills/ingredients, show the admin what's
+  // about to disappear, then either delete cleanly (no dependents) or
+  // require explicit cascade confirmation. Without this, tapping the
+  // trash icon used to silently orphan an entire branch's data.
+  Future<void> _confirmAndDelete(
+      BuildContext context, WidgetRef ref, String id, String name) async {
+    Map<String, dynamic>? preview;
+    try {
+      final dio = createDioClient(ref.read(authProvider).token);
+      final res = await dio.get('/branches/$id/deletion-preview');
+      preview = Map<String, dynamic>.from(res.data);
+    } catch (e) {
+      if (context.mounted) _showError(context, describeApiError(e));
+      return;
+    }
+    if (!context.mounted) return;
+
+    final counts = Map<String, dynamic>.from(preview['counts'] ?? {});
+    final total = (preview['total'] as num?)?.toInt() ?? 0;
+    final hasDependents = preview['hasDependents'] as bool? ?? false;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: slateCard,
+        title: Text(
+          hasDependents ? 'Delete "$name" and all linked data?' : 'Delete "$name"?',
+          style: const TextStyle(color: textPrimary, fontSize: 15),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (hasDependents)
+              Text(
+                'This branch has $total linked records that will be permanently deleted with it:',
+                style: const TextStyle(color: crimson, fontSize: 12),
+              )
+            else
+              const Text(
+                'No linked records. The branch will be removed cleanly.',
+                style: TextStyle(color: textSecondary, fontSize: 12),
+              ),
+            if (hasDependents) ...[
+              const SizedBox(height: 8),
+              _DepCountRow('Users', counts['users']),
+              _DepCountRow('Menu items', counts['menus']),
+              _DepCountRow('Tables', counts['tables']),
+              _DepCountRow('Orders', counts['orders']),
+              _DepCountRow('Bills', counts['bills']),
+              _DepCountRow('Ingredients', counts['ingredients']),
+              const SizedBox(height: 8),
+              const Text(
+                'This cannot be undone.',
+                style: TextStyle(
+                    color: crimson, fontSize: 11, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel',
+                  style: TextStyle(color: textSecondary))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              hasDependents ? 'Delete all $total + branch' : 'Delete',
+              style: const TextStyle(
+                  color: crimson, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+
+    try {
+      final dio = createDioClient(ref.read(authProvider).token);
+      await dio.delete(
+        '/branches/$id',
+        queryParameters: hasDependents ? {'cascade': 'true'} : null,
+        options: Options(headers: {
+          'Idempotency-Key': newIdempotencyKey('del-branch-$id'),
+        }),
+      );
+      ref.invalidate(_branchesProvider);
+      if (context.mounted) {
+        _showSuccess(context,
+            hasDependents
+                ? 'Deleted branch + $total linked records.'
+                : 'Branch deleted.');
+      }
+    } catch (e) {
+      if (context.mounted) _showError(context, describeApiError(e));
+    }
+  }
+}
+
+class _DepCountRow extends StatelessWidget {
+  final String label;
+  final dynamic count;
+  const _DepCountRow(this.label, this.count);
+  @override
+  Widget build(BuildContext context) {
+    final n = (count as num?)?.toInt() ?? 0;
+    final emphasised = n > 0;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 1),
+      child: Row(children: [
+        Icon(
+          emphasised ? Icons.warning_amber_outlined : Icons.check_circle_outline,
+          size: 12,
+          color: emphasised ? crimson : emerald,
+        ),
+        const SizedBox(width: 6),
+        Text(label,
+            style: const TextStyle(color: textSecondary, fontSize: 12)),
+        const Spacer(),
+        Text('$n',
+            style: TextStyle(
+                color: emphasised ? crimson : textSecondary,
+                fontSize: 12,
+                fontWeight: FontWeight.w700)),
+      ]),
+    );
   }
 }
 
@@ -4572,7 +4864,14 @@ class _InputField extends StatelessWidget {
   final String label;
   final bool obscure;
   final TextInputType? keyboardType;
-  const _InputField({required this.ctrl, required this.label, this.obscure = false, this.keyboardType});
+  final String? errorText;
+  const _InputField({
+    required this.ctrl,
+    required this.label,
+    this.obscure = false,
+    this.keyboardType,
+    this.errorText,
+  });
 
   @override
   Widget build(BuildContext context) => TextField(
@@ -4580,7 +4879,7 @@ class _InputField extends StatelessWidget {
         obscureText: obscure,
         keyboardType: keyboardType,
         style: const TextStyle(color: textPrimary),
-        decoration: _inputDec(label),
+        decoration: _inputDec(label).copyWith(errorText: errorText),
       );
 }
 
