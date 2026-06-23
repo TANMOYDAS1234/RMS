@@ -35,6 +35,12 @@ class AppConfig {
   static const Duration connectTimeout = Duration(seconds: 60);
   static const Duration receiveTimeout = Duration(seconds: 60);
   static const Duration pollInterval   = Duration(seconds: 8);
-  static const int maxRetries          = 3;
+  // Cold-start on Render's free tier takes 30-50s after the dyno sleeps.
+  // 3 retries × 2s/4s/6s = 12s of headroom only blanket-covered a warm
+  // backend; cold restarts still leaked the "Server hiccup" snackbar.
+  // Bumping to 5 with the same linear backoff (2/4/6/8/10s) gives ~30s
+  // of background recovery, which covers the typical cold-start window
+  // before the user ever sees an error.
+  static const int maxRetries          = 5;
   static const Duration retryBaseDelay = Duration(seconds: 2);
 }

@@ -2188,6 +2188,20 @@ class AdminInventoryTab extends ConsumerWidget {
       });
     });
 
+    // Admin sees every branch's inventory (scopeFilter returns {} for
+    // admin), so we fetch the branches list once and build a lookup
+    // map for the per-card label. Mistakes here would render the
+    // wrong branch — that's why the lookup happens once at this level
+    // instead of inside each card.
+    final branchesAsync = ref.watch(_branchesProvider);
+    final branchNameById = <String, String>{};
+    branchesAsync.whenData((branches) {
+      for (final b in branches) {
+        final id = (b['_id'] ?? b['id'])?.toString() ?? '';
+        if (id.isNotEmpty) branchNameById[id] = (b['name'] as String?) ?? id;
+      }
+    });
+
     return Stack(
       children: [
         invAsync.when(
@@ -2199,6 +2213,13 @@ class AdminInventoryTab extends ConsumerWidget {
               final thresh = (i['lowStockThreshold'] as num?)?.toDouble() ?? 0;
               return cur <= thresh;
             }).toList();
+            // Branch count from the fetched inventory itself — covers
+            // edge case where the items reference a branch the
+            // branchesProvider hasn't yet loaded.
+            final branchIdsInUse = items
+                .map((i) => (i['branchId'] ?? '').toString())
+                .where((s) => s.isNotEmpty)
+                .toSet();
 
             return ListView(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
@@ -2236,8 +2257,35 @@ class AdminInventoryTab extends ConsumerWidget {
                   _SmallStat('Low Stock', '${lowItems.length}', crimson),
                   _SmallStat('OK', '${items.length - lowItems.length}', emerald),
                 ]),
+                const SizedBox(height: 8),
+                Text(
+                  'Across ${branchIdsInUse.length} branch${branchIdsInUse.length == 1 ? '' : 'es'}',
+                  style: const TextStyle(color: textSecondary, fontSize: 11),
+                ),
+                // Orphan-items hint: legacy seed inserted ingredients
+                // without a branchId and they would otherwise live in
+                // limbo (never on any per-branch dashboard, never
+                // broadcast over WS, never counted toward COGS). When
+                // we detect orphans AND know at least one branch,
+                // surface a one-tap fix.
+                if (items.any((i) => (i['branchId'] ?? '').toString().isEmpty))
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: _OrphanItemsFix(
+                      orphanCount: items
+                          .where((i) => (i['branchId'] ?? '').toString().isEmpty)
+                          .length,
+                    ),
+                  ),
                 const SizedBox(height: 16),
-                ...items.map((item) => _AdminInventoryCard(item: item)),
+                ...items.map((item) => _AdminInventoryCard(
+                      item: item,
+                      branchLabel: branchNameById[
+                              (item['branchId'] ?? '').toString()] ??
+                          (item['branchId']?.toString().isEmpty ?? true
+                              ? null
+                              : 'Branch'),
+                    )),
               ],
             );
           },
@@ -2290,63 +2338,235 @@ class AdminInventoryTab extends ConsumerWidget {
     final stockCtrl = TextEditingController();
     final threshCtrl = TextEditingController();
     final costCtrl = TextEditingController();
+    // Admin must pick which branch the ingredient belongs to. We don't
+    // default to the first one — silent defaults are how you end up
+    // with stock "appearing" at the wrong branch and screwing up
+    // per-branch COGS days later. Surface the choice explicitly.
+    String? selectedBranchId;
 
     showModalBottomSheet(
       context: context,
       backgroundColor: slateCard,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Add Inventory Item', style: TextStyle(color: textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 16),
-          _InputField(ctrl: nameCtrl, label: 'Name (e.g. Tomatoes)'),
-          const SizedBox(height: 10),
-          _InputField(ctrl: unitCtrl, label: 'Unit (e.g. kg, litre, piece)'),
-          const SizedBox(height: 10),
-          Row(children: [
-            Expanded(child: _InputField(ctrl: stockCtrl, label: 'Current Stock', keyboardType: const TextInputType.numberWithOptions(decimal: true))),
-            const SizedBox(width: 10),
-            Expanded(child: _InputField(ctrl: threshCtrl, label: 'Low Threshold', keyboardType: const TextInputType.numberWithOptions(decimal: true))),
-          ]),
-          const SizedBox(height: 10),
-          _InputField(ctrl: costCtrl, label: 'Cost per Unit (₹)', keyboardType: const TextInputType.numberWithOptions(decimal: true)),
-          const SizedBox(height: 16),
-          _PrimaryButton(
-            label: 'Create Item',
-            onTap: () async {
-              final name = nameCtrl.text.trim();
-              final unit = unitCtrl.text.trim();
-              final stock = double.tryParse(stockCtrl.text);
-              final thresh = double.tryParse(threshCtrl.text);
-              if (name.isEmpty || unit.isEmpty || stock == null || thresh == null) return;
-              Navigator.pop(ctx);
-              try {
-                final dio = createDioClient(ref.read(authProvider).token);
-                await dio.post('/inventory', data: {
-                  'name': name,
-                  'unit': unit,
-                  'currentStock': stock,
-                  'lowStockThreshold': thresh,
-                  'costPerUnit': double.tryParse(costCtrl.text) ?? 0,
-                }, options: Options(headers: {'Idempotency-Key': newIdempotencyKey('inv-create')}));
-                ref.invalidate(_inventoryAdminProvider);
-                if (context.mounted) _showSuccess(context, 'Item added');
-              } catch (e) {
-                if (context.mounted) _showError(context, describeApiError(e));
-              }
-            },
-          ),
-        ]),
-      ),
+      builder: (ctx) => Consumer(builder: (ctx, ref, _) {
+        final branchesAsync = ref.watch(_branchesProvider);
+        return Padding(
+          padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
+          child: StatefulBuilder(builder: (ctx, setSheetState) {
+            return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Add Inventory Item', style: TextStyle(color: textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 16),
+              branchesAsync.when(
+                loading: () => const _BranchPickerSkeleton(),
+                error: (e, _) => Text('Branches: ${describeApiError(e)}',
+                    style: const TextStyle(color: crimson, fontSize: 12)),
+                data: (branches) => Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: slateSurface,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: dividerColor),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: selectedBranchId,
+                      isExpanded: true,
+                      hint: const Text('Branch (required)',
+                          style: TextStyle(color: textSecondary, fontSize: 13)),
+                      dropdownColor: slateCard,
+                      iconEnabledColor: copperAccent,
+                      style: const TextStyle(color: textPrimary, fontSize: 13),
+                      items: branches.map((b) {
+                        final id = (b['_id'] ?? b['id']).toString();
+                        final name = (b['name'] as String?) ?? id;
+                        return DropdownMenuItem<String>(value: id, child: Text(name));
+                      }).toList(),
+                      onChanged: (v) => setSheetState(() => selectedBranchId = v),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              _InputField(ctrl: nameCtrl, label: 'Name (e.g. Tomatoes)'),
+              const SizedBox(height: 10),
+              _InputField(ctrl: unitCtrl, label: 'Unit (e.g. kg, litre, piece)'),
+              const SizedBox(height: 10),
+              Row(children: [
+                Expanded(child: _InputField(ctrl: stockCtrl, label: 'Current Stock', keyboardType: const TextInputType.numberWithOptions(decimal: true))),
+                const SizedBox(width: 10),
+                Expanded(child: _InputField(ctrl: threshCtrl, label: 'Low Threshold', keyboardType: const TextInputType.numberWithOptions(decimal: true))),
+              ]),
+              const SizedBox(height: 10),
+              _InputField(ctrl: costCtrl, label: 'Cost per Unit (₹)', keyboardType: const TextInputType.numberWithOptions(decimal: true)),
+              const SizedBox(height: 16),
+              _PrimaryButton(
+                label: 'Create Item',
+                onTap: () async {
+                  final name = nameCtrl.text.trim();
+                  final unit = unitCtrl.text.trim();
+                  final stock = double.tryParse(stockCtrl.text);
+                  final thresh = double.tryParse(threshCtrl.text);
+                  if (selectedBranchId == null) {
+                    _showError(context, 'Pick a branch first.');
+                    return;
+                  }
+                  if (name.isEmpty || unit.isEmpty || stock == null || thresh == null) {
+                    _showError(context, 'Fill name, unit, current stock, and low threshold.');
+                    return;
+                  }
+                  Navigator.pop(ctx);
+                  try {
+                    final dio = createDioClient(ref.read(authProvider).token);
+                    await dio.post('/inventory', data: {
+                      'name': name,
+                      'unit': unit,
+                      'currentStock': stock,
+                      'lowStockThreshold': thresh,
+                      'costPerUnit': double.tryParse(costCtrl.text) ?? 0,
+                      'branchId': selectedBranchId,
+                    }, options: Options(headers: {'Idempotency-Key': newIdempotencyKey('inv-create')}));
+                    ref.invalidate(_inventoryAdminProvider);
+                    if (context.mounted) _showSuccess(context, 'Item added');
+                  } catch (e) {
+                    if (context.mounted) _showError(context, describeApiError(e));
+                  }
+                },
+              ),
+            ]);
+          }),
+        );
+      }),
     );
   }
 }
 
+class _OrphanItemsFix extends ConsumerStatefulWidget {
+  final int orphanCount;
+  const _OrphanItemsFix({required this.orphanCount});
+  @override
+  ConsumerState<_OrphanItemsFix> createState() => _OrphanItemsFixState();
+}
+
+class _OrphanItemsFixState extends ConsumerState<_OrphanItemsFix> {
+  bool _busy = false;
+
+  Future<void> _run() async {
+    final branches = ref.read(_branchesProvider).asData?.value ?? const [];
+    if (branches.isEmpty) {
+      _showError(context, 'Create a branch before fixing orphan items.');
+      return;
+    }
+    // Pick which branch to home the orphans to. Show a sheet rather
+    // than silently defaulting — wrong choice ruins per-branch COGS.
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: slateCard,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Text('Assign orphan ingredients to…',
+                  style: TextStyle(
+                      color: textPrimary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700)),
+            ),
+            for (final b in branches)
+              ListTile(
+                leading: const Icon(Icons.store_outlined, color: copperAccent),
+                title: Text((b['name'] as String?) ?? '',
+                    style: const TextStyle(color: textPrimary, fontSize: 13)),
+                onTap: () => Navigator.pop(ctx,
+                    ((b['_id'] ?? b['id'])?.toString()) ?? ''),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (picked == null || picked.isEmpty) return;
+
+    setState(() => _busy = true);
+    try {
+      final dio = createDioClient(ref.read(authProvider).token);
+      final res = await dio.post('/inventory/assign-orphans', data: {
+        'branchId': picked,
+      }, options: Options(headers: {
+        'Idempotency-Key': newIdempotencyKey('inv-orphan-fix'),
+      }));
+      final assigned = res.data['assigned'] ?? 0;
+      ref.invalidate(_inventoryAdminProvider);
+      if (mounted) _showSuccess(context, 'Re-homed $assigned orphan ingredient(s).');
+    } catch (e) {
+      if (mounted) _showError(context, describeApiError(e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: amber.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: amber.withValues(alpha: 0.3)),
+      ),
+      child: Row(children: [
+        const Icon(Icons.warning_amber_outlined, color: amber, size: 16),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            '${widget.orphanCount} ingredient(s) have no branch assigned. They won\'t appear on per-branch dashboards or fire live updates.',
+            style: const TextStyle(color: amber, fontSize: 11, height: 1.3),
+          ),
+        ),
+        TextButton(
+          onPressed: _busy ? null : _run,
+          style: TextButton.styleFrom(
+            foregroundColor: amber,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          child: Text(_busy ? 'Fixing…' : 'Fix',
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+        ),
+      ]),
+    );
+  }
+}
+
+class _BranchPickerSkeleton extends StatelessWidget {
+  const _BranchPickerSkeleton();
+  @override
+  Widget build(BuildContext context) => Container(
+        height: 48,
+        decoration: BoxDecoration(
+          color: slateSurface,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: const Center(
+          child: SizedBox(width: 14, height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2, color: copperAccent)),
+        ),
+      );
+}
+
 class _AdminInventoryCard extends ConsumerWidget {
   final Map<String, dynamic> item;
-  const _AdminInventoryCard({required this.item});
+  // Resolved branch name for this item, or null when the item's branchId
+  // doesn't match a known branch (shouldn't happen in practice; we
+  // collapse to nothing rather than show a raw ObjectId).
+  final String? branchLabel;
+  const _AdminInventoryCard({required this.item, this.branchLabel});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -2366,8 +2586,21 @@ class _AdminInventoryCard extends ConsumerWidget {
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Expanded(child: Text(item['name'] ?? '',
-              style: const TextStyle(color: textPrimary, fontSize: 13, fontWeight: FontWeight.w600))),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(item['name'] ?? '',
+                  style: const TextStyle(color: textPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
+              if (branchLabel != null) ...[
+                const SizedBox(height: 2),
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.store_mall_directory_outlined, size: 10, color: textSecondary),
+                  const SizedBox(width: 3),
+                  Text(branchLabel!,
+                      style: const TextStyle(color: textSecondary, fontSize: 10, fontWeight: FontWeight.w500)),
+                ]),
+              ],
+            ]),
+          ),
           if (isLow)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -2469,7 +2702,10 @@ class _AdminInventoryCard extends ConsumerWidget {
             label: 'Apply',
             onTap: () async {
               final delta = double.tryParse(ctrl.text);
-              if (delta == null) return;
+              if (delta == null) {
+                _showError(context, 'Enter a number (e.g. +10 or -5).');
+                return;
+              }
               Navigator.pop(ctx);
               try {
                 final dio = createDioClient(ref.read(authProvider).token);
@@ -2478,6 +2714,14 @@ class _AdminInventoryCard extends ConsumerWidget {
                   'reason': reasonCtrl.text.isEmpty ? 'Admin adjustment' : reasonCtrl.text,
                 }, options: Options(headers: {'Idempotency-Key': newIdempotencyKey('inv-adj-$id')}));
                 ref.invalidate(_inventoryAdminProvider);
+                // Success confirmation — without it, the sheet closed
+                // and the user saw no change (the WS broadcast also
+                // silently skips when branchId is null on legacy seed
+                // items), making it look broken.
+                if (context.mounted) {
+                  _showSuccess(context,
+                      '$name stock ${delta >= 0 ? '+' : ''}$delta applied.');
+                }
               } catch (e) {
                 if (context.mounted) _showError(context, describeApiError(e));
               }
