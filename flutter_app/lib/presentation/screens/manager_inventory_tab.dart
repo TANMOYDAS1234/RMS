@@ -190,33 +190,33 @@ class _ShortageSheetState extends ConsumerState<_ShortageSheet> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('Report Shortage — $name',
-                  style: const TextStyle(
-                      color: textPrimary,
+                  style: TextStyle(
+                      color: BrandColors.of(context).textHi,
                       fontSize: 15,
                       fontWeight: FontWeight.w700)),
               const SizedBox(height: 6),
               Text(
                 'Current: ${widget.item['currentStock']} ${widget.item['unit']} '
                 '(min: ${widget.item['lowStockThreshold']} ${widget.item['unit']})',
-                style: const TextStyle(color: textSecondary, fontSize: 12),
+                style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: _ctrl,
                 maxLines: 2,
-                style: const TextStyle(color: textPrimary),
+                style: TextStyle(color: BrandColors.of(context).textHi),
                 decoration: InputDecoration(
                   hintText: 'Describe the shortage (e.g. supplier delayed)',
                   hintStyle:
-                      const TextStyle(color: textSecondary, fontSize: 12),
+                      TextStyle(color: BrandColors.of(context).textLo, fontSize: 12),
                   filled: true,
                   fillColor: slateSurface,
                   border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: dividerColor)),
+                      borderSide: BorderSide(color: BrandColors.of(context).divider)),
                   enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: dividerColor)),
+                      borderSide: BorderSide(color: BrandColors.of(context).divider)),
                   focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                       borderSide: const BorderSide(color: copperAccent)),
@@ -283,7 +283,7 @@ class _Chip extends StatelessWidget {
                 style: TextStyle(
                     color: color, fontSize: 18, fontWeight: FontWeight.w800)),
             Text(label,
-                style: const TextStyle(color: textSecondary, fontSize: 10)),
+                style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 10)),
           ]),
         ),
       );
@@ -325,22 +325,22 @@ class _SearchBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) => TextField(
         onChanged: onChanged,
-        style: const TextStyle(color: textPrimary, fontSize: 13),
+        style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 13),
         decoration: InputDecoration(
           hintText: 'Search ingredients...',
-          hintStyle: const TextStyle(color: textSecondary, fontSize: 13),
+          hintStyle: TextStyle(color: BrandColors.of(context).textLo, fontSize: 13),
           prefixIcon:
-              const Icon(Icons.search, color: textSecondary, size: 18),
+              Icon(Icons.search, color: BrandColors.of(context).textLo, size: 18),
           filled: true,
-          fillColor: slateCard,
+          fillColor: BrandColors.of(context).card,
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: dividerColor)),
+              borderSide: BorderSide(color: BrandColors.of(context).divider)),
           enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: dividerColor)),
+              borderSide: BorderSide(color: BrandColors.of(context).divider)),
           focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: copperAccent)),
@@ -420,7 +420,7 @@ class _InventoryCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isLow ? crimson.withValues(alpha: 0.4) : dividerColor,
@@ -430,8 +430,8 @@ class _InventoryCard extends StatelessWidget {
         Row(children: [
           Expanded(
             child: Text(name,
-                style: const TextStyle(
-                    color: textPrimary,
+                style: TextStyle(
+                    color: BrandColors.of(context).textHi,
                     fontSize: 13,
                     fontWeight: FontWeight.w600)),
           ),
@@ -481,7 +481,7 @@ class _InventoryCard extends StatelessWidget {
                   fontWeight: FontWeight.w800)),
           const Spacer(),
           Text('Min: $thr $unit',
-              style: const TextStyle(color: textSecondary, fontSize: 11)),
+              style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11)),
         ]),
         const SizedBox(height: 8),
         ClipRRect(
@@ -520,16 +520,16 @@ class _EmptyState extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 40),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             Icon(Icons.inventory_2_outlined,
-                size: 48, color: textSecondary.withValues(alpha: 0.4)),
+                size: 48, color: BrandColors.of(context).textLo.withValues(alpha: 0.4)),
             const SizedBox(height: 12),
-            const Text('No items found',
+            Text('No items found',
                 style: TextStyle(
-                    color: textPrimary,
+                    color: BrandColors.of(context).textHi,
                     fontSize: 15,
                     fontWeight: FontWeight.w600)),
             const SizedBox(height: 4),
-            const Text('Try a different filter or search',
-                style: TextStyle(color: textSecondary, fontSize: 12)),
+            Text('Try a different filter or search',
+                style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12)),
           ]),
         ),
       );

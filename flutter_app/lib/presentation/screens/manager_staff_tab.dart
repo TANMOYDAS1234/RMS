@@ -110,8 +110,8 @@ class _StaffBody extends StatelessWidget {
                           letterSpacing: 1)),
                   const SizedBox(width: 8),
                   Text('${members.length}',
-                      style: const TextStyle(
-                          color: textSecondary, fontSize: 11)),
+                      style: TextStyle(
+                          color: BrandColors.of(context).textLo, fontSize: 11)),
                 ]),
               ),
               ...members.map((s) => _StaffCard(member: s)),
@@ -143,17 +143,17 @@ class _LeaderboardCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: copperAccent.withValues(alpha: 0.2)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Row(children: [
-          Icon(Icons.emoji_events_outlined, color: amber, size: 16),
-          SizedBox(width: 6),
+        Row(children: [
+          const Icon(Icons.emoji_events_outlined, color: amber, size: 16),
+          const SizedBox(width: 6),
           Text("Today's Top Performers",
               style: TextStyle(
-                  color: textPrimary,
+                  color: BrandColors.of(context).textHi,
                   fontSize: 13,
                   fontWeight: FontWeight.w700)),
         ]),
@@ -173,13 +173,13 @@ class _LeaderboardCard extends StatelessWidget {
               Expanded(child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(name,
-                    style: const TextStyle(
-                        color: textPrimary,
+                    style: TextStyle(
+                        color: BrandColors.of(context).textHi,
                         fontSize: 12,
                         fontWeight: FontWeight.w600)),
                 Text(role.toUpperCase(),
-                    style: const TextStyle(
-                        color: textSecondary, fontSize: 10)),
+                    style: TextStyle(
+                        color: BrandColors.of(context).textLo, fontSize: 10)),
               ])),
               Container(
                 padding: const EdgeInsets.symmetric(
@@ -229,7 +229,7 @@ class _StaffCard extends ConsumerWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isActive ? dividerColor : crimson.withValues(alpha: 0.2),
@@ -267,7 +267,7 @@ class _StaffCard extends ConsumerWidget {
               decoration: BoxDecoration(
                 color: isActive ? emerald : textSecondary,
                 shape: BoxShape.circle,
-                border: Border.all(color: slateCard, width: 1.5),
+                border: Border.all(color: BrandColors.of(context).card, width: 1.5),
               ),
             ),
           ),
@@ -278,12 +278,12 @@ class _StaffCard extends ConsumerWidget {
         Expanded(child: Column(
             crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(name,
-              style: const TextStyle(
-                  color: textPrimary,
+              style: TextStyle(
+                  color: BrandColors.of(context).textHi,
                   fontSize: 13,
                   fontWeight: FontWeight.w600)),
           Text(email,
-              style: const TextStyle(color: textSecondary, fontSize: 10),
+              style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 10),
               overflow: TextOverflow.ellipsis),
           const SizedBox(height: 4),
           Row(children: [
@@ -302,8 +302,8 @@ class _StaffCard extends ConsumerWidget {
             const SizedBox(width: 6),
             if (orders > 0)
               Text('$orders orders today',
-                  style: const TextStyle(
-                      color: textSecondary, fontSize: 10)),
+                  style: TextStyle(
+                      color: BrandColors.of(context).textLo, fontSize: 10)),
           ]),
         ])),
 
@@ -337,16 +337,16 @@ class _StaffCard extends ConsumerWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: slateSurface,
+                color: BrandColors.of(context).surface,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: dividerColor),
+                border: Border.all(color: BrandColors.of(context).divider),
               ),
-              child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(Icons.note_add_outlined, color: textSecondary, size: 12),
-                SizedBox(width: 4),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.note_add_outlined, color: BrandColors.of(context).textLo, size: 12),
+                const SizedBox(width: 4),
                 Text('Note',
                     style: TextStyle(
-                        color: textSecondary,
+                        color: BrandColors.of(context).textLo,
                         fontSize: 10,
                         fontWeight: FontWeight.w600)),
               ]),
@@ -428,27 +428,27 @@ class _StaffNoteSheetState extends ConsumerState<_StaffNoteSheet> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Add Note — ${widget.staffName}',
-                style: const TextStyle(
-                    color: textPrimary,
+                style: TextStyle(
+                    color: BrandColors.of(context).textHi,
                     fontSize: 15,
                     fontWeight: FontWeight.w700)),
             const SizedBox(height: 16),
             TextField(
               controller: _ctrl,
               maxLines: 3,
-              style: const TextStyle(color: textPrimary),
+              style: TextStyle(color: BrandColors.of(context).textHi),
               decoration: InputDecoration(
                 hintText: 'e.g. Late arrival, performance note...',
                 hintStyle:
-                    const TextStyle(color: textSecondary, fontSize: 12),
+                    TextStyle(color: BrandColors.of(context).textLo, fontSize: 12),
                 filled: true,
                 fillColor: slateSurface,
                 border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: dividerColor)),
+                    borderSide: BorderSide(color: BrandColors.of(context).divider)),
                 enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: dividerColor)),
+                    borderSide: BorderSide(color: BrandColors.of(context).divider)),
                 focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
                     borderSide: const BorderSide(color: copperAccent)),
@@ -506,7 +506,7 @@ class _SummaryChip extends StatelessWidget {
                 style: TextStyle(
                     color: color, fontSize: 18, fontWeight: FontWeight.w800)),
             Text(label,
-                style: const TextStyle(color: textSecondary, fontSize: 10)),
+                style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 10)),
           ]),
         ),
       );

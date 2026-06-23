@@ -84,7 +84,7 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
     final ready = orders.where((o) => o.status == OrderStatus.ready).length;
 
     return Scaffold(
-      backgroundColor: slateBg,
+      backgroundColor: BrandColors.of(context).bg,
       appBar: AppBar(
         title: const Text('KITCHEN DISPLAY'),
         bottom: PreferredSize(
@@ -141,7 +141,7 @@ class _WorkloadHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-      color: slateBg,
+      color: BrandColors.of(context).bg,
       child: Row(
         children: [
           Expanded(child: _Stat('Incoming', incoming, amber)),
@@ -178,8 +178,8 @@ class _Stat extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(label,
-                style: const TextStyle(
-                    color: textSecondary, fontSize: 11, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                    color: BrandColors.of(context).textLo, fontSize: 11, fontWeight: FontWeight.w600),
                 overflow: TextOverflow.ellipsis),
           ),
         ],
@@ -202,12 +202,12 @@ class _FilterBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: slateBg,
+      color: BrandColors.of(context).bg,
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
       child: Row(
         children: [
           for (final f in _Filter.values) ...[
-            _chip(f, _label(f), counts[f]),
+            _chip(context, f, _label(f), counts[f]),
             const SizedBox(width: 6),
           ],
         ],
@@ -222,23 +222,23 @@ class _FilterBar extends StatelessWidget {
         _Filter.ready => 'Ready',
       };
 
-  Widget _chip(_Filter f, String label, int? count) {
+  Widget _chip(BuildContext context, _Filter f, String label, int? count) {
     final selected = value == f;
     return GestureDetector(
       onTap: () => onChanged(f),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: selected ? copperAccent.withValues(alpha: 0.2) : slateCard,
+          color: selected ? copperAccent.withValues(alpha: 0.2) : BrandColors.of(context).card,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: selected ? copperAccent : dividerColor,
+            color: selected ? copperAccent : BrandColors.of(context).divider,
           ),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           Text(label,
               style: TextStyle(
-                  color: selected ? copperAccent : textPrimary,
+                  color: selected ? copperAccent : BrandColors.of(context).textHi,
                   fontSize: 11,
                   fontWeight: FontWeight.w700)),
           if (count != null && count > 0 && f != _Filter.all) ...[
@@ -246,12 +246,12 @@ class _FilterBar extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
               decoration: BoxDecoration(
-                color: textSecondary.withValues(alpha: 0.2),
+                color: BrandColors.of(context).textLo.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text('$count',
-                  style: const TextStyle(
-                      color: textPrimary, fontSize: 9, fontWeight: FontWeight.w700)),
+                  style: TextStyle(
+                      color: BrandColors.of(context).textHi, fontSize: 9, fontWeight: FontWeight.w700)),
             ),
           ],
         ]),
@@ -277,10 +277,10 @@ class _KitchenCard extends ConsumerWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isOverdue ? crimson.withValues(alpha: 0.6) : dividerColor,
+          color: isOverdue ? crimson.withValues(alpha: 0.6) : BrandColors.of(context).divider,
           width: isOverdue ? 2 : 1,
         ),
       ),
@@ -301,8 +301,8 @@ class _KitchenCard extends ConsumerWidget {
               Expanded(
                 child: Text(
                   '#${order.id.length > 8 ? order.id.substring(order.id.length - 6) : order.id}',
-                  style: const TextStyle(
-                      color: textPrimary,
+                  style: TextStyle(
+                      color: BrandColors.of(context).textHi,
                       fontWeight: FontWeight.w800,
                       fontSize: 13),
                   overflow: TextOverflow.ellipsis,
@@ -320,18 +320,18 @@ class _KitchenCard extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(children: [
-                    const Icon(Icons.table_restaurant_outlined,
-                        size: 12, color: textSecondary),
+                    Icon(Icons.table_restaurant_outlined,
+                        size: 12, color: BrandColors.of(context).textLo),
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text(order.tableLabel,
-                          style: const TextStyle(
-                              color: textSecondary, fontSize: 11),
+                          style: TextStyle(
+                              color: BrandColors.of(context).textLo, fontSize: 11),
                           overflow: TextOverflow.ellipsis),
                     ),
                     Text('${elapsed.inMinutes}m',
                         style: TextStyle(
-                          color: isOverdue ? crimson : textSecondary,
+                          color: isOverdue ? crimson : BrandColors.of(context).textLo,
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
                         )),
@@ -359,10 +359,10 @@ class _ChefItemRow extends ConsumerWidget {
   final OrderItemEntity item;
   const _ChefItemRow({required this.orderId, required this.item});
 
-  Color _progressColor(double p) {
+  Color _progressColor(double p, BuildContext context) {
     if (p >= 1.0) return emerald;
     if (p >= 0.5) return copperAccent;
-    return textSecondary;
+    return BrandColors.of(context).textLo;
   }
 
   @override
@@ -373,9 +373,9 @@ class _ChefItemRow extends ConsumerWidget {
         margin: const EdgeInsets.only(bottom: 6),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
-          color: slateSurface,
+          color: BrandColors.of(context).surface,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: dividerColor),
+          border: Border.all(color: BrandColors.of(context).divider),
         ),
         child: Row(children: [
           Container(
@@ -399,8 +399,8 @@ class _ChefItemRow extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                 Text(item.name,
-                    style: const TextStyle(
-                        color: textPrimary,
+                    style: TextStyle(
+                        color: BrandColors.of(context).textHi,
                         fontSize: 12,
                         fontWeight: FontWeight.w600),
                     overflow: TextOverflow.ellipsis),
@@ -415,8 +415,8 @@ class _ChefItemRow extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
                     value: item.progress.clamp(0, 1),
-                    backgroundColor: slateBg,
-                    valueColor: AlwaysStoppedAnimation(_progressColor(item.progress)),
+                    backgroundColor: BrandColors.of(context).bg,
+                    valueColor: AlwaysStoppedAnimation(_progressColor(item.progress, context)),
                     minHeight: 3,
                   ),
                 ),
@@ -429,7 +429,7 @@ class _ChefItemRow extends ConsumerWidget {
   void _showActionsSheet(BuildContext context, WidgetRef ref) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: slateCard,
+      backgroundColor: BrandColors.of(context).card,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (_) => _ItemActionsSheet(orderId: orderId, item: item),
@@ -521,18 +521,18 @@ class _ItemActionsSheetState extends ConsumerState<_ItemActionsSheet> {
           Container(
             width: 36, height: 4,
             decoration: BoxDecoration(
-              color: textSecondary.withValues(alpha: 0.4),
+              color: BrandColors.of(context).textLo.withValues(alpha: 0.4),
               borderRadius: BorderRadius.circular(2),
             ),
           ),
           const SizedBox(height: 16),
           Text(widget.item.name,
-              style: const TextStyle(
-                  color: textPrimary,
+              style: TextStyle(
+                  color: BrandColors.of(context).textHi,
                   fontSize: 16,
                   fontWeight: FontWeight.w700)),
           Text('×${widget.item.quantity}',
-              style: const TextStyle(color: textSecondary, fontSize: 12)),
+              style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12)),
           if (widget.item.notes?.isNotEmpty == true) ...[
             const SizedBox(height: 8),
             Container(
@@ -550,8 +550,8 @@ class _ItemActionsSheetState extends ConsumerState<_ItemActionsSheet> {
           const SizedBox(height: 20),
           // Progress slider — 0/0.5/1.0 are the meaningful stops
           Row(children: [
-            const Text('Progress',
-                style: TextStyle(color: textSecondary, fontSize: 12)),
+            Text('Progress',
+                style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12)),
             const Spacer(),
             Text('${(_progress * 100).round()}%',
                 style: const TextStyle(
@@ -565,7 +565,7 @@ class _ItemActionsSheetState extends ConsumerState<_ItemActionsSheet> {
             max: 1,
             divisions: 4,
             activeColor: copperAccent,
-            inactiveColor: slateSurface,
+            inactiveColor: BrandColors.of(context).surface,
             onChanged: (v) => setState(() => _progress = v),
             onChangeEnd: _pushProgress,
           ),
@@ -615,7 +615,7 @@ class _ActionFooter extends ConsumerWidget {
       case OrderStatus.ready:
         next = null;
         label = 'Awaiting Pickup';
-        color = textSecondary;
+        color = BrandColors.of(context).textLo;
         icon = Icons.timer_outlined;
         break;
       default:
@@ -623,9 +623,9 @@ class _ActionFooter extends ConsumerWidget {
     }
     return Container(
       padding: const EdgeInsets.all(10),
-      decoration: const BoxDecoration(
-        color: slateBg,
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(15)),
+      decoration: BoxDecoration(
+        color: BrandColors.of(context).bg,
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(15)),
       ),
       child: SizedBox(
         width: double.infinity,
@@ -633,8 +633,8 @@ class _ActionFooter extends ConsumerWidget {
           icon: Icon(icon, size: 18),
           label: Text(label),
           style: ElevatedButton.styleFrom(
-            backgroundColor: next == null ? slateSurface : color,
-            foregroundColor: next == null ? textSecondary : Colors.white,
+            backgroundColor: next == null ? BrandColors.of(context).surface : color,
+            foregroundColor: next == null ? BrandColors.of(context).textLo : Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 12),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
@@ -666,14 +666,14 @@ class _EmptyKitchen extends StatelessWidget {
             Icon(Icons.check_circle_outline,
                 size: 64, color: emerald.withValues(alpha: 0.5)),
             const SizedBox(height: 16),
-            const Text('All caught up!',
+            Text('All caught up!',
                 style: TextStyle(
-                    color: textPrimary,
+                    color: BrandColors.of(context).textHi,
                     fontSize: 18,
                     fontWeight: FontWeight.w600)),
             const SizedBox(height: 6),
-            const Text('No active kitchen orders',
-                style: TextStyle(color: textSecondary, fontSize: 13)),
+            Text('No active kitchen orders',
+                style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 13)),
           ],
         ),
       );

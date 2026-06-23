@@ -153,9 +153,9 @@ class _AddTableSheetState extends ConsumerState<_AddTableSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Add Table',
+              Text('Add Table',
                   style: TextStyle(
-                      color: textPrimary,
+                      color: BrandColors.of(context).textHi,
                       fontSize: 16,
                       fontWeight: FontWeight.w700)),
               const SizedBox(height: 16),
@@ -258,14 +258,14 @@ class _TableBody extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('${table['label']} — Current Order',
-                  style: const TextStyle(
-                      color: textPrimary,
+                  style: TextStyle(
+                      color: BrandColors.of(context).textHi,
                       fontSize: 15,
                       fontWeight: FontWeight.w700)),
               const SizedBox(height: 16),
               if (order == null)
-                const Text('No active order',
-                    style: TextStyle(color: textSecondary, fontSize: 13))
+                Text('No active order',
+                    style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 13))
               else ...[
                 _OrderRow('Status', order['status']?.toString().toUpperCase() ?? ''),
                 _OrderRow('Items',
@@ -306,7 +306,7 @@ class _TableCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: slateCard,
+          color: BrandColors.of(context).card,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: color.withValues(alpha: 0.4), width: 1.5),
         ),
@@ -327,9 +327,9 @@ class _TableCard extends StatelessWidget {
                         horizontal: 5, vertical: 2),
                     margin: const EdgeInsets.only(right: 4),
                     decoration: BoxDecoration(
-                      color: slateSurface,
+                      color: BrandColors.of(context).surface,
                       borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: dividerColor),
+                      border: Border.all(color: BrandColors.of(context).divider),
                     ),
                     child: const Icon(Icons.qr_code,
                         color: copperAccent, size: 11),
@@ -355,17 +355,17 @@ class _TableCard extends StatelessWidget {
               ]),
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(table['label'] ?? '',
-                    style: const TextStyle(
-                        color: textPrimary,
+                    style: TextStyle(
+                        color: BrandColors.of(context).textHi,
                         fontSize: 15,
                         fontWeight: FontWeight.w800)),
                 const SizedBox(height: 2),
                 Row(children: [
-                  Icon(Icons.people_outline, size: 11, color: textSecondary),
+                  Icon(Icons.people_outline, size: 11, color: BrandColors.of(context).textLo),
                   const SizedBox(width: 3),
                   Text('$cap seats',
-                      style: const TextStyle(
-                          color: textSecondary, fontSize: 10)),
+                      style: TextStyle(
+                          color: BrandColors.of(context).textLo, fontSize: 10)),
                 ]),
                 const SizedBox(height: 4),
                 Container(
@@ -425,8 +425,8 @@ class _TableCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('${table['label']} — Set Status',
-                  style: const TextStyle(
-                      color: textPrimary,
+                  style: TextStyle(
+                      color: BrandColors.of(context).textHi,
                       fontSize: 15,
                       fontWeight: FontWeight.w700)),
               const SizedBox(height: 16),
@@ -494,20 +494,20 @@ class _OccupancyBar extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: dividerColor),
+        border: Border.all(color: BrandColors.of(context).divider),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          const Text('Occupancy',
+          Text('Occupancy',
               style: TextStyle(
-                  color: textPrimary,
+                  color: BrandColors.of(context).textHi,
                   fontSize: 13,
                   fontWeight: FontWeight.w700)),
           const Spacer(),
           Text('$occupied / $total tables',
-              style: const TextStyle(color: textSecondary, fontSize: 12)),
+              style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12)),
           const SizedBox(width: 8),
           Text('${(pct * 100).toStringAsFixed(0)}%',
               style: TextStyle(
@@ -549,7 +549,7 @@ class _SummaryChip extends StatelessWidget {
                 style: TextStyle(
                     color: color, fontSize: 16, fontWeight: FontWeight.w800)),
             Text(label,
-                style: const TextStyle(color: textSecondary, fontSize: 9),
+                style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 9),
                 textAlign: TextAlign.center),
           ]),
         ),
@@ -567,11 +567,11 @@ class _OrderRow extends StatelessWidget {
         padding: const EdgeInsets.only(bottom: 8),
         child: Row(children: [
           Text(label,
-              style: const TextStyle(color: textSecondary, fontSize: 13)),
+              style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 13)),
           const Spacer(),
           Text(value,
-              style: const TextStyle(
-                  color: textPrimary,
+              style: TextStyle(
+                  color: BrandColors.of(context).textHi,
                   fontSize: 13,
                   fontWeight: FontWeight.w600)),
         ]),
@@ -589,18 +589,18 @@ class _Field extends StatelessWidget {
   Widget build(BuildContext context) => TextField(
         controller: ctrl,
         keyboardType: keyboardType,
-        style: const TextStyle(color: textPrimary),
+        style: TextStyle(color: BrandColors.of(context).textHi),
         decoration: InputDecoration(
           labelText: label,
-          labelStyle: const TextStyle(color: textSecondary, fontSize: 13),
+          labelStyle: TextStyle(color: BrandColors.of(context).textLo, fontSize: 13),
           filled: true,
           fillColor: slateSurface,
           border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: dividerColor)),
+              borderSide: BorderSide(color: BrandColors.of(context).divider)),
           enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: dividerColor)),
+              borderSide: BorderSide(color: BrandColors.of(context).divider)),
           focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: const BorderSide(color: copperAccent)),

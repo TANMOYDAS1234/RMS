@@ -295,7 +295,7 @@ class _FinancialSnapshot extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: emerald.withValues(alpha: 0.2)),
       ),
@@ -305,7 +305,7 @@ class _FinancialSnapshot extends StatelessWidget {
           Row(children: [
             const Icon(Icons.today_outlined, color: emerald, size: 16),
             const SizedBox(width: 6),
-            Text("Today — ${data['date'] ?? ''}", style: const TextStyle(color: textSecondary, fontSize: 12)),
+            Text("Today — ${data['date'] ?? ''}", style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12)),
           ]),
           const SizedBox(height: 12),
           Row(children: [
@@ -332,7 +332,7 @@ class _FinStat extends StatelessWidget {
           children: [
             Text(value, style: TextStyle(color: color, fontSize: 14, fontWeight: FontWeight.w800)),
             const SizedBox(height: 2),
-            Text(label, style: const TextStyle(color: textSecondary, fontSize: 10)),
+            Text(label, style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 10)),
           ],
         ),
       );
@@ -359,7 +359,7 @@ class _SystemHealthBanner extends StatelessWidget {
         Expanded(child: Text('System ${ok ? "Healthy" : "Degraded"}',
             style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 13))),
         Text('${health['activeUsers'] ?? 0} users online',
-            style: const TextStyle(color: textSecondary, fontSize: 11)),
+            style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11)),
       ]),
     );
   }
@@ -380,14 +380,14 @@ class _OrderPipeline extends StatelessWidget {
             margin: const EdgeInsets.symmetric(horizontal: 3),
             padding: const EdgeInsets.symmetric(vertical: 12),
             decoration: BoxDecoration(
-              color: slateCard,
+              color: BrandColors.of(context).card,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: dividerColor),
+              border: Border.all(color: BrandColors.of(context).divider),
             ),
             child: Column(children: [
               Text('$count', style: const TextStyle(color: copperAccent, fontSize: 20, fontWeight: FontWeight.w800)),
               const SizedBox(height: 4),
-              Text(stage, style: const TextStyle(color: textSecondary, fontSize: 9), textAlign: TextAlign.center),
+              Text(stage, style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 9), textAlign: TextAlign.center),
             ]),
           ),
         );
@@ -453,7 +453,7 @@ class AdminAnalyticsTab extends ConsumerWidget {
         const SizedBox(height: 12),
         staffAsync.when(
           loading: () => const _ChartSkeleton(height: 100),
-          error: (_, __) => const Center(child: Text('No staff analytics', style: TextStyle(color: textSecondary))),
+          error: (_, __) => Center(child: Text('No staff analytics', style: TextStyle(color: BrandColors.of(context).textLo))),
           data: (staff) => Column(
             children: staff.take(5).map((s) => _StaffPerfRow(data: s)).toList(),
           ),
@@ -489,9 +489,9 @@ class _AnalyticsRangePicker extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: dividerColor),
+        border: Border.all(color: BrandColors.of(context).divider),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
@@ -499,8 +499,8 @@ class _AnalyticsRangePicker extends ConsumerWidget {
               color: copperAccent, size: 14),
           const SizedBox(width: 8),
           Text(label,
-              style: const TextStyle(
-                  color: textPrimary,
+              style: TextStyle(
+                  color: BrandColors.of(context).textHi,
                   fontSize: 13,
                   fontWeight: FontWeight.w700)),
           const Spacer(),
@@ -599,7 +599,7 @@ class _ProfitCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
@@ -615,7 +615,7 @@ class _ProfitCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(4),
           child: LinearProgressIndicator(
             value: (margin / 100).clamp(0.0, 1.0),
-            backgroundColor: slateSurface,
+            backgroundColor: BrandColors.of(context).surface,
             valueColor: AlwaysStoppedAnimation<Color>(color),
             minHeight: 6,
           ),
@@ -643,7 +643,7 @@ class _StaffPerfRow extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(color: slateCard, borderRadius: BorderRadius.circular(10)),
+      decoration: BoxDecoration(color: BrandColors.of(context).card, borderRadius: BorderRadius.circular(10)),
       child: Row(children: [
         CircleAvatar(
           radius: 16,
@@ -653,8 +653,8 @@ class _StaffPerfRow extends StatelessWidget {
         ),
         const SizedBox(width: 10),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(name, style: const TextStyle(color: textPrimary, fontSize: 12, fontWeight: FontWeight.w600)),
-          Text(role.toUpperCase(), style: const TextStyle(color: textSecondary, fontSize: 10)),
+          Text(name, style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 12, fontWeight: FontWeight.w600)),
+          Text(role.toUpperCase(), style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 10)),
         ])),
         Text('$orders orders', style: const TextStyle(color: copperAccent, fontSize: 12, fontWeight: FontWeight.w700)),
       ]),
@@ -668,24 +668,24 @@ class _RevenueChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (data.isEmpty) return const Center(child: Text('No data', style: TextStyle(color: textSecondary)));
+    if (data.isEmpty) return Center(child: Text('No data', style: TextStyle(color: BrandColors.of(context).textLo)));
     final spots = data.asMap().entries.map((e) =>
         FlSpot(e.key.toDouble(), (e.value['revenue'] ?? 0).toDouble())).toList();
 
     return Container(
       height: 180,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: slateCard, borderRadius: BorderRadius.circular(14)),
+      decoration: BoxDecoration(color: BrandColors.of(context).card, borderRadius: BorderRadius.circular(14)),
       child: LineChart(LineChartData(
         gridData: FlGridData(
           show: true,
-          getDrawingHorizontalLine: (_) => const FlLine(color: dividerColor, strokeWidth: 0.5),
+          getDrawingHorizontalLine: (_) => FlLine(color: BrandColors.of(context).divider, strokeWidth: 0.5),
           drawVerticalLine: false,
         ),
         titlesData: FlTitlesData(
           leftTitles: AxisTitles(sideTitles: SideTitles(
             showTitles: true, reservedSize: 40,
-            getTitlesWidget: (v, _) => Text('₹${v.toInt()}', style: const TextStyle(color: textSecondary, fontSize: 9)),
+            getTitlesWidget: (v, _) => Text('₹${v.toInt()}', style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 9)),
           )),
           bottomTitles: AxisTitles(sideTitles: SideTitles(
             showTitles: true,
@@ -694,7 +694,7 @@ class _RevenueChart extends StatelessWidget {
               if (idx < 0 || idx >= data.length) return const SizedBox.shrink();
               final date = data[idx]['_id'] as String? ?? '';
               return Text(date.length >= 10 ? date.substring(5) : date,
-                  style: const TextStyle(color: textSecondary, fontSize: 9));
+                  style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 9));
             },
           )),
           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -717,12 +717,12 @@ class _PeakHoursChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (data.isEmpty) return const Center(child: Text('No data', style: TextStyle(color: textSecondary)));
+    if (data.isEmpty) return Center(child: Text('No data', style: TextStyle(color: BrandColors.of(context).textLo)));
     final maxCount = data.fold<int>(0, (m, e) => (e['count'] as int? ?? 0) > m ? (e['count'] as int) : m);
     return Container(
       height: 140,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: slateCard, borderRadius: BorderRadius.circular(14)),
+      decoration: BoxDecoration(color: BrandColors.of(context).card, borderRadius: BorderRadius.circular(14)),
       child: BarChart(BarChartData(
         alignment: BarChartAlignment.spaceAround,
         maxY: maxCount.toDouble() * 1.2,
@@ -730,7 +730,7 @@ class _PeakHoursChart extends StatelessWidget {
         titlesData: FlTitlesData(
           bottomTitles: AxisTitles(sideTitles: SideTitles(
             showTitles: true,
-            getTitlesWidget: (v, _) => Text('${v.toInt()}h', style: const TextStyle(color: textSecondary, fontSize: 9)),
+            getTitlesWidget: (v, _) => Text('${v.toInt()}h', style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 9)),
           )),
           leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -762,10 +762,10 @@ class _TopItemRow extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(color: slateCard, borderRadius: BorderRadius.circular(10)),
+      decoration: BoxDecoration(color: BrandColors.of(context).card, borderRadius: BorderRadius.circular(10)),
       child: Row(children: [
-        Expanded(child: Text(item['name'] ?? '', style: const TextStyle(color: textPrimary, fontSize: 13, fontWeight: FontWeight.w600))),
-        Text('$qty sold', style: const TextStyle(color: textSecondary, fontSize: 12)),
+        Expanded(child: Text(item['name'] ?? '', style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 13, fontWeight: FontWeight.w600))),
+        Text('$qty sold', style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12)),
         const SizedBox(width: 12),
         Text('₹${revenue.toStringAsFixed(0)}', style: const TextStyle(color: copperAccent, fontSize: 13, fontWeight: FontWeight.w700)),
       ]),
@@ -795,18 +795,18 @@ class AdminComparisonTab extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(Icons.lock_outline,
-                  size: 56, color: textSecondary.withValues(alpha: 0.4)),
+                  size: 56, color: BrandColors.of(context).textLo.withValues(alpha: 0.4)),
               const SizedBox(height: 16),
-              const Text('Admins only',
+              Text('Admins only',
                   style: TextStyle(
-                      color: textPrimary,
+                      color: BrandColors.of(context).textHi,
                       fontSize: 16,
                       fontWeight: FontWeight.w800)),
               const SizedBox(height: 6),
-              const Text(
+              Text(
                 'Cross-branch comparisons are limited to chain administrators.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: textSecondary, fontSize: 12),
+                style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12),
               ),
             ],
           ),
@@ -827,11 +827,11 @@ class AdminComparisonTab extends ConsumerWidget {
           error: (e, _) => _ErrorText(describeApiError(e)),
           data: (rows) {
             if (rows.isEmpty) {
-              return const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
                 child: Center(
                   child: Text('No paid bills in this range',
-                      style: TextStyle(color: textSecondary)),
+                      style: TextStyle(color: BrandColors.of(context).textLo)),
                 ),
               );
             }
@@ -866,15 +866,15 @@ class _BranchRevenueBars extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Revenue by Branch',
+          Text('Revenue by Branch',
               style: TextStyle(
-                  color: textSecondary,
+                  color: BrandColors.of(context).textLo,
                   fontSize: 11,
                   fontWeight: FontWeight.w600)),
           const SizedBox(height: 12),
@@ -890,8 +890,8 @@ class _BranchRevenueBars extends StatelessWidget {
                   Row(children: [
                     Expanded(
                       child: Text(name,
-                          style: const TextStyle(
-                              color: textPrimary,
+                          style: TextStyle(
+                              color: BrandColors.of(context).textHi,
                               fontSize: 12,
                               fontWeight: FontWeight.w600)),
                     ),
@@ -906,7 +906,7 @@ class _BranchRevenueBars extends StatelessWidget {
                     borderRadius: BorderRadius.circular(4),
                     child: LinearProgressIndicator(
                       value: pct,
-                      backgroundColor: slateSurface,
+                      backgroundColor: BrandColors.of(context).surface,
                       valueColor:
                           const AlwaysStoppedAnimation<Color>(copperAccent),
                       minHeight: 8,
@@ -930,23 +930,23 @@ class _BranchComparisonTable extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         borderRadius: BorderRadius.circular(14),
       ),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: DataTable(
           headingRowColor:
-              WidgetStateProperty.all(slateSurface),
+              WidgetStateProperty.all(BrandColors.of(context).surface),
           dataRowColor: WidgetStateProperty.all(Colors.transparent),
           columnSpacing: 24,
           horizontalMargin: 16,
-          headingTextStyle: const TextStyle(
-              color: textSecondary,
+          headingTextStyle: TextStyle(
+              color: BrandColors.of(context).textLo,
               fontSize: 11,
               fontWeight: FontWeight.w700),
           dataTextStyle:
-              const TextStyle(color: textPrimary, fontSize: 12),
+              TextStyle(color: BrandColors.of(context).textHi, fontSize: 12),
           columns: const [
             DataColumn(label: Text('Branch')),
             DataColumn(label: Text('Revenue'), numeric: true),
@@ -962,8 +962,8 @@ class _BranchComparisonTable extends StatelessWidget {
             final gst = (r['gstCollected'] as num? ?? 0).toDouble();
             return DataRow(cells: [
               DataCell(Text(name,
-                  style: const TextStyle(
-                      color: textPrimary, fontWeight: FontWeight.w600))),
+                  style: TextStyle(
+                      color: BrandColors.of(context).textHi, fontWeight: FontWeight.w600))),
               DataCell(Text('₹${rev.toStringAsFixed(0)}',
                   style: const TextStyle(
                       color: copperAccent, fontWeight: FontWeight.w700))),
@@ -1020,7 +1020,7 @@ class AdminStaffTab extends ConsumerWidget {
   void _showAddStaffSheet(BuildContext context, WidgetRef ref) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: slateCard,
+      backgroundColor: BrandColors.of(context).card,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (_) => const _AddStaffSheet(),
@@ -1093,7 +1093,7 @@ class _AddStaffSheetState extends ConsumerState<_AddStaffSheet> {
     return Padding(
         padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 24),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Add Staff Member', style: TextStyle(color: textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
+          Text('Add Staff Member', style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 16, fontWeight: FontWeight.w700)),
           const SizedBox(height: 16),
           _InputField(ctrl: _nameCtrl, label: 'Full Name'),
           const SizedBox(height: 10),
@@ -1103,9 +1103,9 @@ class _AddStaffSheetState extends ConsumerState<_AddStaffSheet> {
           const SizedBox(height: 10),
           DropdownButtonFormField<String>(
             value: _selectedRole,
-            dropdownColor: slateSurface,
-            style: const TextStyle(color: textPrimary),
-            decoration: _inputDec('Role'),
+            dropdownColor: BrandColors.of(context).surface,
+            style: TextStyle(color: BrandColors.of(context).textHi),
+            decoration: _inputDec(context, 'Role'),
             items: ['manager', 'waiter', 'chef', 'cashier']
                 .map((r) => DropdownMenuItem(value: r, child: Text(r.toUpperCase())))
                 .toList(),
@@ -1117,9 +1117,9 @@ class _AddStaffSheetState extends ConsumerState<_AddStaffSheet> {
             error: (_, __) => const SizedBox.shrink(),
             data: (branches) => DropdownButtonFormField<String>(
               value: _selectedBranchId,
-              dropdownColor: slateSurface,
-              style: const TextStyle(color: textPrimary),
-              decoration: _inputDec('Branch (optional)'),
+              dropdownColor: BrandColors.of(context).surface,
+              style: TextStyle(color: BrandColors.of(context).textHi),
+              decoration: _inputDec(context, 'Branch (optional)'),
               items: [
                 const DropdownMenuItem<String>(value: null, child: Text('— No branch —')),
                 ...branches.map((b) => DropdownMenuItem<String>(
@@ -1160,16 +1160,16 @@ class _StaffCard extends ConsumerWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: dividerColor),
+        border: Border.all(color: BrandColors.of(context).divider),
       ),
       child: Row(children: [
         _StaffAvatar(user: user, color: color, id: id),
         const SizedBox(width: 12),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(user['name'] ?? '', style: const TextStyle(color: textPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
-          Text(user['email'] ?? '', style: const TextStyle(color: textSecondary, fontSize: 11)),
+          Text(user['name'] ?? '', style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 13, fontWeight: FontWeight.w600)),
+          Text(user['email'] ?? '', style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11)),
         ])),
         Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
           Container(
@@ -1201,14 +1201,14 @@ class _StaffCard extends ConsumerWidget {
             GestureDetector(
               onTap: () => showModalBottomSheet(
                 context: context,
-                backgroundColor: slateCard,
+                backgroundColor: BrandColors.of(context).card,
                 isScrollControlled: true,
                 shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
                 builder: (_) => _EditUserSheet(user: user),
               ),
-              child: const Tooltip(
+              child: Tooltip(
                 message: 'Edit user',
-                child: Icon(Icons.edit_outlined, color: textSecondary, size: 16),
+                child: Icon(Icons.edit_outlined, color: BrandColors.of(context).textLo, size: 16),
               ),
             ),
             const SizedBox(width: 8),
@@ -1216,14 +1216,14 @@ class _StaffCard extends ConsumerWidget {
             GestureDetector(
               onTap: () => showModalBottomSheet(
                 context: context,
-                backgroundColor: slateCard,
+                backgroundColor: BrandColors.of(context).card,
                 isScrollControlled: true,
                 shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
                 builder: (_) => _ResetPasswordSheet(userId: id, userName: user['name'] as String? ?? ''),
               ),
-              child: const Tooltip(
+              child: Tooltip(
                 message: 'Reset password',
-                child: Icon(Icons.lock_reset_outlined, color: textSecondary, size: 16),
+                child: Icon(Icons.lock_reset_outlined, color: BrandColors.of(context).textLo, size: 16),
               ),
             ),
             const SizedBox(width: 8),
@@ -1232,12 +1232,12 @@ class _StaffCard extends ConsumerWidget {
               onTap: () => showDialog(
                 context: context,
                 builder: (_) => AlertDialog(
-                  backgroundColor: slateCard,
-                  title: const Text('Remove Staff?', style: TextStyle(color: textPrimary)),
+                  backgroundColor: BrandColors.of(context).card,
+                  title: Text('Remove Staff?', style: TextStyle(color: BrandColors.of(context).textHi)),
                   content: Text('This will permanently delete ${user['name'] ?? 'this user'}. This cannot be undone.',
-                      style: const TextStyle(color: textSecondary)),
+                      style: TextStyle(color: BrandColors.of(context).textLo)),
                   actions: [
-                    TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel', style: TextStyle(color: textSecondary))),
+                    TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel', style: TextStyle(color: BrandColors.of(context).textLo))),
                     TextButton(
                       onPressed: () async {
                         Navigator.pop(context);
@@ -1332,15 +1332,15 @@ class _EditUserSheetState extends ConsumerState<_EditUserSheet> {
       padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 24),
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('Edit — ${widget.user['name'] ?? ''}',
-            style: const TextStyle(color: textPrimary, fontSize: 15, fontWeight: FontWeight.w700)),
+            style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 15, fontWeight: FontWeight.w700)),
         const SizedBox(height: 16),
         _InputField(ctrl: _nameCtrl, label: 'Full Name'),
         const SizedBox(height: 10),
         DropdownButtonFormField<String>(
           value: _role,
-          dropdownColor: slateSurface,
-          style: const TextStyle(color: textPrimary),
-          decoration: _inputDec('Role'),
+          dropdownColor: BrandColors.of(context).surface,
+          style: TextStyle(color: BrandColors.of(context).textHi),
+          decoration: _inputDec(context, 'Role'),
           items: ['manager', 'waiter', 'chef', 'cashier']
               .map((r) => DropdownMenuItem(value: r, child: Text(r.toUpperCase())))
               .toList(),
@@ -1352,9 +1352,9 @@ class _EditUserSheetState extends ConsumerState<_EditUserSheet> {
           error: (_, __) => const SizedBox.shrink(),
           data: (branches) => DropdownButtonFormField<String>(
             value: _branchId,
-            dropdownColor: slateSurface,
-            style: const TextStyle(color: textPrimary),
-            decoration: _inputDec('Branch'),
+            dropdownColor: BrandColors.of(context).surface,
+            style: TextStyle(color: BrandColors.of(context).textHi),
+            decoration: _inputDec(context, 'Branch'),
             items: [
               const DropdownMenuItem(value: null, child: Text('No Branch')),
               ...branches.map((b) => DropdownMenuItem(
@@ -1429,7 +1429,7 @@ class _ResetPasswordSheetState extends ConsumerState<_ResetPasswordSheet> {
         padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 24),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('Reset Password — ${widget.userName}',
-              style: const TextStyle(color: textPrimary, fontSize: 15, fontWeight: FontWeight.w700)),
+              style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 15, fontWeight: FontWeight.w700)),
           const SizedBox(height: 16),
           _InputField(ctrl: _ctrl, label: 'New Password (min 6 chars)', obscure: true),
           const SizedBox(height: 16),
@@ -1511,7 +1511,7 @@ class AdminOrdersTab extends ConsumerWidget {
 
     return RefreshIndicator(
       color: copperAccent,
-      backgroundColor: slateCard,
+      backgroundColor: BrandColors.of(context).card,
       onRefresh: () async => ref.invalidate(_allOrdersProvider),
       child: ordersAsync.when(
         loading: () => const Center(child: CircularProgressIndicator(color: copperAccent)),
@@ -1553,7 +1553,7 @@ class _SmallStat extends StatelessWidget {
           ),
           child: Column(children: [
             Text(value, style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.w800)),
-            Text(label, style: const TextStyle(color: textSecondary, fontSize: 10)),
+            Text(label, style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 10)),
           ]),
         ),
       );
@@ -1573,17 +1573,17 @@ class _AdminOrderCard extends ConsumerWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: dividerColor),
+        border: Border.all(color: BrandColors.of(context).divider),
       ),
       child: Row(children: [
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('Table ${order['tableLabel'] ?? ''}',
-              style: const TextStyle(color: textPrimary, fontSize: 13, fontWeight: FontWeight.w700)),
+              style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 13, fontWeight: FontWeight.w700)),
           const SizedBox(height: 2),
           Text('${(order['items'] as List?)?.length ?? 0} items',
-              style: const TextStyle(color: textSecondary, fontSize: 11)),
+              style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11)),
         ])),
         _StatusBadge(status),
         const SizedBox(width: 8),
@@ -1608,12 +1608,12 @@ class _AdminOrderCard extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: slateCard,
-        title: const Text('Force Close Order?', style: TextStyle(color: textPrimary)),
-        content: const Text('This will immediately close the order. This action is logged.',
-            style: TextStyle(color: textSecondary)),
+        backgroundColor: BrandColors.of(context).card,
+        title: Text('Force Close Order?', style: TextStyle(color: BrandColors.of(context).textHi)),
+        content: Text('This will immediately close the order. This action is logged.',
+            style: TextStyle(color: BrandColors.of(context).textLo)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel', style: TextStyle(color: textSecondary))),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel', style: TextStyle(color: BrandColors.of(context).textLo))),
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
@@ -1802,21 +1802,21 @@ class _TaxReportsCardState extends ConsumerState<_TaxReportsCard> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: copperAccent.withValues(alpha: 0.25)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: const [
-          Icon(Icons.receipt_long_outlined, color: copperAccent, size: 16),
-          SizedBox(width: 6),
+        Row(children: [
+          const Icon(Icons.receipt_long_outlined, color: copperAccent, size: 16),
+          const SizedBox(width: 6),
           Text('Tax Reports',
-              style: TextStyle(color: textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
+              style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12, fontWeight: FontWeight.w600)),
         ]),
         const SizedBox(height: 4),
-        const Text(
+        Text(
           'Export a GST-ready CSV of paid bills for accounting.',
-          style: TextStyle(color: textSecondary, fontSize: 11),
+          style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11),
         ),
         const SizedBox(height: 14),
         Row(children: [
@@ -1879,17 +1879,17 @@ class _DateField extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.black.withValues(alpha: 0.25),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: dividerColor),
+          border: Border.all(color: BrandColors.of(context).divider),
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(label, style: const TextStyle(color: textSecondary, fontSize: 10)),
+          Text(label, style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 10)),
           const SizedBox(height: 2),
           Row(children: [
-            const Icon(Icons.calendar_today_outlined, size: 12, color: textSecondary),
+            Icon(Icons.calendar_today_outlined, size: 12, color: BrandColors.of(context).textLo),
             const SizedBox(width: 6),
             Expanded(
               child: Text(value,
-                  style: const TextStyle(color: textPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
+                  style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 13, fontWeight: FontWeight.w600)),
             ),
           ]),
         ]),
@@ -1920,15 +1920,15 @@ class _PendingRefundCard extends ConsumerWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: amber.withValues(alpha: 0.45)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Text('Table $tableLabel',
-              style: const TextStyle(
-                  color: textPrimary, fontSize: 13, fontWeight: FontWeight.w700)),
+              style: TextStyle(
+                  color: BrandColors.of(context).textHi, fontSize: 13, fontWeight: FontWeight.w700)),
           const Spacer(),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -1951,15 +1951,15 @@ class _PendingRefundCard extends ConsumerWidget {
           const Spacer(),
           if (requestedAt != null)
             Text(DateFormat('dd MMM, HH:mm').format(requestedAt),
-                style: const TextStyle(color: textSecondary, fontSize: 11)),
+                style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11)),
         ]),
         const SizedBox(height: 8),
         Text('Reason: $reason',
-            style: const TextStyle(color: textSecondary, fontSize: 12)),
+            style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12)),
         if (reference != null && reference.isNotEmpty) ...[
           const SizedBox(height: 2),
           Text('Ref: $reference',
-              style: const TextStyle(color: textSecondary, fontSize: 11)),
+              style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11)),
         ],
         const SizedBox(height: 10),
         Row(children: [
@@ -1969,7 +1969,7 @@ class _PendingRefundCard extends ConsumerWidget {
               label: const Text('Deny'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: textSecondary,
-                side: BorderSide(color: textSecondary.withValues(alpha: 0.5)),
+                side: BorderSide(color: BrandColors.of(context).textLo.withValues(alpha: 0.5)),
                 padding: const EdgeInsets.symmetric(vertical: 9),
                 textStyle:
                     const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
@@ -2029,7 +2029,7 @@ class _EodSummaryCard extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: slateCard,
+          color: BrandColors.of(context).card,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: emerald.withValues(alpha: 0.25)),
         ),
@@ -2038,14 +2038,14 @@ class _EodSummaryCard extends StatelessWidget {
             const Icon(Icons.summarize_outlined, color: emerald, size: 16),
             const SizedBox(width: 6),
             Text('EOD Summary — ${data['date'] ?? ''}',
-                style: const TextStyle(color: textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
+                style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12, fontWeight: FontWeight.w600)),
           ]),
           const SizedBox(height: 14),
           _BillingRow('Gross Revenue', '₹${((data['grossRevenue'] ?? 0) as num).toStringAsFixed(2)}', emerald),
           _BillingRow('Refunded', '-₹${((data['refundedAmount'] ?? 0) as num).toStringAsFixed(2)}', crimson),
           _BillingRow('GST Collected', '₹${((data['gstCollected'] ?? 0) as num).toStringAsFixed(2)}', amber),
           _BillingRow('Discounts', '-₹${((data['totalDiscounts'] ?? 0) as num).toStringAsFixed(2)}', roseGold),
-          const Divider(color: dividerColor, height: 16),
+          Divider(color: BrandColors.of(context).divider, height: 16),
           _BillingRow('Net Revenue', '₹${((data['netRevenue'] ?? 0) as num).toStringAsFixed(2)}', copperAccent, bold: true),
           const SizedBox(height: 8),
           Row(children: [
@@ -2068,7 +2068,7 @@ class _BillingRow extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 3),
         child: Row(children: [
-          Text(label, style: TextStyle(color: textSecondary, fontSize: 12, fontWeight: bold ? FontWeight.w700 : FontWeight.normal)),
+          Text(label, style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12, fontWeight: bold ? FontWeight.w700 : FontWeight.normal)),
           const Spacer(),
           Text(value, style: TextStyle(color: color, fontSize: 12, fontWeight: bold ? FontWeight.w800 : FontWeight.w600)),
         ]),
@@ -2094,17 +2094,17 @@ class _TransactionCard extends ConsumerWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: dividerColor),
+        border: Border.all(color: BrandColors.of(context).divider),
       ),
       child: Row(children: [
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('Table ${tx['tableLabel'] ?? ''}',
-              style: const TextStyle(color: textPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
+              style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 13, fontWeight: FontWeight.w600)),
           if (paidAt != null)
             Text(DateFormat('dd MMM, HH:mm').format(paidAt),
-                style: const TextStyle(color: textSecondary, fontSize: 11)),
+                style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11)),
         ])),
         Text('₹${total.toStringAsFixed(2)}',
             style: const TextStyle(color: copperAccent, fontSize: 14, fontWeight: FontWeight.w800)),
@@ -2135,12 +2135,12 @@ class _TransactionCard extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: slateCard,
-        title: const Text('Process Refund?', style: TextStyle(color: textPrimary)),
-        content: const Text('This will mark the bill as refunded. This action cannot be undone.',
-            style: TextStyle(color: textSecondary)),
+        backgroundColor: BrandColors.of(context).card,
+        title: Text('Process Refund?', style: TextStyle(color: BrandColors.of(context).textHi)),
+        content: Text('This will mark the bill as refunded. This action cannot be undone.',
+            style: TextStyle(color: BrandColors.of(context).textLo)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel', style: TextStyle(color: textSecondary))),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel', style: TextStyle(color: BrandColors.of(context).textLo))),
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
@@ -2261,7 +2261,7 @@ class AdminInventoryTab extends ConsumerWidget {
                 const SizedBox(height: 8),
                 Text(
                   'Across ${branchIdsInUse.length} branch${branchIdsInUse.length == 1 ? '' : 'es'}',
-                  style: const TextStyle(color: textSecondary, fontSize: 11),
+                  style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11),
                 ),
                 // Orphan-items hint: legacy seed inserted ingredients
                 // without a branchId and they would otherwise live in
@@ -2347,7 +2347,7 @@ class AdminInventoryTab extends ConsumerWidget {
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: slateCard,
+      backgroundColor: BrandColors.of(context).card,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (ctx) => Consumer(builder: (ctx, ref, _) {
@@ -2356,7 +2356,7 @@ class AdminInventoryTab extends ConsumerWidget {
           padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
           child: StatefulBuilder(builder: (ctx, setSheetState) {
             return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Add Inventory Item', style: TextStyle(color: textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
+              Text('Add Inventory Item', style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 16, fontWeight: FontWeight.w700)),
               const SizedBox(height: 16),
               branchesAsync.when(
                 loading: () => const _BranchPickerSkeleton(),
@@ -2365,19 +2365,19 @@ class AdminInventoryTab extends ConsumerWidget {
                 data: (branches) => Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                   decoration: BoxDecoration(
-                    color: slateSurface,
+                    color: BrandColors.of(context).surface,
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: dividerColor),
+                    border: Border.all(color: BrandColors.of(context).divider),
                   ),
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<String>(
                       value: selectedBranchId,
                       isExpanded: true,
-                      hint: const Text('Branch (required)',
-                          style: TextStyle(color: textSecondary, fontSize: 13)),
-                      dropdownColor: slateCard,
+                      hint: Text('Branch (required)',
+                          style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 13)),
+                      dropdownColor: BrandColors.of(context).card,
                       iconEnabledColor: copperAccent,
-                      style: const TextStyle(color: textPrimary, fontSize: 13),
+                      style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 13),
                       items: branches.map((b) {
                         final id = (b['_id'] ?? b['id']).toString();
                         final name = (b['name'] as String?) ?? id;
@@ -2462,7 +2462,7 @@ class _OrphanItemsFixState extends ConsumerState<_OrphanItemsFix> {
     // than silently defaulting — wrong choice ruins per-branch COGS.
     final picked = await showModalBottomSheet<String>(
       context: context,
-      backgroundColor: slateCard,
+      backgroundColor: BrandColors.of(context).card,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => SafeArea(
@@ -2470,11 +2470,11 @@ class _OrphanItemsFixState extends ConsumerState<_OrphanItemsFix> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
               child: Text('Assign orphan ingredients to…',
                   style: TextStyle(
-                      color: textPrimary,
+                      color: BrandColors.of(context).textHi,
                       fontSize: 14,
                       fontWeight: FontWeight.w700)),
             ),
@@ -2482,7 +2482,7 @@ class _OrphanItemsFixState extends ConsumerState<_OrphanItemsFix> {
               ListTile(
                 leading: const Icon(Icons.store_outlined, color: copperAccent),
                 title: Text((b['name'] as String?) ?? '',
-                    style: const TextStyle(color: textPrimary, fontSize: 13)),
+                    style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 13)),
                 onTap: () => Navigator.pop(ctx,
                     ((b['_id'] ?? b['id'])?.toString()) ?? ''),
               ),
@@ -2614,8 +2614,8 @@ class _InviteManagerSheetState extends ConsumerState<_InviteManagerSheet> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('Invite manager to ${widget.branchName}',
-                  style: const TextStyle(
-                      color: textPrimary,
+                  style: TextStyle(
+                      color: BrandColors.of(context).textHi,
                       fontSize: 16,
                       fontWeight: FontWeight.w700)),
               const SizedBox(height: 16),
@@ -2642,7 +2642,7 @@ class _BranchPickerSkeleton extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         height: 48,
         decoration: BoxDecoration(
-          color: slateSurface,
+          color: BrandColors.of(context).surface,
           borderRadius: BorderRadius.circular(10),
         ),
         child: const Center(
@@ -2672,7 +2672,7 @@ class _AdminInventoryCard extends ConsumerWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: isLow ? crimson.withValues(alpha: 0.4) : dividerColor),
       ),
@@ -2681,14 +2681,14 @@ class _AdminInventoryCard extends ConsumerWidget {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(item['name'] ?? '',
-                  style: const TextStyle(color: textPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
+                  style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 13, fontWeight: FontWeight.w600)),
               if (branchLabel != null) ...[
                 const SizedBox(height: 2),
                 Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.store_mall_directory_outlined, size: 10, color: textSecondary),
+                  Icon(Icons.store_mall_directory_outlined, size: 10, color: BrandColors.of(context).textLo),
                   const SizedBox(width: 3),
                   Text(branchLabel!,
-                      style: const TextStyle(color: textSecondary, fontSize: 10, fontWeight: FontWeight.w500)),
+                      style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 10, fontWeight: FontWeight.w500)),
                 ]),
               ],
             ]),
@@ -2704,10 +2704,10 @@ class _AdminInventoryCard extends ConsumerWidget {
             onTap: () => _showAdjustSheet(context, ref, id, item['name'] ?? ''),
             child: Container(
               padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(color: slateSurface, borderRadius: BorderRadius.circular(8)),
-              child: const Tooltip(
+              decoration: BoxDecoration(color: BrandColors.of(context).surface, borderRadius: BorderRadius.circular(8)),
+              child: Tooltip(
                 message: 'Edit',
-                child: Icon(Icons.edit_outlined, color: textSecondary, size: 16),
+                child: Icon(Icons.edit_outlined, color: BrandColors.of(context).textLo, size: 16),
               ),
             ),
           ),
@@ -2716,12 +2716,12 @@ class _AdminInventoryCard extends ConsumerWidget {
             onTap: () => showDialog(
               context: context,
               builder: (_) => AlertDialog(
-                backgroundColor: slateCard,
-                title: const Text('Delete Item?', style: TextStyle(color: textPrimary)),
+                backgroundColor: BrandColors.of(context).card,
+                title: Text('Delete Item?', style: TextStyle(color: BrandColors.of(context).textHi)),
                 content: Text('Permanently delete "${item['name'] ?? ''}". This cannot be undone.',
-                    style: const TextStyle(color: textSecondary)),
+                    style: TextStyle(color: BrandColors.of(context).textLo)),
                 actions: [
-                  TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel', style: TextStyle(color: textSecondary))),
+                  TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel', style: TextStyle(color: BrandColors.of(context).textLo))),
                   TextButton(
                     onPressed: () async {
                       Navigator.pop(context);
@@ -2757,14 +2757,14 @@ class _AdminInventoryCard extends ConsumerWidget {
           Expanded(child: Text('$cur ${item['unit'] ?? ''}',
               style: TextStyle(color: isLow ? crimson : copperAccent, fontSize: 15, fontWeight: FontWeight.w800))),
           Text('Min: $thresh ${item['unit'] ?? ''}',
-              style: const TextStyle(color: textSecondary, fontSize: 11)),
+              style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11)),
         ]),
         const SizedBox(height: 8),
         ClipRRect(
           borderRadius: BorderRadius.circular(4),
           child: LinearProgressIndicator(
             value: progress,
-            backgroundColor: slateSurface,
+            backgroundColor: BrandColors.of(context).surface,
             valueColor: AlwaysStoppedAnimation<Color>(isLow ? crimson : emerald),
             minHeight: 4,
           ),
@@ -2778,13 +2778,13 @@ class _AdminInventoryCard extends ConsumerWidget {
     final reasonCtrl = TextEditingController();
     showModalBottomSheet(
       context: context,
-      backgroundColor: slateCard,
+      backgroundColor: BrandColors.of(context).card,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => Padding(
         padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Adjust Stock — $name', style: const TextStyle(color: textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
+          Text('Adjust Stock — $name', style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 16, fontWeight: FontWeight.w700)),
           const SizedBox(height: 16),
           _InputField(ctrl: ctrl, label: 'Delta (e.g. +10 or -5)', keyboardType: const TextInputType.numberWithOptions(signed: true)),
           const SizedBox(height: 10),
@@ -2840,7 +2840,7 @@ class AdminBranchesTab extends ConsumerWidget {
       children: [
         RefreshIndicator(
           color: copperAccent,
-          backgroundColor: slateCard,
+          backgroundColor: BrandColors.of(context).card,
           onRefresh: () async => ref.invalidate(_branchesProvider),
           child: branchesAsync.when(
             loading: () => const Center(child: CircularProgressIndicator(color: copperAccent)),
@@ -2888,7 +2888,7 @@ class AdminBranchesTab extends ConsumerWidget {
   void _showAddBranchSheet(BuildContext context, WidgetRef ref) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: slateCard,
+      backgroundColor: BrandColors.of(context).card,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (_) => const _AddBranchSheet(),
@@ -3029,7 +3029,7 @@ class _AddBranchSheetState extends ConsumerState<_AddBranchSheet> {
   void _openInviteManagerSheet(String branchId, String branchName) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: slateCard,
+      backgroundColor: BrandColors.of(context).card,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
@@ -3044,7 +3044,7 @@ class _AddBranchSheetState extends ConsumerState<_AddBranchSheet> {
   Widget build(BuildContext context) => Padding(
         padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 24),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Add Branch', style: TextStyle(color: textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
+          Text('Add Branch', style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 16, fontWeight: FontWeight.w700)),
           const SizedBox(height: 16),
           _InputField(ctrl: _nameCtrl, label: 'Branch Name', errorText: _nameError),
           const SizedBox(height: 10),
@@ -3082,7 +3082,7 @@ class _BranchCard extends ConsumerWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: isActive ? dividerColor : crimson.withValues(alpha: 0.3)),
       ),
@@ -3090,7 +3090,7 @@ class _BranchCard extends ConsumerWidget {
         // Header row: name + slug + edit + delete
         Row(children: [
           Expanded(child: Text(branch['name'] ?? '',
-              style: const TextStyle(color: textPrimary, fontSize: 14, fontWeight: FontWeight.w700))),
+              style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 14, fontWeight: FontWeight.w700))),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(color: emerald.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
@@ -3102,10 +3102,10 @@ class _BranchCard extends ConsumerWidget {
             onTap: () => _showEditSheet(context, ref, id),
             child: Container(
               padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(color: slateSurface, borderRadius: BorderRadius.circular(8)),
-              child: const Tooltip(
+              decoration: BoxDecoration(color: BrandColors.of(context).surface, borderRadius: BorderRadius.circular(8)),
+              child: Tooltip(
                 message: 'Edit',
-                child: Icon(Icons.edit_outlined, color: textSecondary, size: 16),
+                child: Icon(Icons.edit_outlined, color: BrandColors.of(context).textLo, size: 16),
               ),
             ),
           ),
@@ -3123,11 +3123,11 @@ class _BranchCard extends ConsumerWidget {
           ),
         ]),
         const SizedBox(height: 4),
-        Text(branch['address'] ?? '', style: const TextStyle(color: textSecondary, fontSize: 12)),
+        Text(branch['address'] ?? '', style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12)),
         const SizedBox(height: 4),
         Row(children: [
           Text('GST: ${((branch['gstRate'] as num? ?? 0.18) * 100).toStringAsFixed(0)}%',
-              style: const TextStyle(color: textSecondary, fontSize: 11)),
+              style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11)),
           const SizedBox(width: 12),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -3140,8 +3140,8 @@ class _BranchCard extends ConsumerWidget {
           ),
         ]),
         const SizedBox(height: 14),
-        const Text('Feature Toggles',
-            style: TextStyle(color: textSecondary, fontSize: 11, fontWeight: FontWeight.w600)),
+        Text('Feature Toggles',
+            style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11, fontWeight: FontWeight.w600)),
         const SizedBox(height: 8),
         _FeatureToggleRow(
           label: 'QR Ordering',
@@ -3170,7 +3170,7 @@ class _BranchCard extends ConsumerWidget {
   void _showEditSheet(BuildContext context, WidgetRef ref, String id) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: slateCard,
+      backgroundColor: BrandColors.of(context).card,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (_) => _EditBranchSheet(branchId: id, branch: branch),
@@ -3213,10 +3213,10 @@ class _BranchCard extends ConsumerWidget {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: slateCard,
+        backgroundColor: BrandColors.of(context).card,
         title: Text(
           hasDependents ? 'Delete "$name" and all linked data?' : 'Delete "$name"?',
-          style: const TextStyle(color: textPrimary, fontSize: 15),
+          style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 15),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -3228,9 +3228,9 @@ class _BranchCard extends ConsumerWidget {
                 style: const TextStyle(color: crimson, fontSize: 12),
               )
             else
-              const Text(
+              Text(
                 'No linked records. The branch will be removed cleanly.',
-                style: TextStyle(color: textSecondary, fontSize: 12),
+                style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12),
               ),
             if (hasDependents) ...[
               const SizedBox(height: 8),
@@ -3252,8 +3252,8 @@ class _BranchCard extends ConsumerWidget {
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel',
-                  style: TextStyle(color: textSecondary))),
+              child: Text('Cancel',
+                  style: TextStyle(color: BrandColors.of(context).textLo))),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: Text(
@@ -3307,7 +3307,7 @@ class _DepCountRow extends StatelessWidget {
         ),
         const SizedBox(width: 6),
         Text(label,
-            style: const TextStyle(color: textSecondary, fontSize: 12)),
+            style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12)),
         const Spacer(),
         Text('$n',
             style: TextStyle(
@@ -3397,7 +3397,7 @@ class _EditBranchSheetState extends ConsumerState<_EditBranchSheet> {
         padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 24),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('Edit — ${widget.branch['name'] ?? ''}',
-              style: const TextStyle(color: textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
+              style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 16, fontWeight: FontWeight.w700)),
           const SizedBox(height: 16),
           _InputField(ctrl: _nameCtrl, label: 'Branch Name'),
           const SizedBox(height: 10),
@@ -3409,14 +3409,14 @@ class _EditBranchSheetState extends ConsumerState<_EditBranchSheet> {
               keyboardType: const TextInputType.numberWithOptions(decimal: true)),
           const SizedBox(height: 10),
           Row(children: [
-            const Text('Active', style: TextStyle(color: textPrimary, fontSize: 13)),
+            Text('Active', style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 13)),
             const Spacer(),
             Switch(
               value: _isActive,
               onChanged: (v) => setState(() => _isActive = v),
               activeThumbColor: copperAccent,
-              inactiveThumbColor: textSecondary,
-              inactiveTrackColor: slateSurface,
+              inactiveThumbColor: BrandColors.of(context).textLo,
+              inactiveTrackColor: BrandColors.of(context).surface,
             ),
           ]),
           const SizedBox(height: 4),
@@ -3425,23 +3425,23 @@ class _EditBranchSheetState extends ConsumerState<_EditBranchSheet> {
           // pendingReview until a manager audits the values. Off by
           // default — keeps the cleaner separation of duties.
           Row(children: [
-            const Expanded(
+            Expanded(
               child: Text('Chef manages inventory',
-                  style: TextStyle(color: textPrimary, fontSize: 13)),
+                  style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 13)),
             ),
             Switch(
               value: _chefCanManageInventory,
               onChanged: (v) => setState(() => _chefCanManageInventory = v),
               activeThumbColor: copperAccent,
-              inactiveThumbColor: textSecondary,
-              inactiveTrackColor: slateSurface,
+              inactiveThumbColor: BrandColors.of(context).textLo,
+              inactiveTrackColor: BrandColors.of(context).surface,
             ),
           ]),
-          const Padding(
-            padding: EdgeInsets.only(top: 2, bottom: 6),
+          Padding(
+            padding: const EdgeInsets.only(top: 2, bottom: 6),
             child: Text(
               'Chef can add ingredients + set thresholds. Items they add show a REVIEW badge until you approve.',
-              style: TextStyle(color: textSecondary, fontSize: 10, height: 1.3),
+              style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 10, height: 1.3),
             ),
           ),
           const SizedBox(height: 16),
@@ -3461,7 +3461,7 @@ class _FeatureToggleRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Row(children: [
-        Expanded(child: Text(label, style: const TextStyle(color: textPrimary, fontSize: 13))),
+        Expanded(child: Text(label, style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 13))),
         Switch(
           value: value,
           onChanged: onChanged,
@@ -3502,7 +3502,7 @@ class _AdminSystemTabState extends ConsumerState<AdminSystemTab>
   @override
   Widget build(BuildContext context) => Column(children: [
         Container(
-          color: slateCard,
+          color: BrandColors.of(context).card,
           child: TabBar(
             controller: _tc,
             indicatorColor: copperAccent,
@@ -3564,12 +3564,12 @@ class _SystemHealthTab extends ConsumerWidget {
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(color: slateCard, borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(color: BrandColors.of(context).card, borderRadius: BorderRadius.circular(12)),
             child: Row(children: [
-              const Icon(Icons.access_time_outlined, color: textSecondary, size: 14),
+              Icon(Icons.access_time_outlined, color: BrandColors.of(context).textLo, size: 14),
               const SizedBox(width: 6),
               Text('Last checked: ${h['timestamp'] ?? ''}',
-                  style: const TextStyle(color: textSecondary, fontSize: 11)),
+                  style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11)),
               const Spacer(),
               GestureDetector(
                 onTap: () => ref.invalidate(_systemHealthProvider),
@@ -3600,18 +3600,18 @@ class _WipeDemoCardState extends ConsumerState<_WipeDemoCard> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: slateCard,
-        title: const Text('Clear demo orders + bills?',
-            style: TextStyle(color: textPrimary, fontSize: 15)),
-        content: const Text(
+        backgroundColor: BrandColors.of(context).card,
+        title: Text('Clear demo orders + bills?',
+            style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 15)),
+        content: Text(
           'Removes the canned orders and bills the seed script pushed for first-launch demos. Your real transactions and the user accounts, menu, and tables stay.',
-          style: TextStyle(color: textSecondary, fontSize: 12),
+          style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel',
-                style: TextStyle(color: textSecondary)),
+            child: Text('Cancel',
+                style: TextStyle(color: BrandColors.of(context).textLo)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
@@ -3660,24 +3660,24 @@ class _WipeDemoCardState extends ConsumerState<_WipeDemoCard> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: crimson.withValues(alpha: 0.3)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: const [
-          Icon(Icons.cleaning_services_outlined, color: crimson, size: 16),
-          SizedBox(width: 8),
+        Row(children: [
+          const Icon(Icons.cleaning_services_outlined, color: crimson, size: 16),
+          const SizedBox(width: 8),
           Text('Clear demo seed data',
               style: TextStyle(
-                  color: textPrimary,
+                  color: BrandColors.of(context).textHi,
                   fontSize: 13,
                   fontWeight: FontWeight.w700)),
         ]),
         const SizedBox(height: 4),
-        const Text(
+        Text(
           'Remove the canned orders + bills the first-launch seed inserted. Keeps users, menu, and tables.',
-          style: TextStyle(color: textSecondary, fontSize: 11, height: 1.4),
+          style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11, height: 1.4),
         ),
         const SizedBox(height: 12),
         SizedBox(
@@ -3725,7 +3725,7 @@ class _HealthStatusCard extends StatelessWidget {
           Text(ok ? 'All Systems Operational' : 'System Degraded',
               style: TextStyle(color: color, fontSize: 15, fontWeight: FontWeight.w800)),
           Text(ok ? 'No issues detected' : 'Check logs for details',
-              style: const TextStyle(color: textSecondary, fontSize: 12)),
+              style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12)),
         ]),
       ]),
     );
@@ -3750,9 +3750,9 @@ class _AuditLogTab extends ConsumerWidget {
                 const Center(child: CircularProgressIndicator(color: copperAccent)),
             error: (e, _) => Center(child: _ErrorText(describeApiError(e))),
             data: (entries) => entries.isEmpty
-                ? const Center(
+                ? Center(
                     child: Text('No audit entries',
-                        style: TextStyle(color: textSecondary)))
+                        style: TextStyle(color: BrandColors.of(context).textLo)))
                 : RefreshIndicator(
                     color: copperAccent,
                     onRefresh: () async => ref.invalidate(auditEventsProvider),
@@ -3834,9 +3834,9 @@ class _AuditFilterBarState extends ConsumerState<_AuditFilterBar> {
     final df = DateFormat('dd MMM');
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-      decoration: const BoxDecoration(
-        color: slateCard,
-        border: Border(bottom: BorderSide(color: dividerColor)),
+      decoration: BoxDecoration(
+        color: BrandColors.of(context).card,
+        border: Border(bottom: BorderSide(color: BrandColors.of(context).divider)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3848,7 +3848,7 @@ class _AuditFilterBarState extends ConsumerState<_AuditFilterBar> {
                 decoration: BoxDecoration(
                   color: slateBg,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: dividerColor),
+                  border: Border.all(color: BrandColors.of(context).divider),
                 ),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
@@ -3856,7 +3856,7 @@ class _AuditFilterBarState extends ConsumerState<_AuditFilterBar> {
                     isExpanded: true,
                     dropdownColor: slateCard,
                     iconEnabledColor: copperAccent,
-                    style: const TextStyle(color: textPrimary, fontSize: 12),
+                    style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 12),
                     items: _types.entries
                         .map((e) => DropdownMenuItem(
                               value: e.key,
@@ -3878,11 +3878,11 @@ class _AuditFilterBarState extends ConsumerState<_AuditFilterBar> {
                 height: 38,
                 child: TextField(
                   controller: _actorCtrl,
-                  style: const TextStyle(color: textPrimary, fontSize: 12),
+                  style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 12),
                   decoration: InputDecoration(
                     hintText: 'Actor id',
                     hintStyle:
-                        const TextStyle(color: textSecondary, fontSize: 12),
+                        TextStyle(color: BrandColors.of(context).textLo, fontSize: 12),
                     isDense: true,
                     contentPadding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -3890,7 +3890,7 @@ class _AuditFilterBarState extends ConsumerState<_AuditFilterBar> {
                     fillColor: slateBg,
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: dividerColor),
+                      borderSide: BorderSide(color: BrandColors.of(context).divider),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
@@ -3900,8 +3900,8 @@ class _AuditFilterBarState extends ConsumerState<_AuditFilterBar> {
                         ? null
                         : IconButton(
                             iconSize: 16,
-                            icon: const Icon(Icons.close,
-                                color: textSecondary, size: 16),
+                            icon: Icon(Icons.close,
+                                color: BrandColors.of(context).textLo, size: 16),
                             onPressed: () {
                               _actorCtrl.clear();
                               ref
@@ -3926,7 +3926,7 @@ class _AuditFilterBarState extends ConsumerState<_AuditFilterBar> {
             Expanded(
               child: OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: dividerColor),
+                  side: BorderSide(color: BrandColors.of(context).divider),
                   foregroundColor: textPrimary,
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                 ),
@@ -3943,7 +3943,7 @@ class _AuditFilterBarState extends ConsumerState<_AuditFilterBar> {
             Expanded(
               child: OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: dividerColor),
+                  side: BorderSide(color: BrandColors.of(context).divider),
                   foregroundColor: textPrimary,
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                 ),
@@ -4022,9 +4022,9 @@ class _AuditEntry extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: dividerColor),
+        border: Border.all(color: BrandColors.of(context).divider),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -4046,12 +4046,12 @@ class _AuditEntry extends StatelessWidget {
                         fontSize: 12,
                         fontWeight: FontWeight.w700)),
                 Text(actorLine,
-                    style: const TextStyle(
-                        color: textSecondary, fontSize: 11)),
+                    style: TextStyle(
+                        color: BrandColors.of(context).textLo, fontSize: 11)),
                 if (branchId != null && branchId.isNotEmpty)
                   Text('branch · $branchId',
-                      style: const TextStyle(
-                          color: textSecondary, fontSize: 10)),
+                      style: TextStyle(
+                          color: BrandColors.of(context).textLo, fontSize: 10)),
                 if (meta is Map && meta.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
@@ -4059,8 +4059,8 @@ class _AuditEntry extends StatelessWidget {
                       meta.entries
                           .map((e) => '${e.key}: ${e.value}')
                           .join(' · '),
-                      style: const TextStyle(
-                          color: textSecondary, fontSize: 10),
+                      style: TextStyle(
+                          color: BrandColors.of(context).textLo, fontSize: 10),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -4070,7 +4070,7 @@ class _AuditEntry extends StatelessWidget {
           ),
           if (at != null)
             Text(DateFormat('dd MMM HH:mm').format(at),
-                style: const TextStyle(color: textSecondary, fontSize: 10)),
+                style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 10)),
         ],
       ),
     );
@@ -4098,7 +4098,7 @@ class _MenuManagementTabState extends ConsumerState<_MenuManagementTab> {
       error: (e, _) => Center(child: _ErrorText(describeApiError(e))),
       data: (branches) {
         if (branches.isEmpty) {
-          return const Center(child: Text('No branches found', style: TextStyle(color: textSecondary)));
+          return Center(child: Text('No branches found', style: TextStyle(color: BrandColors.of(context).textLo)));
         }
         // Auto-select first branch
         _selectedBranchId ??= branches.first['_id'] as String?;
@@ -4109,19 +4109,19 @@ class _MenuManagementTabState extends ConsumerState<_MenuManagementTab> {
             Column(children: [
               // Branch selector
               Container(
-                color: slateSurface,
+                color: BrandColors.of(context).surface,
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 child: DropdownButtonFormField<String>(
                   value: _selectedBranchId,
                   dropdownColor: slateSurface,
-                  style: const TextStyle(color: textPrimary, fontSize: 13),
+                  style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 13),
                   decoration: InputDecoration(
                     labelText: 'Branch',
-                    labelStyle: const TextStyle(color: textSecondary, fontSize: 12),
-                    filled: true, fillColor: slateCard,
+                    labelStyle: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12),
+                    filled: true, fillColor: BrandColors.of(context).card,
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: dividerColor)),
-                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: dividerColor)),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: BrandColors.of(context).divider)),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: BrandColors.of(context).divider)),
                     focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: copperAccent)),
                   ),
                   items: branches.map((b) => DropdownMenuItem<String>(
@@ -4144,7 +4144,7 @@ class _MenuManagementTabState extends ConsumerState<_MenuManagementTab> {
                           loading: () => const Center(child: CircularProgressIndicator(color: copperAccent)),
                           error: (e, _) => Center(child: _ErrorText(describeApiError(e))),
                           data: (items) => items.isEmpty
-                              ? const Center(child: Text('No items yet. Add one!', style: TextStyle(color: textSecondary)))
+                              ? Center(child: Text('No items yet. Add one!', style: TextStyle(color: BrandColors.of(context).textLo)))
                               : ListView.builder(
                                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
                                   itemCount: items.length,
@@ -4197,7 +4197,7 @@ class _MenuManagementTabState extends ConsumerState<_MenuManagementTab> {
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: slateCard,
+      backgroundColor: BrandColors.of(context).card,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (ctx) => StatefulBuilder(
@@ -4205,7 +4205,7 @@ class _MenuManagementTabState extends ConsumerState<_MenuManagementTab> {
           padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(id == null ? 'Add Menu Item' : 'Edit — ${existing!['name']}',
-                style: const TextStyle(color: textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
+                style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 16, fontWeight: FontWeight.w700)),
             const SizedBox(height: 16),
             _InputField(ctrl: nameCtrl, label: 'Name'),
             const SizedBox(height: 10),
@@ -4224,13 +4224,13 @@ class _MenuManagementTabState extends ConsumerState<_MenuManagementTab> {
             _InputField(ctrl: tagsCtrl, label: 'Tags (comma separated, e.g. spicy,vegan)'),
             const SizedBox(height: 10),
             Row(children: [
-              const Text('Vegetarian', style: TextStyle(color: textPrimary, fontSize: 13)),
+              Text('Vegetarian', style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 13)),
               const Spacer(),
               Switch(
                 value: isVeg,
                 onChanged: (v) => setState(() => isVeg = v),
                 activeThumbColor: emerald,
-                inactiveThumbColor: textSecondary,
+                inactiveThumbColor: BrandColors.of(context).textLo,
                 inactiveTrackColor: slateSurface,
               ),
             ]),
@@ -4255,7 +4255,7 @@ class _MenuManagementTabState extends ConsumerState<_MenuManagementTab> {
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
                 decoration: BoxDecoration(
-                  color: slateSurface,
+                  color: BrandColors.of(context).surface,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: pickedImageBytes != null ? copperAccent : dividerColor),
                 ),
@@ -4304,7 +4304,7 @@ class _MenuManagementTabState extends ConsumerState<_MenuManagementTab> {
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
                 decoration: BoxDecoration(
-                  color: slateSurface,
+                  color: BrandColors.of(context).surface,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: pickedGlbBytes != null ? copperAccent : dividerColor),
                 ),
@@ -4440,7 +4440,7 @@ class _MenuItemCard extends ConsumerWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: isAvailable ? dividerColor : crimson.withValues(alpha: 0.3)),
       ),
@@ -4453,14 +4453,14 @@ class _MenuItemCard extends ConsumerWidget {
               fullImageUrl != null
                   ? CachedNetworkImage(
                       imageUrl: fullImageUrl, height: 130, width: double.infinity, fit: BoxFit.cover,
-                      placeholder: (_, __) => Container(height: 130, color: slateSurface),
+                      placeholder: (_, __) => Container(height: 130, color: BrandColors.of(context).surface),
                       // Show the no-photo placeholder if the GET fails —
                       // happens when the backend has imageUrl set but
                       // imageData is missing/corrupt, or during a Render
                       // cold start. Tapping Photo re-uploads.
-                      errorWidget: (_, __, ___) => _placeholder(),
+                      errorWidget: (_, __, ___) => _placeholder(context),
                     )
-                  : _placeholder(),
+                  : _placeholder(context),
               Positioned(
                 bottom: 8, right: 8,
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -4530,14 +4530,14 @@ class _MenuItemCard extends ConsumerWidget {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
               Expanded(child: Text(item['name'] ?? '',
-                  style: const TextStyle(color: textPrimary, fontSize: 13, fontWeight: FontWeight.w700))),
+                  style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 13, fontWeight: FontWeight.w700))),
               Text('₹${price.toStringAsFixed(0)}',
                   style: const TextStyle(color: copperAccent, fontSize: 14, fontWeight: FontWeight.w800)),
             ]),
             if ((item['description'] as String? ?? '').isNotEmpty) ...[
               const SizedBox(height: 3),
               Text(item['description'] ?? '',
-                  style: const TextStyle(color: textSecondary, fontSize: 11),
+                  style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11),
                   maxLines: 2, overflow: TextOverflow.ellipsis),
             ],
             if (tags.isNotEmpty) ...[
@@ -4558,12 +4558,12 @@ class _MenuItemCard extends ConsumerWidget {
               const Icon(Icons.star_rounded, color: amber, size: 13),
               const SizedBox(width: 3),
               Text('${rating.toStringAsFixed(1)} ($ratingCount)',
-                  style: const TextStyle(color: textSecondary, fontSize: 11)),
+                  style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11)),
               if (prep > 0) ...[
                 const SizedBox(width: 10),
-                const Icon(Icons.timer_outlined, color: textSecondary, size: 12),
+                Icon(Icons.timer_outlined, color: BrandColors.of(context).textLo, size: 12),
                 const SizedBox(width: 3),
-                Text('${prep}m', style: const TextStyle(color: textSecondary, fontSize: 11)),
+                Text('${prep}m', style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11)),
               ],
               const Spacer(),
               // Availability
@@ -4598,8 +4598,8 @@ class _MenuItemCard extends ConsumerWidget {
                 },
                 child: Container(
                   padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(color: slateSurface, borderRadius: BorderRadius.circular(8)),
-                  child: const Icon(Icons.edit_outlined, color: textSecondary, size: 15),
+                  decoration: BoxDecoration(color: BrandColors.of(context).surface, borderRadius: BorderRadius.circular(8)),
+                  child: Icon(Icons.edit_outlined, color: BrandColors.of(context).textLo, size: 15),
                 ),
               ),
               const SizedBox(width: 4),
@@ -4608,13 +4608,13 @@ class _MenuItemCard extends ConsumerWidget {
                 onTap: () => showDialog(
                   context: context,
                   builder: (_) => AlertDialog(
-                    backgroundColor: slateCard,
-                    title: const Text('Delete Item?', style: TextStyle(color: textPrimary)),
+                    backgroundColor: BrandColors.of(context).card,
+                    title: Text('Delete Item?', style: TextStyle(color: BrandColors.of(context).textHi)),
                     content: Text('Permanently delete "${item['name'] ?? ''}". This cannot be undone.',
-                        style: const TextStyle(color: textSecondary)),
+                        style: TextStyle(color: BrandColors.of(context).textLo)),
                     actions: [
                       TextButton(onPressed: () => Navigator.pop(context),
-                          child: const Text('Cancel', style: TextStyle(color: textSecondary))),
+                          child: Text('Cancel', style: TextStyle(color: BrandColors.of(context).textLo))),
                       TextButton(
                         onPressed: () async {
                           Navigator.pop(context);
@@ -4648,17 +4648,17 @@ class _MenuItemCard extends ConsumerWidget {
     );
   }
 
-  Widget _placeholder() => Container(
+  Widget _placeholder(BuildContext context) => Container(
         height: 130,
         width: double.infinity,
-        color: slateSurface,
+        color: BrandColors.of(context).surface,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: const [
-            Icon(Icons.add_a_photo_outlined, color: copperAccent, size: 32),
-            SizedBox(height: 6),
+          children: [
+            const Icon(Icons.add_a_photo_outlined, color: copperAccent, size: 32),
+            const SizedBox(height: 6),
             Text("No photo yet — tap 'Photo' to upload",
-                style: TextStyle(color: textSecondary, fontSize: 11)),
+                style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11)),
           ],
         ),
       );
@@ -4699,19 +4699,19 @@ class _MenuItemCard extends ConsumerWidget {
   Future<void> _uploadImage(BuildContext context, WidgetRef ref, String id) async {
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
-      backgroundColor: slateCard,
+      backgroundColor: BrandColors.of(context).card,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) => SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           const SizedBox(height: 12),
           ListTile(
             leading: const Icon(Icons.camera_alt_outlined, color: copperAccent),
-            title: const Text('Camera', style: TextStyle(color: textPrimary)),
+            title: Text('Camera', style: TextStyle(color: BrandColors.of(context).textHi)),
             onTap: () => Navigator.pop(context, ImageSource.camera),
           ),
           ListTile(
             leading: const Icon(Icons.photo_library_outlined, color: copperAccent),
-            title: const Text('Gallery', style: TextStyle(color: textPrimary)),
+            title: Text('Gallery', style: TextStyle(color: BrandColors.of(context).textHi)),
             onTap: () => Navigator.pop(context, ImageSource.gallery),
           ),
           const SizedBox(height: 8),
@@ -4789,8 +4789,8 @@ class _Inline3dPreviewState extends State<_Inline3dPreview> {
       decoration: BoxDecoration(
         color: slateBg,
         border: Border(
-          top: BorderSide(color: dividerColor),
-          bottom: BorderSide(color: dividerColor),
+          top: BorderSide(color: BrandColors.of(context).divider),
+          bottom: BorderSide(color: BrandColors.of(context).divider),
         ),
       ),
       child: Stack(children: [
@@ -4866,7 +4866,7 @@ class _MetricCard extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: slateCard,
+          color: BrandColors.of(context).card,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: color.withValues(alpha: 0.2)),
         ),
@@ -4874,7 +4874,7 @@ class _MetricCard extends StatelessWidget {
           Icon(icon, color: color, size: 20),
           Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(value, style: TextStyle(color: color, fontSize: 22, fontWeight: FontWeight.w800)),
-            Text(label, style: const TextStyle(color: textSecondary, fontSize: 11)),
+            Text(label, style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11)),
           ]),
         ]),
       ).animate().fadeIn(duration: 300.ms);
@@ -4885,7 +4885,7 @@ class _SectionTitle extends StatelessWidget {
   const _SectionTitle(this.title);
   @override
   Widget build(BuildContext context) => Text(title,
-      style: const TextStyle(color: textPrimary, fontSize: 14, fontWeight: FontWeight.w700));
+      style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 14, fontWeight: FontWeight.w700));
 }
 
 class _ChartSkeleton extends StatelessWidget {
@@ -4894,7 +4894,7 @@ class _ChartSkeleton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         height: height,
-        decoration: BoxDecoration(color: slateCard, borderRadius: BorderRadius.circular(14)),
+        decoration: BoxDecoration(color: BrandColors.of(context).card, borderRadius: BorderRadius.circular(14)),
         child: const Center(child: CircularProgressIndicator(color: copperAccent, strokeWidth: 2)),
       );
 }
@@ -4920,20 +4920,20 @@ class _EmptyView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 64, color: textSecondary.withValues(alpha: 0.4)),
+            Icon(icon, size: 64, color: BrandColors.of(context).textLo.withValues(alpha: 0.4)),
             const SizedBox(height: 18),
             Text(title,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                    color: textPrimary,
+                style: TextStyle(
+                    color: BrandColors.of(context).textHi,
                     fontSize: 16,
                     fontWeight: FontWeight.w800)),
             const SizedBox(height: 6),
             Text(
               subtitle,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                  color: textSecondary, fontSize: 13, height: 1.4),
+              style: TextStyle(
+                  color: BrandColors.of(context).textLo, fontSize: 13, height: 1.4),
             ),
           ],
         ),
@@ -4993,8 +4993,8 @@ class _InputField extends StatelessWidget {
         controller: ctrl,
         obscureText: obscure,
         keyboardType: keyboardType,
-        style: const TextStyle(color: textPrimary),
-        decoration: _inputDec(label).copyWith(errorText: errorText),
+        style: TextStyle(color: BrandColors.of(context).textHi),
+        decoration: _inputDec(context, label).copyWith(errorText: errorText),
       );
 }
 
@@ -5019,13 +5019,13 @@ class _PrimaryButton extends StatelessWidget {
       );
 }
 
-InputDecoration _inputDec(String label) => InputDecoration(
+InputDecoration _inputDec(BuildContext context, String label) => InputDecoration(
       labelText: label,
-      labelStyle: const TextStyle(color: textSecondary, fontSize: 13),
+      labelStyle: TextStyle(color: BrandColors.of(context).textLo, fontSize: 13),
       filled: true,
-      fillColor: slateSurface,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: dividerColor)),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: dividerColor)),
+      fillColor: BrandColors.of(context).surface,
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: BrandColors.of(context).divider)),
+      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: BrandColors.of(context).divider)),
       focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: copperAccent)),
     );
 

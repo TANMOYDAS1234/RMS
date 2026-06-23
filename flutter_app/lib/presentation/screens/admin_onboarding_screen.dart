@@ -189,7 +189,7 @@ class _AdminOnboardingScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: slateBg,
+      backgroundColor: BrandColors.of(context).bg,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
@@ -253,7 +253,7 @@ class _ProgressBar extends StatelessWidget {
           child: Container(
             height: 4,
             decoration: BoxDecoration(
-              color: i <= step ? copperAccent : slateSurface,
+              color: i <= step ? copperAccent : BrandColors.of(context).surface,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -296,21 +296,21 @@ class _StepWelcome extends StatelessWidget {
           duration: 600.ms,
           curve: Curves.elasticOut),
       const SizedBox(height: 24),
-      const Text('WELCOME TO DINE OPS',
+      Text('WELCOME TO DINE OPS',
               style: TextStyle(
-                  color: textPrimary,
+                  color: BrandColors.of(context).textHi,
                   fontSize: 18,
                   fontWeight: FontWeight.w900,
                   letterSpacing: 4))
           .animate()
           .fadeIn(delay: 250.ms, duration: 400.ms),
       const SizedBox(height: 8),
-      const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 18),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 18),
         child: Text(
           'Let us set up your first branch in three quick steps. Should take less than a minute.',
           textAlign: TextAlign.center,
-          style: TextStyle(color: textSecondary, fontSize: 13, height: 1.5),
+          style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 13, height: 1.5),
         ),
       ).animate().fadeIn(delay: 450.ms, duration: 400.ms),
       const SizedBox(height: 28),
@@ -352,14 +352,14 @@ class _StepList extends StatelessWidget {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(items[i].$1,
-                  style: const TextStyle(
-                      color: textPrimary,
+                  style: TextStyle(
+                      color: BrandColors.of(context).textHi,
                       fontSize: 13,
                       fontWeight: FontWeight.w700)),
               const SizedBox(height: 2),
               Text(items[i].$2,
-                  style: const TextStyle(
-                      color: textSecondary, fontSize: 11)),
+                  style: TextStyle(
+                      color: BrandColors.of(context).textLo, fontSize: 11)),
             ]),
           ),
         ])
@@ -534,16 +534,16 @@ class _StepTitle extends StatelessWidget {
         const SizedBox(width: 12),
         Expanded(
           child: Text(title,
-              style: const TextStyle(
-                  color: textPrimary,
+              style: TextStyle(
+                  color: BrandColors.of(context).textHi,
                   fontSize: 17,
                   fontWeight: FontWeight.w800)),
         ),
       ]),
       const SizedBox(height: 10),
       Text(subtitle,
-          style: const TextStyle(
-              color: textSecondary, fontSize: 12, height: 1.5)),
+          style: TextStyle(
+              color: BrandColors.of(context).textLo, fontSize: 12, height: 1.5)),
     ]).animate().fadeIn(duration: 350.ms);
   }
 }
@@ -568,20 +568,20 @@ class _Field extends StatelessWidget {
       controller: ctrl,
       obscureText: obscure,
       keyboardType: keyboardType,
-      style: const TextStyle(color: textPrimary, fontSize: 14),
+      style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 14),
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
-        labelStyle: const TextStyle(color: textSecondary, fontSize: 12),
-        hintStyle: const TextStyle(color: textSecondary, fontSize: 12),
+        labelStyle: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12),
+        hintStyle: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12),
         filled: true,
-        fillColor: slateSurface,
+        fillColor: BrandColors.of(context).surface,
         border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: dividerColor)),
+            borderSide: BorderSide(color: BrandColors.of(context).divider)),
         enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: dividerColor)),
+            borderSide: BorderSide(color: BrandColors.of(context).divider)),
         focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
             borderSide: const BorderSide(color: copperAccent)),
@@ -632,14 +632,14 @@ class _SecondaryBtn extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
-          color: slateSurface,
+          color: BrandColors.of(context).surface,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: dividerColor),
+          border: Border.all(color: BrandColors.of(context).divider),
         ),
         child: Center(
           child: Text(label,
-              style: const TextStyle(
-                  color: textSecondary,
+              style: TextStyle(
+                  color: BrandColors.of(context).textLo,
                   fontWeight: FontWeight.w800,
                   fontSize: 14,
                   letterSpacing: 1.5)),

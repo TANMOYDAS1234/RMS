@@ -198,9 +198,9 @@ class _DateRangePicker extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: dividerColor),
+        border: Border.all(color: BrandColors.of(context).divider),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
@@ -208,8 +208,8 @@ class _DateRangePicker extends ConsumerWidget {
               color: copperAccent, size: 14),
           const SizedBox(width: 8),
           Text(range.label,
-              style: const TextStyle(
-                  color: textPrimary,
+              style: TextStyle(
+                  color: BrandColors.of(context).textHi,
                   fontSize: 13,
                   fontWeight: FontWeight.w700)),
           const Spacer(),
@@ -313,7 +313,7 @@ class _TodaySummary extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: copperAccent.withValues(alpha: 0.2)),
       ),
@@ -322,7 +322,7 @@ class _TodaySummary extends StatelessWidget {
           const Icon(Icons.today_outlined, color: copperAccent, size: 14),
           const SizedBox(width: 6),
           Text(date,
-              style: const TextStyle(color: textSecondary, fontSize: 12)),
+              style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12)),
         ]),
         const SizedBox(height: 14),
         Row(children: [
@@ -355,7 +355,7 @@ class _StatBox extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           Text(label,
-              style: const TextStyle(color: textSecondary, fontSize: 10),
+              style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 10),
               textAlign: TextAlign.center),
         ]),
       );
@@ -383,8 +383,8 @@ class _StatusBreakdown extends StatelessWidget {
         .where((e) => (e.value as int? ?? 0) > 0)
         .toList();
     if (entries.isEmpty) {
-      return const Text('No orders today',
-          style: TextStyle(color: textSecondary, fontSize: 12));
+      return Text('No orders today',
+          style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12));
     }
     return Wrap(
       spacing: 8,
@@ -431,12 +431,12 @@ class _RevenueChart extends StatelessWidget {
       height: 180,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-          color: slateCard, borderRadius: BorderRadius.circular(14)),
+          color: BrandColors.of(context).card, borderRadius: BorderRadius.circular(14)),
       child: LineChart(LineChartData(
         gridData: FlGridData(
           show: true,
           getDrawingHorizontalLine: (_) =>
-              const FlLine(color: dividerColor, strokeWidth: 0.5),
+              FlLine(color: BrandColors.of(context).divider, strokeWidth: 0.5),
           drawVerticalLine: false,
         ),
         titlesData: FlTitlesData(
@@ -446,7 +446,7 @@ class _RevenueChart extends StatelessWidget {
               reservedSize: 44,
               getTitlesWidget: (v, _) => Text(
                 '₹${(v / 1000).toStringAsFixed(0)}k',
-                style: const TextStyle(color: textSecondary, fontSize: 9),
+                style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 9),
               ),
             ),
           ),
@@ -461,7 +461,7 @@ class _RevenueChart extends StatelessWidget {
                 final date = data[idx]['_id'] as String? ?? '';
                 return Text(
                   date.length >= 10 ? date.substring(5) : date,
-                  style: const TextStyle(color: textSecondary, fontSize: 9),
+                  style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 9),
                 );
               },
             ),
@@ -506,7 +506,7 @@ class _PeakHoursChart extends StatelessWidget {
       height: 130,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-          color: slateCard, borderRadius: BorderRadius.circular(14)),
+          color: BrandColors.of(context).card, borderRadius: BorderRadius.circular(14)),
       child: BarChart(BarChartData(
         alignment: BarChartAlignment.spaceAround,
         maxY: maxY * 1.2,
@@ -516,8 +516,8 @@ class _PeakHoursChart extends StatelessWidget {
             sideTitles: SideTitles(
               showTitles: true,
               getTitlesWidget: (v, _) => Text('${v.toInt()}h',
-                  style: const TextStyle(
-                      color: textSecondary, fontSize: 9)),
+                  style: TextStyle(
+                      color: BrandColors.of(context).textLo, fontSize: 9)),
             ),
           ),
           leftTitles: const AxisTitles(
@@ -565,7 +565,7 @@ class _TopItemsList extends StatelessWidget {
           margin: const EdgeInsets.only(bottom: 8),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
-              color: slateCard, borderRadius: BorderRadius.circular(10)),
+              color: BrandColors.of(context).card, borderRadius: BorderRadius.circular(10)),
           child: Row(children: [
             Container(
               width: 26, height: 26,
@@ -584,14 +584,14 @@ class _TopItemsList extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(
               child: Text(item['name'] as String? ?? '',
-                  style: const TextStyle(
-                      color: textPrimary,
+                  style: TextStyle(
+                      color: BrandColors.of(context).textHi,
                       fontSize: 12,
                       fontWeight: FontWeight.w600)),
             ),
             Text('$qty sold',
-                style: const TextStyle(
-                    color: textSecondary, fontSize: 11)),
+                style: TextStyle(
+                    color: BrandColors.of(context).textLo, fontSize: 11)),
             const SizedBox(width: 10),
             Text('₹${revenue.toStringAsFixed(0)}',
                 style: const TextStyle(
@@ -620,7 +620,7 @@ class _StaffActivityList extends StatelessWidget {
             margin: const EdgeInsets.only(bottom: 8),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-                color: slateCard, borderRadius: BorderRadius.circular(10)),
+                color: BrandColors.of(context).card, borderRadius: BorderRadius.circular(10)),
             child: Row(children: [
               CircleAvatar(
                 radius: 16,
@@ -636,8 +636,8 @@ class _StaffActivityList extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(id,
-                    style: const TextStyle(
-                        color: textSecondary, fontSize: 11),
+                    style: TextStyle(
+                        color: BrandColors.of(context).textLo, fontSize: 11),
                     overflow: TextOverflow.ellipsis),
               ),
               Text('$count orders',
@@ -664,8 +664,8 @@ class _SectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Text(title,
-      style: const TextStyle(
-          color: textPrimary, fontSize: 14, fontWeight: FontWeight.w700));
+      style: TextStyle(
+          color: BrandColors.of(context).textHi, fontSize: 14, fontWeight: FontWeight.w700));
 }
 
 class _Skeleton extends StatelessWidget {
@@ -676,7 +676,7 @@ class _Skeleton extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         height: height,
         decoration: BoxDecoration(
-            color: slateCard, borderRadius: BorderRadius.circular(14)),
+            color: BrandColors.of(context).card, borderRadius: BorderRadius.circular(14)),
         child: const Center(
             child: CircularProgressIndicator(
                 color: copperAccent, strokeWidth: 2)),
@@ -712,9 +712,9 @@ class _NoData extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         height: 80,
         decoration: BoxDecoration(
-            color: slateCard, borderRadius: BorderRadius.circular(14)),
-        child: const Center(
+            color: BrandColors.of(context).card, borderRadius: BorderRadius.circular(14)),
+        child: Center(
             child: Text('No data available',
-                style: TextStyle(color: textSecondary, fontSize: 12))),
+                style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12))),
       );
 }

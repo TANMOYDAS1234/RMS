@@ -59,7 +59,7 @@ class _ManagerDiscountsTabState extends ConsumerState<ManagerDiscountsTab>
     return Column(children: [
       // ── Sub-tabs ───────────────────────────────────────────────────────
       Container(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         child: TabBar(
           controller: _tc,
           indicatorColor: copperAccent,
@@ -256,7 +256,7 @@ class _BillCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: hasDiscount
@@ -269,13 +269,13 @@ class _BillCard extends StatelessWidget {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(tableLabel,
-                  style: const TextStyle(
-                      color: textPrimary,
+                  style: TextStyle(
+                      color: BrandColors.of(context).textHi,
                       fontSize: 14,
                       fontWeight: FontWeight.w700)),
               if (createdAt != null)
                 Text(DateFormat('dd MMM, HH:mm').format(createdAt),
-                    style: const TextStyle(color: textSecondary, fontSize: 11)),
+                    style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11)),
             ]),
           ),
           if (hasDiscount)
@@ -352,7 +352,7 @@ class _OrderDiscountCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: hasDiscount
@@ -365,12 +365,12 @@ class _OrderDiscountCard extends StatelessWidget {
           Expanded(child: Column(
               crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(tableLabel,
-                style: const TextStyle(
-                    color: textPrimary,
+                style: TextStyle(
+                    color: BrandColors.of(context).textHi,
                     fontSize: 14,
                     fontWeight: FontWeight.w700)),
             Text('$items items · ${status.toUpperCase()}',
-                style: const TextStyle(color: textSecondary, fontSize: 11)),
+                style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11)),
           ])),
           if (hasDiscount)
             Container(
@@ -464,14 +464,14 @@ class _DiscountSheetState extends State<_DiscountSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Apply Discount',
+              Text('Apply Discount',
                   style: TextStyle(
-                      color: textPrimary,
+                      color: BrandColors.of(context).textHi,
                       fontSize: 16,
                       fontWeight: FontWeight.w700)),
               const SizedBox(height: 16),
-              const Text('Quick Select',
-                  style: TextStyle(color: textSecondary, fontSize: 12)),
+              Text('Quick Select',
+                  style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12)),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
@@ -503,8 +503,8 @@ class _DiscountSheetState extends State<_DiscountSheet> {
               ),
               const SizedBox(height: 16),
               Row(children: [
-                const Text('Custom:',
-                    style: TextStyle(color: textSecondary, fontSize: 12)),
+                Text('Custom:',
+                    style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12)),
                 const SizedBox(width: 8),
                 Text('${_selectedPct.toInt()}%',
                     style: const TextStyle(
@@ -524,19 +524,19 @@ class _DiscountSheetState extends State<_DiscountSheet> {
               const SizedBox(height: 8),
               TextField(
                 controller: _reasonCtrl,
-                style: const TextStyle(color: textPrimary),
+                style: TextStyle(color: BrandColors.of(context).textHi),
                 decoration: InputDecoration(
                   labelText: 'Reason (e.g. VIP guest, complaint)',
                   labelStyle:
-                      const TextStyle(color: textSecondary, fontSize: 13),
+                      TextStyle(color: BrandColors.of(context).textLo, fontSize: 13),
                   filled: true,
                   fillColor: slateSurface,
                   border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: dividerColor)),
+                      borderSide: BorderSide(color: BrandColors.of(context).divider)),
                   enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: dividerColor)),
+                      borderSide: BorderSide(color: BrandColors.of(context).divider)),
                   focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                       borderSide: const BorderSide(color: copperAccent)),
@@ -585,7 +585,7 @@ class _BillRow extends StatelessWidget {
         child: Row(children: [
           Text(label,
               style: TextStyle(
-                  color: textSecondary,
+                  color: BrandColors.of(context).textLo,
                   fontSize: 12,
                   fontWeight: bold ? FontWeight.w700 : FontWeight.normal)),
           const Spacer(),
@@ -618,7 +618,7 @@ class _SummaryChip extends StatelessWidget {
                 style: TextStyle(
                     color: color, fontSize: 18, fontWeight: FontWeight.w800)),
             Text(label,
-                style: const TextStyle(color: textSecondary, fontSize: 10)),
+                style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 10)),
           ]),
         ),
       );
@@ -634,16 +634,16 @@ class _EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Center(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, size: 48, color: textSecondary.withValues(alpha: 0.4)),
+          Icon(icon, size: 48, color: BrandColors.of(context).textLo.withValues(alpha: 0.4)),
           const SizedBox(height: 12),
           Text(message,
-              style: const TextStyle(
-                  color: textPrimary,
+              style: TextStyle(
+                  color: BrandColors.of(context).textHi,
                   fontSize: 16,
                   fontWeight: FontWeight.w600)),
           const SizedBox(height: 4),
           Text(sub,
-              style: const TextStyle(color: textSecondary, fontSize: 12)),
+              style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12)),
         ]),
       );
 }

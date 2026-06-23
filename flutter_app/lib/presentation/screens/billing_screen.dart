@@ -175,8 +175,8 @@ class _SectionTitle extends StatelessWidget {
       Icon(icon, color: accent, size: 16),
       const SizedBox(width: 8),
       Text(title.toUpperCase(),
-          style: const TextStyle(
-              color: textSecondary,
+          style: TextStyle(
+              color: BrandColors.of(context).textLo,
               fontSize: 11,
               fontWeight: FontWeight.w800,
               letterSpacing: 1)),
@@ -205,7 +205,7 @@ class _SectionEmpty extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 14),
       alignment: Alignment.center,
       child: Text(label,
-          style: const TextStyle(color: textSecondary, fontSize: 12)),
+          style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12)),
     );
   }
 }
@@ -218,7 +218,7 @@ class _Skeleton extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         height: height,
         decoration: BoxDecoration(
-          color: slateCard,
+          color: BrandColors.of(context).card,
           borderRadius: BorderRadius.circular(14),
         ),
       );
@@ -236,7 +236,7 @@ class _RevenueCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: emerald.withValues(alpha: 0.3)),
       ),
@@ -254,8 +254,8 @@ class _RevenueCard extends StatelessWidget {
             child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-              const Text("Today's Revenue",
-                  style: TextStyle(color: textSecondary, fontSize: 11)),
+              Text("Today's Revenue",
+                  style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11)),
               FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerLeft,
@@ -267,11 +267,11 @@ class _RevenueCard extends StatelessWidget {
               ),
             ])),
         Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          const Text('Bills Paid',
-              style: TextStyle(color: textSecondary, fontSize: 11)),
+          Text('Bills Paid',
+              style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11)),
           Text('$count',
-              style: const TextStyle(
-                  color: textPrimary,
+              style: TextStyle(
+                  color: BrandColors.of(context).textHi,
                   fontSize: 18,
                   fontWeight: FontWeight.w700)),
         ]),
@@ -291,7 +291,7 @@ class _AwaitingBillingCard extends ConsumerWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: amber.withValues(alpha: 0.35)),
       ),
@@ -300,8 +300,8 @@ class _AwaitingBillingCard extends ConsumerWidget {
           children: [
             Row(children: [
               Text(order.tableLabel,
-                  style: const TextStyle(
-                      color: textPrimary,
+                  style: TextStyle(
+                      color: BrandColors.of(context).textHi,
                       fontSize: 14,
                       fontWeight: FontWeight.w700)),
               const Spacer(),
@@ -321,11 +321,11 @@ class _AwaitingBillingCard extends ConsumerWidget {
             const SizedBox(height: 8),
             Text(
                 '${order.items.length} item${order.items.length == 1 ? '' : 's'}',
-                style: const TextStyle(color: textSecondary, fontSize: 11)),
+                style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11)),
             const SizedBox(height: 6),
             Row(children: [
-              const Text('Order total',
-                  style: TextStyle(color: textSecondary, fontSize: 12)),
+              Text('Order total',
+                  style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12)),
               const Spacer(),
               Text('₹${order.total.toStringAsFixed(2)}',
                   style: const TextStyle(
@@ -429,18 +429,18 @@ class _GenerateBillSheetState extends ConsumerState<_GenerateBillSheet> {
         Container(
           width: 36, height: 4,
           decoration: BoxDecoration(
-            color: textSecondary.withValues(alpha: 0.4),
+            color: BrandColors.of(context).textLo.withValues(alpha: 0.4),
             borderRadius: BorderRadius.circular(2),
           ),
         ),
         const SizedBox(height: 14),
         Text('Generate Bill — ${widget.order.tableLabel}',
-            style: const TextStyle(
-                color: textPrimary, fontSize: 15, fontWeight: FontWeight.w800)),
+            style: TextStyle(
+                color: BrandColors.of(context).textHi, fontSize: 15, fontWeight: FontWeight.w800)),
         const SizedBox(height: 16),
         Row(children: [
-          const Text('Discount',
-              style: TextStyle(color: textSecondary, fontSize: 12)),
+          Text('Discount',
+              style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12)),
           const Spacer(),
           Text('${_discount.toInt()}%',
               style: const TextStyle(
@@ -462,7 +462,7 @@ class _GenerateBillSheetState extends ConsumerState<_GenerateBillSheet> {
         if (_discount > 0)
           _SummaryRow('Discount', -discountAmount, color: emerald),
         _SummaryRow('GST (18%)', gstAmount),
-        const Divider(color: dividerColor, height: 24),
+        Divider(color: BrandColors.of(context).divider, height: 24),
         _SummaryRow('Total', total, bold: true, color: copperAccent),
         const SizedBox(height: 16),
         SizedBox(
@@ -504,7 +504,7 @@ class _SummaryRow extends StatelessWidget {
         child: Row(children: [
           Text(label,
               style: TextStyle(
-                  color: textSecondary,
+                  color: BrandColors.of(context).textLo,
                   fontSize: 13,
                   fontWeight: bold ? FontWeight.w700 : FontWeight.normal)),
           const Spacer(),
@@ -529,7 +529,7 @@ class _BillCard extends ConsumerWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
             color: bill.isPaid ? emerald.withValues(alpha: 0.3) : dividerColor),
@@ -539,8 +539,8 @@ class _BillCard extends ConsumerWidget {
           children: [
             Row(children: [
               Text(bill.tableLabel,
-                  style: const TextStyle(
-                      color: textPrimary,
+                  style: TextStyle(
+                      color: BrandColors.of(context).textHi,
                       fontSize: 14,
                       fontWeight: FontWeight.w700)),
               const Spacer(),
@@ -564,13 +564,13 @@ class _BillCard extends ConsumerWidget {
             if (bill.discountAmount > 0)
               _SummaryRow('Discount', -bill.discountAmount, color: emerald),
             _SummaryRow('GST', bill.gstAmount),
-            const Divider(color: dividerColor, height: 16),
+            Divider(color: BrandColors.of(context).divider, height: 16),
             _SummaryRow('Total', bill.total, bold: true, color: copperAccent),
             if (bill.isPaid && bill.paidAt != null) ...[
               const SizedBox(height: 6),
               Text(
                 'Paid via ${bill.paymentMethod?.toUpperCase() ?? 'N/A'} • ${DateFormat('dd MMM, HH:mm').format(bill.paidAt!)}',
-                style: const TextStyle(color: textSecondary, fontSize: 11),
+                style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11),
               ),
               const SizedBox(height: 10),
               _ReceiptActions(bill: bill),
@@ -674,7 +674,7 @@ class _ReceiptActionsState extends ConsumerState<_ReceiptActions> {
           label: const Text('Share'),
           style: OutlinedButton.styleFrom(
             foregroundColor: textPrimary,
-            side: BorderSide(color: textSecondary.withValues(alpha: 0.5)),
+            side: BorderSide(color: BrandColors.of(context).textLo.withValues(alpha: 0.5)),
             padding: const EdgeInsets.symmetric(vertical: 8),
             textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
           ),
@@ -839,13 +839,13 @@ class _QuickPaySheetState extends ConsumerState<_QuickPaySheet> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('Pay ₹${widget.bill.total.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                      color: textPrimary,
+                  style: TextStyle(
+                      color: BrandColors.of(context).textHi,
                       fontSize: 18,
                       fontWeight: FontWeight.w800)),
               const SizedBox(height: 4),
-              const Text('Razorpay is in sandbox mode — no real money moves.',
-                  style: TextStyle(color: textSecondary, fontSize: 11)),
+              Text('Razorpay is in sandbox mode — no real money moves.',
+                  style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11)),
               const SizedBox(height: 16),
               _PayTile(
                 icon: Icons.payments_outlined,
@@ -890,7 +890,7 @@ class _PayTile extends StatelessWidget {
           margin: const EdgeInsets.only(bottom: 10),
           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 14),
           decoration: BoxDecoration(
-            color: slateSurface,
+            color: BrandColors.of(context).surface,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: color.withValues(alpha: 0.4)),
           ),
@@ -899,8 +899,8 @@ class _PayTile extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(
               child: Text(label,
-                  style: const TextStyle(
-                      color: textPrimary,
+                  style: TextStyle(
+                      color: BrandColors.of(context).textHi,
                       fontWeight: FontWeight.w700,
                       fontSize: 13)),
             ),
@@ -994,14 +994,14 @@ class _SplitPaySheetState extends ConsumerState<_SplitPaySheet> {
         Container(
           width: 36, height: 4,
           decoration: BoxDecoration(
-            color: textSecondary.withValues(alpha: 0.4),
+            color: BrandColors.of(context).textLo.withValues(alpha: 0.4),
             borderRadius: BorderRadius.circular(2),
           ),
         ),
         const SizedBox(height: 14),
         Text('Split ₹${widget.bill.total.toStringAsFixed(2)}',
-            style: const TextStyle(
-                color: textPrimary, fontSize: 18, fontWeight: FontWeight.w800)),
+            style: TextStyle(
+                color: BrandColors.of(context).textHi, fontSize: 18, fontWeight: FontWeight.w800)),
         const SizedBox(height: 18),
         for (final m in const ['cash', 'card', 'upi']) _SplitRow(
           method: m,
@@ -1102,15 +1102,15 @@ class _SplitRowState extends State<_SplitRow> {
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         decoration: BoxDecoration(
-          color: slateSurface,
+          color: BrandColors.of(context).surface,
           borderRadius: BorderRadius.circular(10),
         ),
         child: Row(children: [
           SizedBox(
             width: 60,
             child: Text(widget.method.toUpperCase(),
-                style: const TextStyle(
-                    color: textPrimary,
+                style: TextStyle(
+                    color: BrandColors.of(context).textHi,
                     fontSize: 12,
                     fontWeight: FontWeight.w700)),
           ),
@@ -1119,14 +1119,14 @@ class _SplitRowState extends State<_SplitRow> {
                   controller: _ctrl,
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
-                  style: const TextStyle(color: textPrimary, fontSize: 14),
+                  style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 14),
                   textAlign: TextAlign.right,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     hintText: '0',
-                    hintStyle: TextStyle(color: textSecondary, fontSize: 14),
+                    hintStyle: TextStyle(color: BrandColors.of(context).textLo, fontSize: 14),
                     border: InputBorder.none,
                     prefixText: '₹',
-                    prefixStyle: TextStyle(color: textSecondary, fontSize: 14),
+                    prefixStyle: TextStyle(color: BrandColors.of(context).textLo, fontSize: 14),
                   ),
                   onChanged: (s) {
                     final v = double.tryParse(s) ?? 0;

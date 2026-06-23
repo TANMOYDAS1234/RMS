@@ -73,7 +73,7 @@ class _ManagerCustomerServiceTabState
   Widget build(BuildContext context) {
     return Column(children: [
       Container(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         child: TabBar(
           controller: _tc,
           indicatorColor: copperAccent,
@@ -136,13 +136,13 @@ class _LogComplaintTabState extends ConsumerState<_LogComplaintTab> {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: copperAccent.withValues(alpha: 0.2)),
           ),
-          child: const Row(children: [
-            Icon(Icons.info_outline, color: copperAccent, size: 16),
-            SizedBox(width: 8),
+          child: Row(children: [
+            const Icon(Icons.info_outline, color: copperAccent, size: 16),
+            const SizedBox(width: 8),
             Expanded(
               child: Text(
                 'Log customer complaints to track service quality and identify recurring issues.',
-                style: TextStyle(color: textSecondary, fontSize: 12),
+                style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12),
               ),
             ),
           ]),
@@ -228,19 +228,19 @@ class _LogComplaintTabState extends ConsumerState<_LogComplaintTab> {
         TextField(
           controller: _detailCtrl,
           maxLines: 4,
-          style: const TextStyle(color: textPrimary, fontSize: 13),
+          style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 13),
           decoration: InputDecoration(
             hintText: 'Describe the issue in detail...',
             hintStyle:
-                const TextStyle(color: textSecondary, fontSize: 12),
+                TextStyle(color: BrandColors.of(context).textLo, fontSize: 12),
             filled: true,
-            fillColor: slateCard,
+            fillColor: BrandColors.of(context).card,
             border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: dividerColor)),
+                borderSide: BorderSide(color: BrandColors.of(context).divider)),
             enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: dividerColor)),
+                borderSide: BorderSide(color: BrandColors.of(context).divider)),
             focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: const BorderSide(color: copperAccent)),
@@ -381,9 +381,9 @@ class _ComplaintSummary extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: dividerColor),
+        border: Border.all(color: BrandColors.of(context).divider),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
@@ -391,15 +391,15 @@ class _ComplaintSummary extends StatelessWidget {
               color: copperAccent, size: 16),
           const SizedBox(width: 6),
           Text('$total complaint${total != 1 ? 's' : ''} logged',
-              style: const TextStyle(
-                  color: textPrimary,
+              style: TextStyle(
+                  color: BrandColors.of(context).textHi,
                   fontSize: 13,
                   fontWeight: FontWeight.w700)),
         ]),
         if (top.isNotEmpty) ...[
           const SizedBox(height: 10),
-          const Text('Top issues:',
-              style: TextStyle(color: textSecondary, fontSize: 11)),
+          Text('Top issues:',
+              style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11)),
           const SizedBox(height: 6),
           Wrap(
             spacing: 6,
@@ -496,7 +496,7 @@ class _ComplaintCard extends ConsumerWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
             color: resolved
@@ -510,8 +510,8 @@ class _ComplaintCard extends ConsumerWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(tableLabel,
-                style: const TextStyle(
-                    color: textPrimary,
+                style: TextStyle(
+                    color: BrandColors.of(context).textHi,
                     fontSize: 13,
                     fontWeight: FontWeight.w700),
                 overflow: TextOverflow.ellipsis),
@@ -562,16 +562,16 @@ class _ComplaintCard extends ConsumerWidget {
         ]),
         const SizedBox(height: 8),
         Text(cleanIssue.isEmpty ? issue : cleanIssue,
-            style: const TextStyle(color: textSecondary, fontSize: 12)),
+            style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12)),
         if (at != null) ...[
           const SizedBox(height: 6),
           Row(children: [
-            const Icon(Icons.access_time_outlined,
-                size: 11, color: textSecondary),
+            Icon(Icons.access_time_outlined,
+                size: 11, color: BrandColors.of(context).textLo),
             const SizedBox(width: 4),
             Text(DateFormat('dd MMM, HH:mm').format(at),
-                style: const TextStyle(
-                    color: textSecondary, fontSize: 10)),
+                style: TextStyle(
+                    color: BrandColors.of(context).textLo, fontSize: 10)),
           ]),
         ],
         if (!resolved && orderId != null && complaintId != null) ...[
@@ -690,27 +690,27 @@ class _ResolveComplaintSheetState
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('Resolve Complaint — ${widget.tableLabel}',
-                  style: const TextStyle(
-                      color: textPrimary,
+                  style: TextStyle(
+                      color: BrandColors.of(context).textHi,
                       fontSize: 15,
                       fontWeight: FontWeight.w700)),
               const SizedBox(height: 16),
               TextField(
                 controller: _ctrl,
                 maxLines: 3,
-                style: const TextStyle(color: textPrimary),
+                style: TextStyle(color: BrandColors.of(context).textHi),
                 decoration: InputDecoration(
                   hintText: 'How was this resolved? (e.g. comped meal, replaced dish)',
                   hintStyle:
-                      const TextStyle(color: textSecondary, fontSize: 12),
+                      TextStyle(color: BrandColors.of(context).textLo, fontSize: 12),
                   filled: true,
-                  fillColor: slateSurface,
+                  fillColor: BrandColors.of(context).surface,
                   border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: dividerColor)),
+                      borderSide: BorderSide(color: BrandColors.of(context).divider)),
                   enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: dividerColor)),
+                      borderSide: BorderSide(color: BrandColors.of(context).divider)),
                   focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                       borderSide: const BorderSide(color: emerald)),
@@ -788,8 +788,8 @@ class _Label extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Text(text,
-      style: const TextStyle(
-          color: textSecondary, fontSize: 12, fontWeight: FontWeight.w600));
+      style: TextStyle(
+          color: BrandColors.of(context).textLo, fontSize: 12, fontWeight: FontWeight.w600));
 }
 
 class _Field extends StatelessWidget {
@@ -800,21 +800,21 @@ class _Field extends StatelessWidget {
   @override
   Widget build(BuildContext context) => TextField(
         controller: ctrl,
-        style: const TextStyle(color: textPrimary, fontSize: 13),
+        style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 13),
         decoration: InputDecoration(
           hintText: hint,
           hintStyle:
-              const TextStyle(color: textSecondary, fontSize: 12),
+              TextStyle(color: BrandColors.of(context).textLo, fontSize: 12),
           filled: true,
           fillColor: slateCard,
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: dividerColor)),
+              borderSide: BorderSide(color: BrandColors.of(context).divider)),
           enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: dividerColor)),
+              borderSide: BorderSide(color: BrandColors.of(context).divider)),
           focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: copperAccent)),
@@ -831,14 +831,14 @@ class _EmptyState extends StatelessWidget {
           Icon(Icons.sentiment_satisfied_outlined,
               size: 56, color: emerald.withValues(alpha: 0.5)),
           const SizedBox(height: 16),
-          const Text('No complaints logged',
+          Text('No complaints logged',
               style: TextStyle(
-                  color: textPrimary,
+                  color: BrandColors.of(context).textHi,
                   fontSize: 16,
                   fontWeight: FontWeight.w600)),
           const SizedBox(height: 4),
-          const Text('Great service! Keep it up.',
-              style: TextStyle(color: textSecondary, fontSize: 12)),
+          Text('Great service! Keep it up.',
+              style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12)),
         ]),
       );
 }

@@ -68,9 +68,9 @@ class ManagerOperationsTab extends ConsumerWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: slateSurface,
+                  color: BrandColors.of(context).surface,
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: dividerColor),
+                  border: Border.all(color: BrandColors.of(context).divider),
                 ),
                 child: const Row(mainAxisSize: MainAxisSize.min, children: [
                   Icon(Icons.refresh, color: copperAccent, size: 14),
@@ -111,8 +111,8 @@ class ManagerOperationsTab extends ConsumerWidget {
 
           // ── Live orders list ─────────────────────────────────────────────
           Row(children: [
-            const Text('Live Orders',
-                style: TextStyle(color: textPrimary, fontSize: 14, fontWeight: FontWeight.w700)),
+            Text('Live Orders',
+                style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 14, fontWeight: FontWeight.w700)),
             const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -143,13 +143,13 @@ class ManagerOperationsTab extends ConsumerWidget {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: slateCard,
-        title: const Text('Force Close Order?', style: TextStyle(color: textPrimary)),
-        content: const Text('This will immediately close the order. Action is logged.',
-            style: TextStyle(color: textSecondary, fontSize: 13)),
+        backgroundColor: BrandColors.of(context).card,
+        title: Text('Force Close Order?', style: TextStyle(color: BrandColors.of(context).textHi)),
+        content: Text('This will immediately close the order. Action is logged.',
+            style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 13)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel', style: TextStyle(color: textSecondary))),
+              child: Text('Cancel', style: TextStyle(color: BrandColors.of(context).textLo))),
           TextButton(onPressed: () => Navigator.pop(context, true),
               child: const Text('Force Close', style: TextStyle(color: crimson, fontWeight: FontWeight.w700))),
         ],
@@ -227,7 +227,7 @@ class _MetricCard extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: slateCard,
+          color: BrandColors.of(context).card,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: color.withValues(alpha: 0.2)),
         ),
@@ -238,7 +238,7 @@ class _MetricCard extends StatelessWidget {
             Text(value,
                 style: TextStyle(color: color, fontSize: 20, fontWeight: FontWeight.w800)),
             Text(label,
-                style: const TextStyle(color: textSecondary, fontSize: 10)),
+                style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 10)),
           ]),
         ]),
       ).animate().fadeIn(duration: 300.ms);
@@ -262,8 +262,8 @@ class _PipelineRow extends StatelessWidget {
   Widget build(BuildContext context) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Order Pipeline',
-              style: TextStyle(color: textPrimary, fontSize: 13, fontWeight: FontWeight.w700)),
+          Text('Order Pipeline',
+              style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 13, fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
           Row(
             children: _stages.map((stage) {
@@ -274,7 +274,7 @@ class _PipelineRow extends StatelessWidget {
                   margin: const EdgeInsets.symmetric(horizontal: 3),
                   padding: const EdgeInsets.symmetric(vertical: 10),
                   decoration: BoxDecoration(
-                    color: slateCard,
+                    color: BrandColors.of(context).card,
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
                       color: count > 0 ? color.withValues(alpha: 0.4) : dividerColor,
@@ -288,7 +288,7 @@ class _PipelineRow extends StatelessWidget {
                             fontWeight: FontWeight.w800)),
                     const SizedBox(height: 3),
                     Text(stage,
-                        style: const TextStyle(color: textSecondary, fontSize: 8),
+                        style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 8),
                         textAlign: TextAlign.center),
                   ]),
                 ),
@@ -312,7 +312,7 @@ class _RevenueRow extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: emerald.withValues(alpha: 0.2)),
       ),
@@ -327,17 +327,17 @@ class _RevenueRow extends StatelessWidget {
         ),
         const SizedBox(width: 12),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text("Today's Revenue",
-              style: TextStyle(color: textSecondary, fontSize: 11)),
+          Text("Today's Revenue",
+              style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11)),
           Text('₹${total.toStringAsFixed(0)}',
               style: const TextStyle(
                   color: emerald, fontSize: 20, fontWeight: FontWeight.w800)),
         ])),
         Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          const Text('Bills Paid', style: TextStyle(color: textSecondary, fontSize: 11)),
+          Text('Bills Paid', style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11)),
           Text('$count',
-              style: const TextStyle(
-                  color: textPrimary, fontSize: 18, fontWeight: FontWeight.w700)),
+              style: TextStyle(
+                  color: BrandColors.of(context).textHi, fontSize: 18, fontWeight: FontWeight.w700)),
         ]),
       ]),
     );
@@ -370,13 +370,13 @@ class _DelayedOrdersBanner extends StatelessWidget {
           ...delayed.map((o) => Padding(
                 padding: const EdgeInsets.only(bottom: 6),
                 child: Row(children: [
-                  const Icon(Icons.table_restaurant_outlined,
-                      size: 12, color: textSecondary),
+                  Icon(Icons.table_restaurant_outlined,
+                      size: 12, color: BrandColors.of(context).textLo),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
                       '${o['tableLabel']} · ${o['status']} · ${o['minutesElapsed']}m',
-                      style: const TextStyle(color: textPrimary, fontSize: 12),
+                      style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 12),
                     ),
                   ),
                   GestureDetector(
@@ -422,7 +422,7 @@ class _LiveOrderCard extends ConsumerWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: isDelayed ? crimson.withValues(alpha: 0.5) : dividerColor,
@@ -441,10 +441,10 @@ class _LiveOrderCard extends ConsumerWidget {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(order.tableLabel,
-                  style: const TextStyle(
-                      color: textPrimary, fontSize: 13, fontWeight: FontWeight.w700)),
+                  style: TextStyle(
+                      color: BrandColors.of(context).textHi, fontSize: 13, fontWeight: FontWeight.w700)),
               Text('${order.items.length} items · ${elapsed.inMinutes}m ago',
-                  style: const TextStyle(color: textSecondary, fontSize: 11)),
+                  style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11)),
             ]),
           ),
           StatusChip(status: order.status),
@@ -461,15 +461,15 @@ class _LiveOrderCard extends ConsumerWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
-                color: slateSurface,
+                color: BrandColors.of(context).surface,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: dividerColor),
+                border: Border.all(color: BrandColors.of(context).divider),
               ),
-              child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(Icons.swap_horiz, color: textSecondary, size: 14),
-                SizedBox(width: 4),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.swap_horiz, color: BrandColors.of(context).textLo, size: 14),
+                const SizedBox(width: 4),
                 Text('Override',
-                    style: TextStyle(color: textSecondary, fontSize: 11, fontWeight: FontWeight.w600)),
+                    style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11, fontWeight: FontWeight.w600)),
               ]),
             ),
           ),
@@ -505,11 +505,11 @@ class _LiveOrderCard extends ConsumerWidget {
         child: Column(mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('Override Status — ${order.tableLabel}',
-              style: const TextStyle(
-                  color: textPrimary, fontSize: 15, fontWeight: FontWeight.w700)),
+              style: TextStyle(
+                  color: BrandColors.of(context).textHi, fontSize: 15, fontWeight: FontWeight.w700)),
           const SizedBox(height: 6),
           Text('Current: ${order.status.label}',
-              style: const TextStyle(color: textSecondary, fontSize: 12)),
+              style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12)),
           const SizedBox(height: 16),
           ...OrderStatus.values
               .where((s) => s != order.status && s != OrderStatus.closed)
@@ -523,14 +523,14 @@ class _LiveOrderCard extends ConsumerWidget {
                       margin: const EdgeInsets.only(bottom: 8),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       decoration: BoxDecoration(
-                        color: slateSurface,
+                        color: BrandColors.of(context).surface,
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: dividerColor),
+                        border: Border.all(color: BrandColors.of(context).divider),
                       ),
                       child: Center(
                         child: Text('→ ${s.label}',
-                            style: const TextStyle(
-                                color: textPrimary,
+                            style: TextStyle(
+                                color: BrandColors.of(context).textHi,
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600)),
                       ),
@@ -585,12 +585,12 @@ class _EmptyOrders extends StatelessWidget {
             Icon(Icons.check_circle_outline,
                 size: 48, color: emerald.withValues(alpha: 0.5)),
             const SizedBox(height: 12),
-            const Text('All clear!',
+            Text('All clear!',
                 style: TextStyle(
-                    color: textPrimary, fontSize: 16, fontWeight: FontWeight.w600)),
+                    color: BrandColors.of(context).textHi, fontSize: 16, fontWeight: FontWeight.w600)),
             const SizedBox(height: 4),
-            const Text('No active orders right now',
-                style: TextStyle(color: textSecondary, fontSize: 12)),
+            Text('No active orders right now',
+                style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12)),
           ]),
         ),
       );
@@ -611,7 +611,7 @@ class _MetricsSkeleton extends StatelessWidget {
           4,
           (_) => Container(
             decoration: BoxDecoration(
-              color: slateCard,
+              color: BrandColors.of(context).card,
               borderRadius: BorderRadius.circular(14),
             ),
             child: const Center(
@@ -686,43 +686,43 @@ class _ManagerBranchSettings extends ConsumerWidget {
         return Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: slateCard,
+            color: BrandColors.of(context).card,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: dividerColor),
+            border: Border.all(color: BrandColors.of(context).divider),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(children: const [
-                Icon(Icons.tune, color: copperAccent, size: 16),
-                SizedBox(width: 8),
+              Row(children: [
+                const Icon(Icons.tune, color: copperAccent, size: 16),
+                const SizedBox(width: 8),
                 Text('Branch Settings',
                     style: TextStyle(
-                        color: textPrimary,
+                        color: BrandColors.of(context).textHi,
                         fontSize: 13,
                         fontWeight: FontWeight.w800)),
               ]),
               const SizedBox(height: 6),
-              const Text(
+              Text(
                 'Tunables you can change without bothering the admin.',
-                style: TextStyle(color: textSecondary, fontSize: 11),
+                style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11),
               ),
               const SizedBox(height: 12),
               Row(children: [
-                const Expanded(
+                Expanded(
                   child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('Chef manages inventory',
                             style: TextStyle(
-                                color: textPrimary,
+                                color: BrandColors.of(context).textHi,
                                 fontSize: 13,
                                 fontWeight: FontWeight.w700)),
-                        SizedBox(height: 2),
+                        const SizedBox(height: 2),
                         Text(
                           'When on, the chef can add ingredients + set low-stock thresholds. Their adds get a REVIEW badge until you audit them.',
                           style: TextStyle(
-                              color: textSecondary,
+                              color: BrandColors.of(context).textLo,
                               fontSize: 11,
                               height: 1.3),
                         ),

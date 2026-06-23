@@ -191,7 +191,7 @@ class _Chip extends StatelessWidget {
                 style: TextStyle(
                     color: color, fontSize: 16, fontWeight: FontWeight.w800)),
             Text(label,
-                style: const TextStyle(color: textSecondary, fontSize: 9),
+                style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 9),
                 textAlign: TextAlign.center),
           ]),
         ),
@@ -248,7 +248,7 @@ class _KitchenCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isUrgent ? crimson.withValues(alpha: 0.6) : color.withValues(alpha: 0.3),
@@ -280,13 +280,13 @@ class _KitchenCard extends StatelessWidget {
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(tableLabel,
-                    style: const TextStyle(
-                        color: textPrimary,
+                    style: TextStyle(
+                        color: BrandColors.of(context).textHi,
                         fontSize: 13,
                         fontWeight: FontWeight.w800)),
                 Text('$itemCount item${itemCount != 1 ? 's' : ''}',
-                    style: const TextStyle(
-                        color: textSecondary, fontSize: 11)),
+                    style: TextStyle(
+                        color: BrandColors.of(context).textLo, fontSize: 11)),
               ]),
             ),
             // Elapsed timer
@@ -359,8 +359,8 @@ class _KitchenCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                       Text(item['name'] ?? '',
-                          style: const TextStyle(
-                              color: textPrimary, fontSize: 12)),
+                          style: TextStyle(
+                              color: BrandColors.of(context).textHi, fontSize: 12)),
                       if (progress > 0) ...[
                         const SizedBox(height: 3),
                         ClipRRect(
@@ -430,17 +430,17 @@ class _Divider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Row(children: [
-        const Expanded(child: Divider(color: dividerColor)),
+        Expanded(child: Divider(color: BrandColors.of(context).divider)),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10),
           child: Text(label,
-              style: const TextStyle(
-                  color: textSecondary,
+              style: TextStyle(
+                  color: BrandColors.of(context).textLo,
                   fontSize: 10,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 1)),
         ),
-        const Expanded(child: Divider(color: dividerColor)),
+        Expanded(child: Divider(color: BrandColors.of(context).divider)),
       ]);
 }
 
@@ -452,14 +452,14 @@ class _EmptyKitchen extends StatelessWidget {
           Icon(Icons.check_circle_outline,
               size: 56, color: emerald.withValues(alpha: 0.5)),
           const SizedBox(height: 16),
-          const Text('Kitchen is clear!',
+          Text('Kitchen is clear!',
               style: TextStyle(
-                  color: textPrimary,
+                  color: BrandColors.of(context).textHi,
                   fontSize: 18,
                   fontWeight: FontWeight.w600)),
           const SizedBox(height: 6),
-          const Text('No active kitchen orders',
-              style: TextStyle(color: textSecondary, fontSize: 13)),
+          Text('No active kitchen orders',
+              style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 13)),
         ]),
       );
 }

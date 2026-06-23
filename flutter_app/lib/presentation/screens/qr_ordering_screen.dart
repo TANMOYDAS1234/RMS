@@ -212,7 +212,7 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
     int selected = 1;
     return showModalBottomSheet<int>(
       context: context,
-      backgroundColor: slateCard,
+      backgroundColor: BrandColors.of(context).card,
       isScrollControlled: true,
       isDismissible: false,
       enableDrag: false,
@@ -226,16 +226,16 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
             Container(
               width: 36, height: 4,
               decoration: BoxDecoration(
-                color: textSecondary.withValues(alpha: 0.4),
+                color: BrandColors.of(context).textLo.withValues(alpha: 0.4),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
             const SizedBox(height: 18),
             const Icon(Icons.groups_2_outlined, color: copperAccent, size: 32),
             const SizedBox(height: 10),
-            const Text('How many of you are seated?',
+            Text('How many of you are seated?',
                 style: TextStyle(
-                    color: textPrimary,
+                    color: BrandColors.of(context).textHi,
                     fontSize: 17,
                     fontWeight: FontWeight.w800)),
             const SizedBox(height: 4),
@@ -243,7 +243,7 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
               remaining == 1
                   ? '1 seat free at this table.'
                   : '$remaining seats free at this table.',
-              style: const TextStyle(color: textSecondary, fontSize: 12),
+              style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12),
             ),
             const SizedBox(height: 20),
             // Stepper row — minus / count / plus.
@@ -257,8 +257,8 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
                 width: 60,
                 child: Text('$selected',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
-                        color: textPrimary,
+                    style: TextStyle(
+                        color: BrandColors.of(context).textHi,
                         fontSize: 30,
                         fontWeight: FontWeight.w900)),
               ),
@@ -337,7 +337,7 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
         ),
       ]),
       bottomNavigationBar: NavigationBar(
-        backgroundColor: slateCard,
+        backgroundColor: BrandColors.of(context).card,
         indicatorColor: copperAccent.withValues(alpha: 0.2),
         selectedIndex: _tabIndex,
         onDestinationSelected: (i) => setState(() => _tabIndex = i),
@@ -360,7 +360,7 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
   PreferredSizeWidget _buildAppBar() {
     final session = ref.watch(_sessionProvider);
     return AppBar(
-      backgroundColor: slateBg,
+      backgroundColor: BrandColors.of(context).bg,
       title: Row(
         children: [
           Container(
@@ -376,16 +376,16 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('DINE OPS',
+              Text('DINE OPS',
                   style: TextStyle(
-                      color: textPrimary,
+                      color: BrandColors.of(context).textHi,
                       fontSize: 14,
                       fontWeight: FontWeight.w800,
                       letterSpacing: 2)),
               if (session != null)
                 Text(
                   _headerSubtitle(session),
-                  style: const TextStyle(color: textSecondary, fontSize: 11),
+                  style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11),
                 ),
             ],
           ),
@@ -423,7 +423,7 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
     final reasonCtrl = TextEditingController();
     final reason = await showModalBottomSheet<String?>(
       context: context,
-      backgroundColor: slateCard,
+      backgroundColor: BrandColors.of(context).card,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
@@ -434,37 +434,37 @@ class _QrOrderingScreenState extends ConsumerState<QrOrderingScreen> {
           Container(
             width: 36, height: 4,
             decoration: BoxDecoration(
-              color: textSecondary.withValues(alpha: 0.4),
+              color: BrandColors.of(context).textLo.withValues(alpha: 0.4),
               borderRadius: BorderRadius.circular(2),
             ),
           ),
           const SizedBox(height: 14),
-          const Text('Add a quick note',
+          Text('Add a quick note',
               style: TextStyle(
-                  color: textPrimary,
+                  color: BrandColors.of(context).textHi,
                   fontSize: 17,
                   fontWeight: FontWeight.w800)),
           const SizedBox(height: 4),
-          const Text('Optional — the waiter will see this with the call.',
-              style: TextStyle(color: textSecondary, fontSize: 12)),
+          Text('Optional — the waiter will see this with the call.',
+              style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12)),
           const SizedBox(height: 14),
           TextField(
             controller: reasonCtrl,
             autofocus: true,
             maxLines: 2,
-            style: const TextStyle(color: textPrimary, fontSize: 13),
+            style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 13),
             decoration: InputDecoration(
               hintText: 'e.g. extra napkins, water, the bill…',
-              hintStyle: const TextStyle(color: textSecondary, fontSize: 12),
+              hintStyle: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12),
               filled: true,
-              fillColor: slateSurface,
+              fillColor: BrandColors.of(context).surface,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: dividerColor),
+                borderSide: BorderSide(color: BrandColors.of(context).divider),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: dividerColor),
+                borderSide: BorderSide(color: BrandColors.of(context).divider),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
@@ -609,8 +609,8 @@ class _MenuTabState extends ConsumerState<_MenuTab> {
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           child: Text(cat,
-                              style: const TextStyle(
-                                  color: textSecondary,
+                              style: TextStyle(
+                                  color: BrandColors.of(context).textLo,
                                   fontSize: 12,
                                   fontWeight: FontWeight.w700,
                                   letterSpacing: 1)),
@@ -738,13 +738,13 @@ class _OrderTrackingTab extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(Icons.receipt_long_outlined,
-                size: 56, color: textSecondary.withValues(alpha: 0.4)),
+                size: 56, color: BrandColors.of(context).textLo.withValues(alpha: 0.4)),
             const SizedBox(height: 16),
-            const Text('No orders yet',
-                style: TextStyle(color: textPrimary, fontSize: 16, fontWeight: FontWeight.w600)),
+            Text('No orders yet',
+                style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 16, fontWeight: FontWeight.w600)),
             const SizedBox(height: 6),
-            const Text('Place an order from the menu',
-                style: TextStyle(color: textSecondary, fontSize: 13)),
+            Text('Place an order from the menu',
+                style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 13)),
           ],
         ),
       );
@@ -780,7 +780,7 @@ class _QrMenuTile extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: slateCard,
+          color: BrandColors.of(context).card,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
               color: qty > 0 ? copperAccent.withValues(alpha: 0.4) : dividerColor),
@@ -792,14 +792,14 @@ class _QrMenuTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(item.name,
-                      style: const TextStyle(
-                          color: textPrimary,
+                      style: TextStyle(
+                          color: BrandColors.of(context).textHi,
                           fontSize: 13,
                           fontWeight: FontWeight.w600)),
                   const SizedBox(height: 2),
                   if (item.description != null)
                     Text(item.description!,
-                        style: const TextStyle(color: textSecondary, fontSize: 11),
+                        style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 4),
@@ -843,16 +843,16 @@ class _QrMenuTile extends StatelessWidget {
                     child: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                          color: slateSurface,
+                          color: BrandColors.of(context).surface,
                           borderRadius: BorderRadius.circular(8)),
-                      child: const Icon(Icons.remove, color: textSecondary, size: 18),
+                      child: Icon(Icons.remove, color: BrandColors.of(context).textLo, size: 18),
                     ),
                   ),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 10),
                     child: Text('$qty',
-                        style: const TextStyle(
-                            color: textPrimary,
+                        style: TextStyle(
+                            color: BrandColors.of(context).textHi,
                             fontSize: 14,
                             fontWeight: FontWeight.w700)),
                   ),
@@ -956,7 +956,7 @@ class _QrOrderCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: BrandColors.of(context).card,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
@@ -978,8 +978,8 @@ class _QrOrderCard extends StatelessWidget {
                         ? 'Order'
                         : 'Order #${raw.substring(0, raw.length < 8 ? raw.length : 8)}';
                   }(),
-                  style: const TextStyle(
-                      color: textPrimary,
+                  style: TextStyle(
+                      color: BrandColors.of(context).textHi,
                       fontSize: 14,
                       fontWeight: FontWeight.w700),
                 ),
@@ -1011,21 +1011,21 @@ class _QrOrderCard extends StatelessWidget {
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(item['name'] ?? '',
-                          style: const TextStyle(color: textPrimary, fontSize: 12)),
+                          style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 12)),
                     ),
                     Text(
                       '₹${((item['unitPrice'] ?? 0) * (item['quantity'] ?? 1)).toStringAsFixed(2)}',
-                      style: const TextStyle(color: textSecondary, fontSize: 12),
+                      style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12),
                     ),
                   ],
                 ),
               )),
-          const Divider(color: dividerColor, height: 16),
+          Divider(color: BrandColors.of(context).divider, height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Total',
-                  style: TextStyle(color: textSecondary, fontSize: 12)),
+              Text('Total',
+                  style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12)),
               Text(
                 '₹${(order['total'] ?? 0).toStringAsFixed(2)}',
                 style: const TextStyle(
@@ -1134,16 +1134,16 @@ class _InfoBanner extends StatelessWidget {
 class _LoadingView extends StatelessWidget {
   const _LoadingView();
   @override
-  Widget build(BuildContext context) => const Scaffold(
-        backgroundColor: slateBg,
+  Widget build(BuildContext context) => Scaffold(
+        backgroundColor: BrandColors.of(context).bg,
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              CircularProgressIndicator(color: copperAccent, strokeWidth: 2),
-              SizedBox(height: 16),
+              const CircularProgressIndicator(color: copperAccent, strokeWidth: 2),
+              const SizedBox(height: 16),
               Text('Loading your table...',
-                  style: TextStyle(color: textSecondary, fontSize: 13)),
+                  style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 13)),
             ],
           ),
         ),
@@ -1155,7 +1155,7 @@ class _ErrorView extends StatelessWidget {
   const _ErrorView({required this.error});
   @override
   Widget build(BuildContext context) => Scaffold(
-        backgroundColor: slateBg,
+        backgroundColor: BrandColors.of(context).bg,
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(32),
@@ -1164,14 +1164,14 @@ class _ErrorView extends StatelessWidget {
               children: [
                 const Icon(Icons.error_outline, color: crimson, size: 48),
                 const SizedBox(height: 16),
-                const Text('Something went wrong',
+                Text('Something went wrong',
                     style: TextStyle(
-                        color: textPrimary,
+                        color: BrandColors.of(context).textHi,
                         fontSize: 18,
                         fontWeight: FontWeight.w700)),
                 const SizedBox(height: 8),
                 Text(error,
-                    style: const TextStyle(color: textSecondary, fontSize: 12),
+                    style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 12),
                     textAlign: TextAlign.center),
               ],
             ),
