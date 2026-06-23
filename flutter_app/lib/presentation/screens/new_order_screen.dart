@@ -30,12 +30,13 @@ class _NewOrderScreenState extends ConsumerState<NewOrderScreen> {
     final tablesAsync = ref.watch(tablesProvider);
     final branchId = ref.watch(authProvider).user?.branchId;
     final menuAsync = ref.watch(menuProvider(branchId));
+    final bc = BrandColors.of(context);
 
     return Scaffold(
-      backgroundColor: slateBg,
+      backgroundColor: bc.bg,
       appBar: AppBar(
         title: const Text('New Order'),
-        backgroundColor: slateBg,
+        backgroundColor: bc.bg,
         actions: [
           if (_cart.isNotEmpty)
             Padding(
@@ -57,15 +58,15 @@ class _NewOrderScreenState extends ConsumerState<NewOrderScreen> {
             padding: const EdgeInsets.all(14),
             constraints: const BoxConstraints(maxHeight: 180),
             decoration: BoxDecoration(
-              color: slateCard,
+              color: bc.card,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: dividerColor),
+              border: Border.all(color: bc.divider),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('Select Table', style: TextStyle(color: textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
+                Text('Select Table', style: TextStyle(color: bc.textLo, fontSize: 12, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 10),
                 Flexible(
                   child: tablesAsync.when(
@@ -85,11 +86,11 @@ class _NewOrderScreenState extends ConsumerState<NewOrderScreen> {
                                 color: selected
                                     ? copperAccent.withValues(alpha: 0.2)
                                     : t.isAvailable
-                                        ? slateSurface
-                                        : slateSurface.withValues(alpha: 0.4),
+                                        ? bc.surface
+                                        : bc.surface.withValues(alpha: 0.4),
                                 borderRadius: BorderRadius.circular(10),
                                 border: Border.all(
-                                  color: selected ? copperAccent : t.isAvailable ? dividerColor : Colors.transparent,
+                                  color: selected ? copperAccent : t.isAvailable ? bc.divider : Colors.transparent,
                                 ),
                               ),
                               child: Column(
@@ -98,7 +99,7 @@ class _NewOrderScreenState extends ConsumerState<NewOrderScreen> {
                                   Text(
                                     t.label,
                                     style: TextStyle(
-                                      color: selected ? copperAccent : t.isAvailable ? textPrimary : textSecondary,
+                                      color: selected ? copperAccent : t.isAvailable ? bc.textHi : bc.textLo,
                                       fontSize: 11,
                                       fontWeight: FontWeight.w600,
                                     ),
@@ -106,7 +107,7 @@ class _NewOrderScreenState extends ConsumerState<NewOrderScreen> {
                                   Text(
                                     t.isAvailable ? '${t.capacity}p' : 'Busy',
                                     style: TextStyle(
-                                      color: t.isAvailable ? textSecondary : crimson,
+                                      color: t.isAvailable ? bc.textLo : crimson,
                                       fontSize: 9,
                                     ),
                                   ),
@@ -139,7 +140,7 @@ class _NewOrderScreenState extends ConsumerState<NewOrderScreen> {
                       children: [
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 10),
-                          child: Text(cat, style: const TextStyle(color: textSecondary, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 1)),
+                          child: Text(cat, style: TextStyle(color: bc.textLo, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 1)),
                         ),
                         ...catItems.map((item) => _MenuItemTile(
                               item: item,
@@ -165,39 +166,39 @@ class _NewOrderScreenState extends ConsumerState<NewOrderScreen> {
       ),
       bottomNavigationBar: _cart.isEmpty
           ? null
-          : _buildOrderFooter(context),
+          : _buildOrderFooter(context, bc),
     );
   }
 
   /// Footer with notes field + Place Order button. Used to be a FAB which
   /// hid the notes; this layout keeps both visible while the cart has
   /// items. Falls back to nothing when the cart is empty.
-  Widget _buildOrderFooter(BuildContext context) => Container(
+  Widget _buildOrderFooter(BuildContext context, BrandColors bc) => Container(
         padding: EdgeInsets.fromLTRB(
             12, 10, 12, MediaQuery.of(context).viewInsets.bottom + 12),
-        decoration: const BoxDecoration(
-          color: slateCard,
-          border: Border(top: BorderSide(color: dividerColor)),
+        decoration: BoxDecoration(
+          color: bc.card,
+          border: Border(top: BorderSide(color: bc.divider)),
         ),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           TextField(
             controller: _notesCtrl,
-            style: const TextStyle(color: textPrimary, fontSize: 13),
+            style: TextStyle(color: bc.textHi, fontSize: 13),
             maxLines: 2,
             minLines: 1,
             decoration: InputDecoration(
               hintText: 'Notes (allergies, "no onions", VIP, …)',
               hintStyle:
-                  const TextStyle(color: textSecondary, fontSize: 12),
+                  TextStyle(color: bc.textLo, fontSize: 12),
               filled: true,
-              fillColor: slateSurface,
+              fillColor: bc.surface,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: dividerColor),
+                borderSide: BorderSide(color: bc.divider),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: dividerColor),
+                borderSide: BorderSide(color: bc.divider),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
@@ -205,8 +206,8 @@ class _NewOrderScreenState extends ConsumerState<NewOrderScreen> {
               ),
               contentPadding: const EdgeInsets.symmetric(
                   horizontal: 12, vertical: 8),
-              prefixIcon: const Icon(Icons.note_alt_outlined,
-                  color: textSecondary, size: 18),
+              prefixIcon: Icon(Icons.note_alt_outlined,
+                  color: bc.textLo, size: 18),
             ),
           ),
           const SizedBox(height: 10),
@@ -276,61 +277,64 @@ class _MenuItemTile extends StatelessWidget {
   const _MenuItemTile({required this.item, required this.quantity, required this.onAdd, required this.onRemove});
 
   @override
-  Widget build(BuildContext context) => Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: slateCard,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: quantity > 0 ? copperAccent.withValues(alpha: 0.4) : dividerColor),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(item.name, style: const TextStyle(color: textPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 2),
-                  Text('₹${item.basePrice.toStringAsFixed(2)}', style: const TextStyle(color: copperAccent, fontSize: 12, fontWeight: FontWeight.w700)),
-                ],
-              ),
+  Widget build(BuildContext context) {
+    final bc = BrandColors.of(context);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: bc.card,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: quantity > 0 ? copperAccent.withValues(alpha: 0.4) : bc.divider),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(item.name, style: TextStyle(color: bc.textHi, fontSize: 13, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 2),
+                Text('₹${item.basePrice.toStringAsFixed(2)}', style: const TextStyle(color: copperAccent, fontSize: 12, fontWeight: FontWeight.w700)),
+              ],
             ),
-            if (quantity == 0)
-              GestureDetector(
-                onTap: onAdd,
-                child: Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(color: copperAccent.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
-                  child: const Icon(Icons.add, color: copperAccent, size: 18),
-                ),
-              )
-            else
-              Row(
-                children: [
-                  GestureDetector(
-                    onTap: onRemove,
-                    child: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(color: slateSurface, borderRadius: BorderRadius.circular(8)),
-                      child: const Icon(Icons.remove, color: textSecondary, size: 18),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    child: Text('$quantity', style: const TextStyle(color: textPrimary, fontSize: 14, fontWeight: FontWeight.w700)),
-                  ),
-                  GestureDetector(
-                    onTap: onAdd,
-                    child: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(color: copperAccent.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
-                      child: const Icon(Icons.add, color: copperAccent, size: 18),
-                    ),
-                  ),
-                ],
+          ),
+          if (quantity == 0)
+            GestureDetector(
+              onTap: onAdd,
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(color: copperAccent.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
+                child: const Icon(Icons.add, color: copperAccent, size: 18),
               ),
-          ],
-        ),
-      );
+            )
+          else
+            Row(
+              children: [
+                GestureDetector(
+                  onTap: onRemove,
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(color: bc.surface, borderRadius: BorderRadius.circular(8)),
+                    child: Icon(Icons.remove, color: bc.textLo, size: 18),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: Text('$quantity', style: TextStyle(color: bc.textHi, fontSize: 14, fontWeight: FontWeight.w700)),
+                ),
+                GestureDetector(
+                  onTap: onAdd,
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(color: copperAccent.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
+                    child: const Icon(Icons.add, color: copperAccent, size: 18),
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
 }

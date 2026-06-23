@@ -16,16 +16,17 @@ class OrderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bc = BrandColors.of(context);
     final isUrgent = order.isUrgent;
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: bc.card,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: isUrgent
               ? copperAccent.withValues(alpha: 0.5)
-              : dividerColor,
+              : bc.divider,
           width: isUrgent ? 1.5 : 1,
         ),
         boxShadow: [
@@ -41,11 +42,11 @@ class OrderCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildHeader(),
-          const Divider(color: dividerColor, height: 1),
+          _buildHeader(bc),
+          Divider(color: bc.divider, height: 1),
           _buildItems(),
-          const Divider(color: dividerColor, height: 1),
-          _buildFooter(),
+          Divider(color: bc.divider, height: 1),
+          _buildFooter(bc),
         ],
       ),
     )
@@ -54,7 +55,7 @@ class OrderCard extends StatelessWidget {
         .slideY(begin: 0.05, end: 0, duration: 350.ms, curve: Curves.easeOut);
   }
 
-  Widget _buildHeader() => Padding(
+  Widget _buildHeader(BrandColors bc) => Padding(
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
         child: Row(
           children: [
@@ -76,8 +77,8 @@ class OrderCard extends StatelessWidget {
                 children: [
                   Text(
                     'Order #${order.id}',
-                    style: const TextStyle(
-                      color: textPrimary,
+                    style: TextStyle(
+                      color: bc.textHi,
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
                       letterSpacing: 0.3,
@@ -86,13 +87,13 @@ class OrderCard extends StatelessWidget {
                   const SizedBox(height: 2),
                   Row(
                     children: [
-                      const Icon(Icons.table_restaurant_outlined,
-                          size: 12, color: textSecondary),
+                      Icon(Icons.table_restaurant_outlined,
+                          size: 12, color: bc.textLo),
                       const SizedBox(width: 4),
                       Text(
                         order.tableLabel,
-                        style: const TextStyle(
-                            color: textSecondary, fontSize: 12),
+                        style: TextStyle(
+                            color: bc.textLo, fontSize: 12),
                       ),
                     ],
                   ),
@@ -114,18 +115,18 @@ class OrderCard extends StatelessWidget {
         ),
       );
 
-  Widget _buildFooter() => Padding(
+  Widget _buildFooter(BrandColors bc) => Padding(
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
         child: Row(
           children: [
             SyncStatusBadge(syncStatus: order.syncStatus),
             const SizedBox(width: 6),
-            const Icon(Icons.history, size: 12, color: textSecondary),
+            Icon(Icons.history, size: 12, color: bc.textLo),
             const SizedBox(width: 3),
             Flexible(
               child: Text(
                 _timeAgo(order.updatedAt),
-                style: const TextStyle(color: textSecondary, fontSize: 11),
+                style: TextStyle(color: bc.textLo, fontSize: 11),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -133,13 +134,13 @@ class OrderCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
               decoration: BoxDecoration(
-                color: slateSurface,
+                color: bc.surface,
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
                 'v${order.version}',
-                style: const TextStyle(
-                    color: textSecondary,
+                style: TextStyle(
+                    color: bc.textLo,
                     fontSize: 10,
                     fontWeight: FontWeight.w600),
               ),

@@ -11,6 +11,7 @@ class ItemRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bc = BrandColors.of(context);
     final progressColor = _progressColor(item.progress);
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -22,8 +23,8 @@ class ItemRow extends StatelessWidget {
               Expanded(
                 child: Text(
                   item.name,
-                  style: const TextStyle(
-                    color: textPrimary,
+                  style: TextStyle(
+                    color: bc.textHi,
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                   ),
@@ -31,7 +32,7 @@ class ItemRow extends StatelessWidget {
               ),
               Text(
                 'x${item.quantity}',
-                style: const TextStyle(color: textSecondary, fontSize: 12),
+                style: TextStyle(color: bc.textLo, fontSize: 12),
               ),
               const SizedBox(width: 8),
               Text(
@@ -49,7 +50,7 @@ class ItemRow extends StatelessWidget {
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
               value: item.progress,
-              backgroundColor: slateSurface,
+              backgroundColor: bc.surface,
               valueColor: AlwaysStoppedAnimation<Color>(progressColor),
               minHeight: 5,
             ),

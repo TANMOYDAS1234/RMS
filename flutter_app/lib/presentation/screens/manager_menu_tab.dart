@@ -42,13 +42,14 @@ class _ManagerMenuTabState extends ConsumerState<ManagerMenuTab> {
   Widget build(BuildContext context) {
     final user = ref.watch(authProvider).user;
     final branchId = user?.branchId;
+    final bc = BrandColors.of(context);
     if (branchId == null || branchId.isEmpty) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(24),
+          padding: const EdgeInsets.all(24),
           child: Text(
             'Your account is not assigned to a branch. Contact an administrator.',
-            style: TextStyle(color: textSecondary, fontSize: 13),
+            style: TextStyle(color: bc.textLo, fontSize: 13),
             textAlign: TextAlign.center,
           ),
         ),
@@ -57,10 +58,10 @@ class _ManagerMenuTabState extends ConsumerState<ManagerMenuTab> {
 
     final menuAsync = ref.watch(_managerMenuProvider(branchId));
     return Scaffold(
-      backgroundColor: slateBg,
+      backgroundColor: bc.bg,
       body: RefreshIndicator(
         color: copperAccent,
-        backgroundColor: slateCard,
+        backgroundColor: bc.card,
         onRefresh: () async => ref.invalidate(_managerMenuProvider(branchId)),
         child: menuAsync.when(
           loading: () => const Center(
@@ -90,9 +91,9 @@ class _ManagerMenuTabState extends ConsumerState<ManagerMenuTab> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: slateCard,
+                    color: bc.card,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: dividerColor),
+                    border: Border.all(color: bc.divider),
                   ),
                   child: Row(children: [
                     _Pill('Available', available, emerald),
@@ -100,30 +101,30 @@ class _ManagerMenuTabState extends ConsumerState<ManagerMenuTab> {
                     _Pill('Hidden', unavailable, amber),
                     const Spacer(),
                     Text('${items.length} total',
-                        style: const TextStyle(
-                            color: textSecondary, fontSize: 11)),
+                        style: TextStyle(
+                            color: bc.textLo, fontSize: 11)),
                   ]),
                 ),
                 const SizedBox(height: 12),
                 // Search
                 TextField(
                   onChanged: (v) => setState(() => _query = v),
-                  style: const TextStyle(color: textPrimary, fontSize: 13),
+                  style: TextStyle(color: bc.textHi, fontSize: 13),
                   decoration: InputDecoration(
                     hintText: 'Search items',
                     hintStyle:
-                        const TextStyle(color: textSecondary, fontSize: 12),
+                        TextStyle(color: bc.textLo, fontSize: 12),
                     filled: true,
-                    fillColor: slateCard,
+                    fillColor: bc.card,
                     prefixIcon:
-                        const Icon(Icons.search, color: textSecondary, size: 18),
+                        Icon(Icons.search, color: bc.textLo, size: 18),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: dividerColor),
+                      borderSide: BorderSide(color: bc.divider),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: dividerColor),
+                      borderSide: BorderSide(color: bc.divider),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
@@ -133,13 +134,13 @@ class _ManagerMenuTabState extends ConsumerState<ManagerMenuTab> {
                 ),
                 const SizedBox(height: 14),
                 if (categories.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 40),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 40),
                     child: Center(
                       child: Text(
                           'No items found. Admin can add new items from the Admin → System → Menu tab.',
                           style: TextStyle(
-                              color: textSecondary, fontSize: 12),
+                              color: bc.textLo, fontSize: 12),
                           textAlign: TextAlign.center),
                     ),
                   ),
@@ -148,8 +149,8 @@ class _ManagerMenuTabState extends ConsumerState<ManagerMenuTab> {
                     padding:
                         const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
                     child: Text(cat.toUpperCase(),
-                        style: const TextStyle(
-                            color: textSecondary,
+                        style: TextStyle(
+                            color: bc.textLo,
                             fontSize: 11,
                             fontWeight: FontWeight.w800,
                             letterSpacing: 1)),
@@ -226,6 +227,7 @@ class _MenuRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bc = BrandColors.of(context);
     final available = item['isAvailable'] == true;
     final price = (item['basePrice'] as num? ?? 0).toDouble();
     final prep = (item['prepTimeMinutes'] as num? ?? 0).toInt();
@@ -234,11 +236,11 @@ class _MenuRow extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: bc.card,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: available
-              ? dividerColor
+              ? bc.divider
               : amber.withValues(alpha: 0.35),
         ),
       ),
@@ -268,7 +270,7 @@ class _MenuRow extends StatelessWidget {
               children: [
                 Text(item['name'] ?? '',
                     style: TextStyle(
-                        color: available ? textPrimary : textSecondary,
+                        color: available ? bc.textHi : bc.textLo,
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                         decoration: available
@@ -283,12 +285,12 @@ class _MenuRow extends StatelessWidget {
                           fontWeight: FontWeight.w700)),
                   if (prep > 0) ...[
                     const SizedBox(width: 10),
-                    const Icon(Icons.timer_outlined,
-                        color: textSecondary, size: 10),
+                    Icon(Icons.timer_outlined,
+                        color: bc.textLo, size: 10),
                     const SizedBox(width: 2),
                     Text('${prep}m',
-                        style: const TextStyle(
-                            color: textSecondary, fontSize: 10)),
+                        style: TextStyle(
+                            color: bc.textLo, fontSize: 10)),
                   ],
                 ]),
               ]),
@@ -296,8 +298,8 @@ class _MenuRow extends StatelessWidget {
         Switch(
           value: available,
           activeThumbColor: emerald,
-          inactiveThumbColor: textSecondary,
-          inactiveTrackColor: slateSurface,
+          inactiveThumbColor: bc.textLo,
+          inactiveTrackColor: bc.surface,
           onChanged: (_) => onToggle(),
         ),
       ]),

@@ -36,11 +36,12 @@ class CashDrawerScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final current = ref.watch(cashDrawerCurrentProvider);
+    final bc = BrandColors.of(context);
     return Scaffold(
-      backgroundColor: slateBg,
+      backgroundColor: bc.bg,
       appBar: AppBar(
         title: const Text('CASH DRAWER'),
-        backgroundColor: slateBg,
+        backgroundColor: bc.bg,
       ),
       body: current.when(
         loading: () => const Center(
@@ -117,6 +118,7 @@ class _OpenShiftFormState extends ConsumerState<_OpenShiftForm> {
 
   @override
   Widget build(BuildContext context) {
+    final bc = BrandColors.of(context);
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 360),
@@ -129,39 +131,39 @@ class _OpenShiftFormState extends ConsumerState<_OpenShiftForm> {
                 const Icon(Icons.point_of_sale_outlined,
                     color: copperAccent, size: 44),
                 const SizedBox(height: 12),
-                const Text('Start a new shift',
+                Text('Start a new shift',
                     style: TextStyle(
-                        color: textPrimary,
+                        color: bc.textHi,
                         fontSize: 18,
                         fontWeight: FontWeight.w800)),
                 const SizedBox(height: 6),
-                const Text(
+                Text(
                     'Count the cash in the drawer and enter the opening balance. Variance at the end of your shift compares this against the cash you collect.',
-                    style: TextStyle(color: textSecondary, fontSize: 12)),
+                    style: TextStyle(color: bc.textLo, fontSize: 12)),
                 const SizedBox(height: 20),
                 TextField(
                   controller: _balanceCtrl,
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
-                  style: const TextStyle(
-                      color: textPrimary,
+                  style: TextStyle(
+                      color: bc.textHi,
                       fontSize: 18,
                       fontWeight: FontWeight.w800),
                   decoration: InputDecoration(
                     labelText: 'Opening Balance',
-                    labelStyle: const TextStyle(color: textSecondary),
+                    labelStyle: TextStyle(color: bc.textLo),
                     prefixText: '₹ ',
                     prefixStyle:
                         const TextStyle(color: copperAccent, fontSize: 18),
                     filled: true,
-                    fillColor: slateCard,
+                    fillColor: bc.card,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: dividerColor),
+                      borderSide: BorderSide(color: bc.divider),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: dividerColor),
+                      borderSide: BorderSide(color: bc.divider),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -272,6 +274,7 @@ class _OpenShiftViewState extends ConsumerState<_OpenShiftView> {
 
   @override
   Widget build(BuildContext context) {
+    final bc = BrandColors.of(context);
     final s = widget.shift;
     final opening = (s['openingBalance'] as num? ?? 0).toDouble();
     final openedAt = DateTime.tryParse(s['openedAt']?.toString() ?? '');
@@ -283,7 +286,7 @@ class _OpenShiftViewState extends ConsumerState<_OpenShiftView> {
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: slateCard,
+            color: bc.card,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: emerald.withValues(alpha: 0.3)),
           ),
@@ -307,8 +310,8 @@ class _OpenShiftViewState extends ConsumerState<_OpenShiftView> {
                 ]),
                 const SizedBox(height: 12),
                 Text(cashierName,
-                    style: const TextStyle(
-                        color: textPrimary,
+                    style: TextStyle(
+                        color: bc.textHi,
                         fontSize: 16,
                         fontWeight: FontWeight.w700)),
                 if (openedAt != null)
@@ -316,13 +319,13 @@ class _OpenShiftViewState extends ConsumerState<_OpenShiftView> {
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
                         'Opened ${DateFormat('dd MMM, HH:mm').format(openedAt)}',
-                        style: const TextStyle(
-                            color: textSecondary, fontSize: 12)),
+                        style: TextStyle(
+                            color: bc.textLo, fontSize: 12)),
                   ),
-                const Divider(color: dividerColor, height: 22),
+                Divider(color: bc.divider, height: 22),
                 Row(children: [
-                  const Text('Opening Balance',
-                      style: TextStyle(color: textSecondary, fontSize: 13)),
+                  Text('Opening Balance',
+                      style: TextStyle(color: bc.textLo, fontSize: 13)),
                   const Spacer(),
                   Text('₹${opening.toStringAsFixed(2)}',
                       style: const TextStyle(
@@ -333,36 +336,36 @@ class _OpenShiftViewState extends ConsumerState<_OpenShiftView> {
               ]),
         ),
         const SizedBox(height: 20),
-        const Text('CLOSE SHIFT',
+        Text('CLOSE SHIFT',
             style: TextStyle(
-                color: textSecondary,
+                color: bc.textLo,
                 fontSize: 11,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 1)),
         const SizedBox(height: 8),
-        const Text(
+        Text(
             'Count every note and coin in the drawer at end of shift. The server will compute your expected cash from CASH bills you processed and flag any variance.',
-            style: TextStyle(color: textSecondary, fontSize: 12)),
+            style: TextStyle(color: bc.textLo, fontSize: 12)),
         const SizedBox(height: 12),
         TextField(
           controller: _closingCtrl,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          style: const TextStyle(
-              color: textPrimary, fontSize: 18, fontWeight: FontWeight.w800),
+          style: TextStyle(
+              color: bc.textHi, fontSize: 18, fontWeight: FontWeight.w800),
           decoration: InputDecoration(
             labelText: 'Closing Balance',
-            labelStyle: const TextStyle(color: textSecondary),
+            labelStyle: TextStyle(color: bc.textLo),
             prefixText: '₹ ',
             prefixStyle: const TextStyle(color: copperAccent, fontSize: 18),
             filled: true,
-            fillColor: slateCard,
+            fillColor: bc.card,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: dividerColor),
+              borderSide: BorderSide(color: bc.divider),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: dividerColor),
+              borderSide: BorderSide(color: bc.divider),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
@@ -374,19 +377,19 @@ class _OpenShiftViewState extends ConsumerState<_OpenShiftView> {
         TextField(
           controller: _noteCtrl,
           maxLines: 2,
-          style: const TextStyle(color: textPrimary, fontSize: 13),
+          style: TextStyle(color: bc.textHi, fontSize: 13),
           decoration: InputDecoration(
             labelText: 'Note (optional)',
-            labelStyle: const TextStyle(color: textSecondary),
+            labelStyle: TextStyle(color: bc.textLo),
             filled: true,
-            fillColor: slateCard,
+            fillColor: bc.card,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: dividerColor),
+              borderSide: BorderSide(color: bc.divider),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: dividerColor),
+              borderSide: BorderSide(color: bc.divider),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),

@@ -20,16 +20,17 @@ class FloorGridScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tablesAsync = ref.watch(tablesProvider);
     final orders = ref.watch(liveOrdersProvider);
+    final bc = BrandColors.of(context);
 
     return Scaffold(
-      backgroundColor: slateBg,
+      backgroundColor: bc.bg,
       appBar: AppBar(
         title: const Text('FLOOR PLAN'),
-        backgroundColor: slateBg,
+        backgroundColor: bc.bg,
       ),
       body: RefreshIndicator(
         color: copperAccent,
-        backgroundColor: slateCard,
+        backgroundColor: bc.card,
         onRefresh: () async {
           ref.invalidate(tablesProvider);
           ref.read(liveOrdersProvider.notifier).refresh();
@@ -42,9 +43,9 @@ class FloorGridScreen extends ConsumerWidget {
                   style: const TextStyle(color: crimson))),
           data: (tables) {
             if (tables.isEmpty) {
-              return const Center(
+              return Center(
                 child: Text('No tables configured yet.',
-                    style: TextStyle(color: textSecondary)),
+                    style: TextStyle(color: bc.textLo)),
               );
             }
             final available = tables.where((t) => t.status == 'available').length;
@@ -108,12 +109,13 @@ class _Legend extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bc = BrandColors.of(context);
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: bc.card,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: dividerColor),
+        border: Border.all(color: bc.divider),
       ),
       child: Row(children: [
         _LegendChip(label: 'Available', count: available, color: emerald),
@@ -123,7 +125,7 @@ class _Legend extends StatelessWidget {
         _LegendChip(label: 'Cleaning', count: cleaning, color: amber),
         const Spacer(),
         Text('$total tables',
-            style: const TextStyle(color: textSecondary, fontSize: 11)),
+            style: TextStyle(color: bc.textLo, fontSize: 11)),
       ]),
     );
   }
@@ -168,7 +170,7 @@ class _TableTile extends StatelessWidget {
   final OrderEntity? activeOrder;
   const _TableTile({required this.table, this.activeOrder});
 
-  Color get _statusColor {
+  Color _statusColor(BrandColors bc) {
     switch (table.status) {
       case 'available':
         return emerald;
@@ -179,24 +181,26 @@ class _TableTile extends StatelessWidget {
       case 'cleaning':
         return amber;
       default:
-        return textSecondary;
+        return bc.textLo;
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final bc = BrandColors.of(context);
+    final statusColor = _statusColor(bc);
     final hasOrder = activeOrder != null;
     return Container(
       decoration: BoxDecoration(
-        color: slateCard,
+        color: bc.card,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _statusColor.withValues(alpha: 0.5), width: 2),
+        border: Border.all(color: statusColor.withValues(alpha: 0.5), width: 2),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: _statusColor.withValues(alpha: 0.12),
+            color: statusColor.withValues(alpha: 0.12),
             borderRadius:
                 const BorderRadius.vertical(top: Radius.circular(12)),
           ),
@@ -204,20 +208,20 @@ class _TableTile extends StatelessWidget {
             Container(
               width: 8, height: 8,
               decoration: BoxDecoration(
-                color: _statusColor, shape: BoxShape.circle,
+                color: statusColor, shape: BoxShape.circle,
               ),
             ),
             const SizedBox(width: 6),
             Text(table.status.toUpperCase(),
                 style: TextStyle(
-                    color: _statusColor,
+                    color: statusColor,
                     fontSize: 9,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 1)),
             const Spacer(),
             Text('${table.capacity}p',
-                style: const TextStyle(
-                    color: textSecondary, fontSize: 10)),
+                style: TextStyle(
+                    color: bc.textLo, fontSize: 10)),
           ]),
         ),
         Expanded(
@@ -227,8 +231,8 @@ class _TableTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(table.label,
-                      style: const TextStyle(
-                          color: textPrimary,
+                      style: TextStyle(
+                          color: bc.textHi,
                           fontSize: 18,
                           fontWeight: FontWeight.w800)),
                   const SizedBox(height: 4),
@@ -240,8 +244,8 @@ class _TableTile extends StatelessWidget {
                       Expanded(
                           child: Text(
                               '${activeOrder!.items.length} item${activeOrder!.items.length == 1 ? '' : 's'}',
-                              style: const TextStyle(
-                                  color: textSecondary, fontSize: 11),
+                              style: TextStyle(
+                                  color: bc.textLo, fontSize: 11),
                               overflow: TextOverflow.ellipsis)),
                     ]),
                     const SizedBox(height: 2),
@@ -251,9 +255,9 @@ class _TableTile extends StatelessWidget {
                             fontSize: 13,
                             fontWeight: FontWeight.w800)),
                   ] else
-                    const Text('Tap to seat',
+                    Text('Tap to seat',
                         style:
-                            TextStyle(color: textSecondary, fontSize: 11)),
+                            TextStyle(color: bc.textLo, fontSize: 11)),
                 ]),
           ),
         ),

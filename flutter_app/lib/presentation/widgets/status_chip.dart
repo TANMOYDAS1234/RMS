@@ -10,7 +10,7 @@ class StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (color, icon) = _config(status);
+    final (color, icon) = _config(status, BrandColors.of(context));
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
@@ -37,15 +37,15 @@ class StatusChip extends StatelessWidget {
     );
   }
 
-  (Color, IconData) _config(OrderStatus s) => switch (s) {
-        OrderStatus.created => (textSecondary, Icons.add_circle_outline),
+  (Color, IconData) _config(OrderStatus s, BrandColors bc) => switch (s) {
+        OrderStatus.created => (bc.textLo, Icons.add_circle_outline),
         OrderStatus.confirmed => (amber, Icons.check_circle_outline),
         OrderStatus.preparing => (copperAccent, Icons.local_fire_department),
         OrderStatus.ready => (emerald, Icons.done_all),
         OrderStatus.served => (roseGold, Icons.room_service_outlined),
         OrderStatus.billed => (Colors.blue, Icons.receipt_outlined),
         OrderStatus.paid => (emerald, Icons.payments_outlined),
-        OrderStatus.closed => (textSecondary, Icons.lock_outline),
+        OrderStatus.closed => (bc.textLo, Icons.lock_outline),
       };
 }
 

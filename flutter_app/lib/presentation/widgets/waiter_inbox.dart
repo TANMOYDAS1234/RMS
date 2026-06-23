@@ -139,7 +139,7 @@ class _HelpRow extends StatelessWidget {
             help['reason']?.toString().isNotEmpty == true
                 ? help['reason'].toString()
                 : 'Help requested',
-            style: const TextStyle(color: textPrimary, fontSize: 12),
+            style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 12),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
@@ -147,8 +147,8 @@ class _HelpRow extends StatelessWidget {
         if (at != null) ...[
           const SizedBox(width: 6),
           Text('${mins}m',
-              style: const TextStyle(
-                  color: textSecondary, fontSize: 11)),
+              style: TextStyle(
+                  color: BrandColors.of(context).textLo, fontSize: 11)),
         ],
         const SizedBox(width: 6),
         IconButton(

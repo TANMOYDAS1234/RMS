@@ -47,15 +47,16 @@ class InventoryScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final inventoryAsync = ref.watch(inventoryProvider);
+    final bc = BrandColors.of(context);
 
     return Scaffold(
-      backgroundColor: slateBg,
+      backgroundColor: bc.bg,
       appBar: AppBar(
         title: const Text('INVENTORY'),
-        backgroundColor: slateBg,
+        backgroundColor: bc.bg,
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh, color: textSecondary),
+            icon: Icon(Icons.refresh, color: bc.textLo),
             onPressed: () => ref.invalidate(inventoryProvider),
           ),
         ],
@@ -103,6 +104,7 @@ class _InventoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bc = BrandColors.of(context);
     final progress = item.lowStockThreshold > 0
         ? (item.currentStock / (item.lowStockThreshold * 3)).clamp(0.0, 1.0)
         : 1.0;
@@ -111,9 +113,9 @@ class _InventoryCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: slateCard,
+        color: bc.card,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: item.isLow ? crimson.withValues(alpha: 0.4) : dividerColor),
+        border: Border.all(color: item.isLow ? crimson.withValues(alpha: 0.4) : bc.divider),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -121,7 +123,7 @@ class _InventoryCard extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text(item.name, style: const TextStyle(color: textPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
+                child: Text(item.name, style: TextStyle(color: bc.textHi, fontSize: 13, fontWeight: FontWeight.w600)),
               ),
               if (item.isLow)
                 Container(
@@ -134,8 +136,8 @@ class _InventoryCard extends StatelessWidget {
                 onTap: () => _showAdjustSheet(context),
                 child: Container(
                   padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(color: slateSurface, borderRadius: BorderRadius.circular(8)),
-                  child: const Icon(Icons.edit_outlined, color: textSecondary, size: 16),
+                  decoration: BoxDecoration(color: bc.surface, borderRadius: BorderRadius.circular(8)),
+                  child: Icon(Icons.edit_outlined, color: bc.textLo, size: 16),
                 ),
               ),
             ],
@@ -156,7 +158,7 @@ class _InventoryCard extends StatelessWidget {
               ),
               Text(
                 'Min: ${item.lowStockThreshold} ${item.unit}',
-                style: const TextStyle(color: textSecondary, fontSize: 11),
+                style: TextStyle(color: bc.textLo, fontSize: 11),
               ),
             ],
           ),
@@ -165,7 +167,7 @@ class _InventoryCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
               value: progress,
-              backgroundColor: slateSurface,
+              backgroundColor: bc.surface,
               valueColor: AlwaysStoppedAnimation<Color>(item.isLow ? crimson : emerald),
               minHeight: 4,
             ),
@@ -178,9 +180,10 @@ class _InventoryCard extends StatelessWidget {
   void _showAdjustSheet(BuildContext context) {
     final ctrl = TextEditingController();
     final reasonCtrl = TextEditingController();
+    final bc = BrandColors.of(context);
     showModalBottomSheet(
       context: context,
-      backgroundColor: slateCard,
+      backgroundColor: bc.card,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) => Padding(
@@ -189,19 +192,19 @@ class _InventoryCard extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Adjust Stock — ${item.name}', style: const TextStyle(color: textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
+            Text('Adjust Stock — ${item.name}', style: TextStyle(color: bc.textHi, fontSize: 16, fontWeight: FontWeight.w700)),
             const SizedBox(height: 16),
             TextField(
               controller: ctrl,
               keyboardType: const TextInputType.numberWithOptions(signed: true),
-              style: const TextStyle(color: textPrimary),
-              decoration: _inputDec('Delta (e.g. +10 or -5)'),
+              style: TextStyle(color: bc.textHi),
+              decoration: _inputDec('Delta (e.g. +10 or -5)', bc),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: reasonCtrl,
-              style: const TextStyle(color: textPrimary),
-              decoration: _inputDec('Reason'),
+              style: TextStyle(color: bc.textHi),
+              decoration: _inputDec('Reason', bc),
             ),
             const SizedBox(height: 16),
             GestureDetector(
@@ -233,13 +236,13 @@ class _InventoryCard extends StatelessWidget {
     );
   }
 
-  InputDecoration _inputDec(String label) => InputDecoration(
+  InputDecoration _inputDec(String label, BrandColors bc) => InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: textSecondary, fontSize: 13),
+        labelStyle: TextStyle(color: bc.textLo, fontSize: 13),
         filled: true,
-        fillColor: slateSurface,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: dividerColor)),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: dividerColor)),
+        fillColor: bc.surface,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: bc.divider)),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: bc.divider)),
         focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: copperAccent)),
       );
 }
