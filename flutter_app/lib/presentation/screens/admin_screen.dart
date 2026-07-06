@@ -4234,91 +4234,224 @@ class _MenuManagementTabState extends ConsumerState<_MenuManagementTab> {
               ),
             ]),
             const SizedBox(height: 10),
-            // Photo picker
-            GestureDetector(
-              onTap: () async {
-                final picked = await ImagePicker().pickImage(
-                    source: ImageSource.gallery, imageQuality: 85, maxWidth: 1024);
-                if (picked != null) {
-                  // readAsBytes() works on web and mobile alike, unlike
-                  // File(picked.path) which throws UnsupportedError in the
-                  // browser.
-                  final bytes = await picked.readAsBytes();
-                  setState(() {
-                    pickedImageBytes = bytes;
-                    pickedImageName = picked.name;
-                  });
-                }
-              },
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
-                decoration: BoxDecoration(
-                  color: BrandColors.of(context).surface,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: pickedImageBytes != null ? copperAccent : dividerColor),
-                ),
-                child: Row(children: [
-                  Icon(Icons.add_photo_alternate_outlined,
-                      color: pickedImageBytes != null ? copperAccent : textSecondary, size: 18),
-                  const SizedBox(width: 10),
-                  Text(
-                    pickedImageBytes != null ? 'Photo selected ✓' : 'Add Dish Photo (optional)',
-                    style: TextStyle(
-                        color: pickedImageBytes != null ? copperAccent : textSecondary, fontSize: 13),
-                  ),
-                ]),
-              ),
-            ),
-            const SizedBox(height: 10),
-            // GLB picker
-            GestureDetector(
-              onTap: () async {
-                // FileType.custom + allowedExtensions: ['glb'] makes Android
-                // resolve a MIME for .glb, which it doesn't know — picker
-                // throws. Use FileType.any and validate the extension here.
-                final result = await FilePicker.platform.pickFiles(
-                  type: FileType.any,
-                  withData: true,
-                );
-                final file = result?.files.single;
-                if (file != null &&
-                    !(file.name.toLowerCase().endsWith('.glb'))) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content: Text('Please pick a .glb file'),
-                      backgroundColor: crimson,
-                    ));
+            // Photo picker — shows the currently stored photo (if any) as
+            // a thumbnail so admin can see what's on file before deciding
+            // whether to replace it. `existingImageUrl` reads straight
+            // from the item document, with the same ?v=updatedAt cache-
+            // buster the card uses so a just-replaced photo doesn't hang.
+            Builder(builder: (_) {
+              final existingImageUrl = existing?['imageUrl'] as String?;
+              final updatedAt = existing?['updatedAt'];
+              final v = updatedAt != null
+                  ? (DateTime.tryParse(updatedAt.toString())
+                          ?.millisecondsSinceEpoch ??
+                      0)
+                  : 0;
+              final storedPhotoUrl = existingImageUrl != null
+                  ? '${AppConfig.baseUrl}$existingImageUrl?v=$v'
+                  : null;
+              final hasNewPick = pickedImageBytes != null;
+              final hasStored = storedPhotoUrl != null;
+              return GestureDetector(
+                onTap: () async {
+                  final picked = await ImagePicker().pickImage(
+                      source: ImageSource.gallery,
+                      imageQuality: 85,
+                      maxWidth: 1024);
+                  if (picked != null) {
+                    // readAsBytes() works on web and mobile alike, unlike
+                    // File(picked.path) which throws UnsupportedError in
+                    // the browser.
+                    final bytes = await picked.readAsBytes();
+                    setState(() {
+                      pickedImageBytes = bytes;
+                      pickedImageName = picked.name;
+                    });
                   }
-                  return;
-                }
-                if (file != null && file.bytes != null) {
-                  setState(() {
-                    pickedGlbBytes = file.bytes;
-                    pickedGlbName = file.name;
-                  });
-                }
-              },
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
-                decoration: BoxDecoration(
-                  color: BrandColors.of(context).surface,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: pickedGlbBytes != null ? copperAccent : dividerColor),
-                ),
-                child: Row(children: [
-                  Icon(Icons.view_in_ar_outlined,
-                      color: pickedGlbBytes != null ? copperAccent : textSecondary, size: 18),
-                  const SizedBox(width: 10),
-                  Text(
-                    pickedGlbBytes != null ? '3D Model selected ✓' : 'Add 3D Model (.glb) (optional)',
-                    style: TextStyle(
-                        color: pickedGlbBytes != null ? copperAccent : textSecondary, fontSize: 13),
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: BrandColors.of(context).surface,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                        color: (hasNewPick || hasStored)
+                            ? copperAccent
+                            : dividerColor),
                   ),
-                ]),
-              ),
-            ),
+                  child: Row(children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: SizedBox(
+                        width: 48,
+                        height: 48,
+                        child: hasNewPick
+                            ? Image.memory(pickedImageBytes!,
+                                fit: BoxFit.cover)
+                            : hasStored
+                                ? CachedNetworkImage(
+                                    imageUrl: storedPhotoUrl,
+                                    fit: BoxFit.cover,
+                                    placeholder: (_, __) => Container(
+                                        color:
+                                            BrandColors.of(context).card),
+                                    errorWidget: (_, __, ___) => Icon(
+                                        Icons.image_not_supported_outlined,
+                                        color: BrandColors.of(context)
+                                            .textLo,
+                                        size: 22),
+                                  )
+                                : Container(
+                                    color: BrandColors.of(context).card,
+                                    child: Icon(
+                                        Icons.add_photo_alternate_outlined,
+                                        color: BrandColors.of(context)
+                                            .textLo,
+                                        size: 22)),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            hasNewPick
+                                ? 'New photo selected ✓'
+                                : hasStored
+                                    ? 'Photo on file'
+                                    : 'Add Dish Photo (optional)',
+                            style: TextStyle(
+                                color: (hasNewPick || hasStored)
+                                    ? copperAccent
+                                    : BrandColors.of(context).textLo,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            hasNewPick
+                                ? (pickedImageName ?? 'ready to upload')
+                                : hasStored
+                                    ? 'Tap to replace'
+                                    : 'Tap to pick from gallery',
+                            style: TextStyle(
+                                color: BrandColors.of(context).textLo,
+                                fontSize: 11),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ]),
+                ),
+              );
+            }),
+            const SizedBox(height: 10),
+            // GLB picker — same treatment as the photo picker: the row
+            // reads the stored glbUrl so admin sees "3D model on file"
+            // instead of an empty upload prompt when one is already
+            // saved. Rendering the full inline preview here would
+            // double the sheet height, so we show a compact status
+            // panel with an inline "View" link that opens /ar.html.
+            Builder(builder: (_) {
+              final existingGlbUrl = existing?['glbUrl'] as String?;
+              final storedGlbUrl = existingGlbUrl != null
+                  ? '${AppConfig.baseUrl}$existingGlbUrl'
+                  : null;
+              final hasNewPick = pickedGlbBytes != null;
+              final hasStored = storedGlbUrl != null;
+              return GestureDetector(
+                onTap: () async {
+                  // FileType.custom + allowedExtensions: ['glb'] makes
+                  // Android resolve a MIME for .glb, which it doesn't
+                  // know — picker throws. Use FileType.any and validate
+                  // the extension here.
+                  final result = await FilePicker.platform.pickFiles(
+                    type: FileType.any,
+                    withData: true,
+                  );
+                  final file = result?.files.single;
+                  if (file != null &&
+                      !(file.name.toLowerCase().endsWith('.glb'))) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text('Please pick a .glb file'),
+                              backgroundColor: crimson));
+                    }
+                    return;
+                  }
+                  if (file != null && file.bytes != null) {
+                    setState(() {
+                      pickedGlbBytes = file.bytes;
+                      pickedGlbName = file.name;
+                    });
+                  }
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: BrandColors.of(context).surface,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                        color: (hasNewPick || hasStored)
+                            ? copperAccent
+                            : dividerColor),
+                  ),
+                  child: Row(children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: BrandColors.of(context).card,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Icon(
+                        Icons.view_in_ar_outlined,
+                        color: (hasNewPick || hasStored)
+                            ? copperAccent
+                            : BrandColors.of(context).textLo,
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            hasNewPick
+                                ? 'New 3D model selected ✓'
+                                : hasStored
+                                    ? '3D model on file'
+                                    : 'Add 3D Model (.glb) (optional)',
+                            style: TextStyle(
+                                color: (hasNewPick || hasStored)
+                                    ? copperAccent
+                                    : BrandColors.of(context).textLo,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            hasNewPick
+                                ? (pickedGlbName ?? 'ready to upload')
+                                : hasStored
+                                    ? 'Tap to replace'
+                                    : 'Tap to pick a .glb file',
+                            style: TextStyle(
+                                color: BrandColors.of(context).textLo,
+                                fontSize: 11),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ]),
+                ),
+              );
+            }),
             const SizedBox(height: 16),
             _PrimaryButton(
               label: id == null ? 'Create Item' : 'Save Changes',
@@ -4597,11 +4730,10 @@ class _MenuItemCard extends ConsumerWidget {
 
 /// Photo + 3D preview strip on the admin menu card.
 ///
-/// Layout rules:
-///  - both uploaded → side-by-side (image | 3D), each takes half width,
-///    shared 180px height so admin can eyeball match between them
-///  - only image / only 3D → single full-width panel, 130px tall
-///  - neither → the "no photo yet" placeholder
+/// Always renders two panels side-by-side at 180px so the layout stays
+/// stable regardless of what the admin has uploaded. Each panel either
+/// shows its asset (photo / rotating 3D model) or an empty-state hint
+/// pointing at the Edit pencil so the admin sees exactly what's missing.
 ///
 /// Only the Veg/Non-Veg pill overlays the image. Photo + GLB uploads live
 /// in the Edit dialog (accessed via the pencil icon on the card) — no
@@ -4623,9 +4755,6 @@ class _MediaHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sideBySide = fullImageUrl != null && fullGlbUrl != null;
-    final panelHeight = sideBySide ? 180.0 : 130.0;
-
     Widget imagePanel = Stack(children: [
       Positioned.fill(
         child: fullImageUrl != null
@@ -4659,7 +4788,7 @@ class _MediaHeader extends StatelessWidget {
       ),
     ]);
 
-    Widget? previewPanel = fullGlbUrl != null
+    Widget previewPanel = fullGlbUrl != null
         ? Stack(children: [
             Positioned.fill(
               child: Container(
@@ -4695,31 +4824,42 @@ class _MediaHeader extends StatelessWidget {
               ),
             ),
           ])
-        : null;
-
-    // Compose row/single depending on how many panels have content.
-    Widget content;
-    if (sideBySide) {
-      content = Row(children: [
-        Expanded(child: imagePanel),
-        Container(width: 1, color: BrandColors.of(context).divider),
-        Expanded(child: previewPanel!),
-      ]);
-    } else if (previewPanel != null) {
-      // Only 3D — still leave the upload buttons visible so admin can
-      // add a photo. Show placeholder on the left half.
-      content = Row(children: [
-        Expanded(child: imagePanel),
-        Container(width: 1, color: BrandColors.of(context).divider),
-        Expanded(child: previewPanel),
-      ]);
-    } else {
-      content = imagePanel;
-    }
+        // Empty state — no GLB uploaded yet. Tells admin exactly what to
+        // do so they don't confuse "missing model" with "app is broken".
+        : Container(
+            color: BrandColors.of(context).surface,
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.view_in_ar_outlined,
+                    color: BrandColors.of(context).textLo, size: 32),
+                const SizedBox(height: 6),
+                Text('No 3D model',
+                    style: TextStyle(
+                        color: BrandColors.of(context).textHi,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Text('Tap the pencil to upload a .glb',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        color: BrandColors.of(context).textLo,
+                        fontSize: 10)),
+              ],
+            ),
+          );
 
     return ClipRRect(
       borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-      child: SizedBox(height: panelHeight, child: content),
+      child: SizedBox(
+        height: 180,
+        child: Row(children: [
+          Expanded(child: imagePanel),
+          Container(width: 1, color: BrandColors.of(context).divider),
+          Expanded(child: previewPanel),
+        ]),
+      ),
     );
   }
 }
