@@ -180,6 +180,16 @@
       60%  { opacity: 0.8; box-shadow: 0 0 0 80px rgba(200,123,58,0.15); }
       100% { opacity: 0; transform: translate(-50%, -50%) scale(8); box-shadow: 0 0 0 120px rgba(200,123,58,0); }
     }
+
+    /* Embed mode — when the page is iframed / WebView'd from the admin
+       menu card. Strips all customer-facing chrome (title bar, close,
+       hint, AR button, install banner) so only the rotating model is
+       visible in the tiny 180px card slot. */
+    body.embed header,
+    body.embed .hint,
+    body.embed .ar-button,
+    body.embed .install-banner { display: none !important; }
+    body.embed { background: transparent; }
   </style>
 </head>
 <body>
@@ -226,6 +236,13 @@
   <script>
     // Resolve params and apply.
     const params = new URLSearchParams(window.location.search);
+    // Admin inline preview embeds this page (iframe on web, WebView on
+    // mobile) inside the menu card. `embed=1` strips all customer chrome
+    // via body.embed and skips the AR-capability check so the Scene
+    // Viewer intent link never renders — that intent errors out if AR
+    // isn't installed and the admin card doesn't need it anyway.
+    const isEmbed = params.get('embed') === '1';
+    if (isEmbed) document.body.classList.add('embed');
     const model = params.get('model') || '/models/pizza.glb';
     // If the caller doesn't pass an iOS-specific URL, derive one by
     // swapping .glb → .usdz on the same path. Apple's AR Quick Look
@@ -249,7 +266,13 @@
     // model-viewer flips canActivateAR=true once Scene Viewer / Quick
     // Look is reachable. Use that to refine the copy + surface an
     // install path on phones where AR isn't yet available.
+    // Skipped entirely in embed mode — no chrome to update, no user
+    // to nudge toward ARCore install.
+    if (isEmbed) {
+      mv.removeAttribute('ar');
+    }
     customElements.whenDefined('model-viewer').then(() => {
+      if (isEmbed) return;
       setTimeout(() => {
         const hint = document.getElementById('hint');
         const install = document.getElementById('install');

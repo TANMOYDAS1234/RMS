@@ -19,8 +19,11 @@ Widget buildInlineArPreview({
 }) {
   final encodedModel = Uri.encodeComponent(modelUrl);
   final encodedName = Uri.encodeComponent(itemName);
+  // embed=1 strips the customer chrome (title bar, hint, AR button,
+  // install banner) and disables the AR-launch intent so the admin
+  // card only shows the rotating model.
   final src = '${AppConfig.baseUrl}/ar.html'
-      '?model=$encodedModel&name=$encodedName&autoplay=1';
+      '?model=$encodedModel&name=$encodedName&autoplay=1&embed=1';
 
   // View factories are keyed by an identifier; use the URL hash so each
   // item's iframe registers exactly once. Re-registering the same

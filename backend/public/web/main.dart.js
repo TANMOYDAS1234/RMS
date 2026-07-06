@@ -41056,7 +41056,7 @@ bqx:function bqx(){},
 a6g:function a6g(a,b,c){this.c=a
 this.d=b
 this.a=c},
-c0X(a,b){var s="https://rms-backend-new-2.onrender.com/ar.html?model="+A.lm(2,b,B.aS,!1)+"&name="+A.lm(2,a,B.aS,!1)+"&autoplay=1",r="ar-iframe-"+B.p.gB(s)
+c0X(a,b){var s="https://rms-backend-new-2.onrender.com/ar.html?model="+A.lm(2,b,B.aS,!1)+"&name="+A.lm(2,a,B.aS,!1)+"&autoplay=1&embed=1",r="ar-iframe-"+B.p.gB(s)
 if($.c_T.F(0,r)){$.br3()
 $.xv().EU(r,new A.boG(s),!0)}return A.bAt(null,B.vN,r)},
 boG:function boG(a){this.a=a},
