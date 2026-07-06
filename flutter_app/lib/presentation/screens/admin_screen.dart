@@ -13,12 +13,11 @@ import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:webview_flutter/webview_flutter.dart';
 import '../../core/config/app_config.dart';
+import '../widgets/inline_ar_preview.dart';
 import '../../core/config/app_theme.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/services/websocket_service.dart';
-import '../../core/utils/web_window.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../core/utils/api_error.dart';
 import '../../core/utils/file_download.dart';
@@ -4445,86 +4444,17 @@ class _MenuItemCard extends ConsumerWidget {
         border: Border.all(color: isAvailable ? dividerColor : crimson.withValues(alpha: 0.3)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        // Image
-        ClipRRect(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-          child: Stack(
-            children: [
-              fullImageUrl != null
-                  ? CachedNetworkImage(
-                      imageUrl: fullImageUrl, height: 130, width: double.infinity, fit: BoxFit.cover,
-                      placeholder: (_, __) => Container(height: 130, color: BrandColors.of(context).surface),
-                      // Show the no-photo placeholder if the GET fails —
-                      // happens when the backend has imageUrl set but
-                      // imageData is missing/corrupt, or during a Render
-                      // cold start. Tapping Photo re-uploads.
-                      errorWidget: (_, __, ___) => _placeholder(context),
-                    )
-                  : _placeholder(context),
-              Positioned(
-                bottom: 8, right: 8,
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  // Photo button — turns copper-filled with "Photo ✓"
-                  // when an imageUrl is on file so admin sees at a glance
-                  // whether the upload landed. Re-tap to replace.
-                  _MediaBtn(
-                    icon: imageUrl != null
-                        ? Icons.check_circle
-                        : Icons.add_photo_alternate_outlined,
-                    label: imageUrl != null ? 'Photo ✓' : 'Photo',
-                    active: imageUrl != null,
-                    onTap: () => _uploadImage(context, ref, id),
-                  ),
-                  const SizedBox(width: 6),
-                  _MediaBtn(icon: Icons.view_in_ar_outlined, label: glbUrl != null ? '3D ✓' : '3D',
-                      active: glbUrl != null,
-                      onTap: () => _uploadGlb(context, ref, id)),
-                  // Preview the uploaded GLB in the same AR/3D page the
-                  // customer sees. Only rendered when an upload exists —
-                  // admin verifies "does this 3D model match the food?"
-                  // without leaving the menu screen.
-                  if (glbUrl != null) ...[
-                    const SizedBox(width: 6),
-                    _MediaBtn(
-                      icon: Icons.preview_outlined,
-                      label: 'View',
-                      active: true,
-                      onTap: () {
-                        final name = Uri.encodeComponent(
-                            (item['name'] as String?) ?? 'Item');
-                        final model = Uri.encodeComponent(glbUrl);
-                        openInNewTab(
-                            '/ar.html?model=$model&name=$name');
-                      },
-                    ),
-                  ],
-                ]),
-              ),
-              Positioned(
-                top: 8, left: 8,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: (isVeg ? emerald : crimson).withValues(alpha: 0.9),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(isVeg ? '🟢 VEG' : '🔴 NON-VEG',
-                      style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700)),
-                ),
-              ),
-            ],
-          ),
+        // Media header — photo + 3D preview, side-by-side when both are
+        // uploaded so admin can verify "does the model match the dish?"
+        // in one glance. Collapses to a single full-width panel when
+        // only one is present (or the placeholder if neither).
+        _MediaHeader(
+          fullImageUrl: fullImageUrl,
+          fullGlbUrl: fullGlbUrl,
+          isVeg: isVeg,
+          itemName: (item['name'] as String?) ?? 'Item',
+          buildPlaceholder: () => _placeholder(context),
         ),
-        // Inline 3D preview — only renders when a glb upload exists.
-        // Loads /ar.html (model-viewer) inside a WebView with autoplay
-        // rotation so the admin can verify the uploaded model without
-        // having to tap a button or leave the screen. Same content the
-        // customer eventually sees from the QR menu.
-        if (fullGlbUrl != null)
-          _Inline3dPreview(
-            modelUrl: fullGlbUrl,
-            itemName: (item['name'] as String?) ?? 'Item',
-          ),
         Padding(
           padding: const EdgeInsets.all(12),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -4663,192 +4593,135 @@ class _MenuItemCard extends ConsumerWidget {
         ),
       );
 
-  Future<void> _uploadGlb(BuildContext context, WidgetRef ref, String id) async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.any,
-      withData: true,
-    );
-    final file = result?.files.single;
-    if (file != null && !(file.name.toLowerCase().endsWith('.glb'))) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Please pick a .glb file'),
-          backgroundColor: crimson,
-        ));
-      }
-      return;
-    }
-    if (file == null || file.bytes == null) return;
-    try {
-      final dio = createDioClient(ref.read(authProvider).token);
-      final formData = FormData.fromMap({
-        'glb': MultipartFile.fromBytes(file.bytes!, filename: file.name),
-      });
-      await dio.post(
-        '/menu/$id/glb',
-        data: formData,
-        options: Options(headers: {'Idempotency-Key': newIdempotencyKey('menu-glb-$id')}),
-      );
-      ref.invalidate(_menuProvider(branchId));
-      if (context.mounted) _showSuccess(context, '3D model uploaded');
-    } catch (e) {
-      if (context.mounted) _showError(context, describeApiError(e));
-    }
-  }
-
-  Future<void> _uploadImage(BuildContext context, WidgetRef ref, String id) async {
-    final source = await showModalBottomSheet<ImageSource>(
-      context: context,
-      backgroundColor: BrandColors.of(context).card,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => SafeArea(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const SizedBox(height: 12),
-          ListTile(
-            leading: const Icon(Icons.camera_alt_outlined, color: copperAccent),
-            title: Text('Camera', style: TextStyle(color: BrandColors.of(context).textHi)),
-            onTap: () => Navigator.pop(context, ImageSource.camera),
-          ),
-          ListTile(
-            leading: const Icon(Icons.photo_library_outlined, color: copperAccent),
-            title: Text('Gallery', style: TextStyle(color: BrandColors.of(context).textHi)),
-            onTap: () => Navigator.pop(context, ImageSource.gallery),
-          ),
-          const SizedBox(height: 8),
-        ]),
-      ),
-    );
-    if (source == null) return;
-    final picked = await ImagePicker().pickImage(source: source, imageQuality: 85, maxWidth: 1024);
-    if (picked == null) return;
-    try {
-      final dio = createDioClient(ref.read(authProvider).token);
-      // Bytes-based upload — fromFile() can't open blob: URLs on web.
-      final bytes = await picked.readAsBytes();
-      final fn = picked.name.toLowerCase();
-      final subtype = fn.endsWith('.png')
-          ? 'png'
-          : fn.endsWith('.webp')
-              ? 'webp'
-              : 'jpeg';
-      final formData = FormData.fromMap({
-        'image': MultipartFile.fromBytes(
-          bytes,
-          filename: picked.name,
-          contentType: DioMediaType('image', subtype),
-        ),
-      });
-      await dio.post(
-        '/menu/$id/image',
-        data: formData,
-        options: Options(headers: {'Idempotency-Key': newIdempotencyKey('menu-image-$id')}),
-      );
-      ref.invalidate(_menuProvider(branchId));
-      if (context.mounted) _showSuccess(context, 'Photo updated');
-    } catch (e) {
-      if (context.mounted) _showError(context, describeApiError(e));
-    }
-  }
 }
 
-/// Inline WebView that loads /ar.html for the supplied GLB. Used on
-/// the admin menu card so the uploaded 3D model renders directly under
-/// the photo instead of forcing the admin into a separate AR-viewer
-/// tab. The ar.html page already wraps a <model-viewer> element and
-/// auto-rotates when ?model=… is supplied, so the WebView is a thin
-/// shell — no JS bridge needed.
-class _Inline3dPreview extends StatefulWidget {
-  final String modelUrl;
+/// Photo + 3D preview strip on the admin menu card.
+///
+/// Layout rules:
+///  - both uploaded → side-by-side (image | 3D), each takes half width,
+///    shared 180px height so admin can eyeball match between them
+///  - only image / only 3D → single full-width panel, 130px tall
+///  - neither → the "no photo yet" placeholder
+///
+/// Only the Veg/Non-Veg pill overlays the image. Photo + GLB uploads live
+/// in the Edit dialog (accessed via the pencil icon on the card) — no
+/// duplicate upload buttons here.
+class _MediaHeader extends StatelessWidget {
+  final String? fullImageUrl;
+  final String? fullGlbUrl;
+  final bool isVeg;
   final String itemName;
-  const _Inline3dPreview({required this.modelUrl, required this.itemName});
+  final Widget Function() buildPlaceholder;
 
-  @override
-  State<_Inline3dPreview> createState() => _Inline3dPreviewState();
-}
-
-class _Inline3dPreviewState extends State<_Inline3dPreview> {
-  late final WebViewController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    final encodedModel = Uri.encodeComponent(widget.modelUrl);
-    final encodedName = Uri.encodeComponent(widget.itemName);
-    final viewerUrl = '${AppConfig.baseUrl}/ar.html'
-        '?model=$encodedModel&name=$encodedName&autoplay=1';
-    _controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(slateBg)
-      ..loadRequest(Uri.parse(viewerUrl));
-  }
+  const _MediaHeader({
+    required this.fullImageUrl,
+    required this.fullGlbUrl,
+    required this.isVeg,
+    required this.itemName,
+    required this.buildPlaceholder,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 220,
-      decoration: BoxDecoration(
-        color: slateBg,
-        border: Border(
-          top: BorderSide(color: BrandColors.of(context).divider),
-          bottom: BorderSide(color: BrandColors.of(context).divider),
+    final sideBySide = fullImageUrl != null && fullGlbUrl != null;
+    final panelHeight = sideBySide ? 180.0 : 130.0;
+
+    Widget imagePanel = Stack(children: [
+      Positioned.fill(
+        child: fullImageUrl != null
+            ? CachedNetworkImage(
+                imageUrl: fullImageUrl!,
+                fit: BoxFit.cover,
+                placeholder: (_, __) =>
+                    Container(color: BrandColors.of(context).surface),
+                // Falls back to the "no photo yet" placeholder if the GET
+                // fails (backend has imageUrl but imageData is missing,
+                // or Render cold-start). Use Edit → re-upload to fix.
+                errorWidget: (_, __, ___) => buildPlaceholder(),
+              )
+            : buildPlaceholder(),
+      ),
+      Positioned(
+        top: 8,
+        left: 8,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+          decoration: BoxDecoration(
+            color: (isVeg ? emerald : crimson).withValues(alpha: 0.9),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text(isVeg ? '🟢 VEG' : '🔴 NON-VEG',
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700)),
         ),
       ),
-      child: Stack(children: [
-        // The model-viewer page paints its own bg; the wrapper colour
-        // matches so the load gap isn't a jarring colour flash.
-        WebViewWidget(controller: _controller),
-        // Small "3D PREVIEW" pill so it's obvious what the embedded
-        // canvas represents — without it the rotating model looks like
-        // an oddly-placed image.
-        Positioned(
-          top: 8,
-          left: 8,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.55),
-              borderRadius: BorderRadius.circular(6),
+    ]);
+
+    Widget? previewPanel = fullGlbUrl != null
+        ? Stack(children: [
+            Positioned.fill(
+              child: Container(
+                color: BrandColors.of(context).surface,
+                child: InlineArPreview(
+                  modelUrl: fullGlbUrl!,
+                  itemName: itemName,
+                ),
+              ),
             ),
-            child: const Row(mainAxisSize: MainAxisSize.min, children: [
-              Icon(Icons.view_in_ar, size: 11, color: copperAccent),
-              SizedBox(width: 4),
-              Text('3D PREVIEW',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 9,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1)),
-            ]),
-          ),
-        ),
-      ]),
+            // Same "3D PREVIEW" pill as the standalone version so it's
+            // unambiguous what the rotating canvas represents.
+            Positioned(
+              top: 8,
+              left: 8,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.55),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.view_in_ar, size: 11, color: copperAccent),
+                  SizedBox(width: 4),
+                  Text('3D PREVIEW',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1)),
+                ]),
+              ),
+            ),
+          ])
+        : null;
+
+    // Compose row/single depending on how many panels have content.
+    Widget content;
+    if (sideBySide) {
+      content = Row(children: [
+        Expanded(child: imagePanel),
+        Container(width: 1, color: BrandColors.of(context).divider),
+        Expanded(child: previewPanel!),
+      ]);
+    } else if (previewPanel != null) {
+      // Only 3D — still leave the upload buttons visible so admin can
+      // add a photo. Show placeholder on the left half.
+      content = Row(children: [
+        Expanded(child: imagePanel),
+        Container(width: 1, color: BrandColors.of(context).divider),
+        Expanded(child: previewPanel),
+      ]);
+    } else {
+      content = imagePanel;
+    }
+
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+      child: SizedBox(height: panelHeight, child: content),
     );
   }
-}
-
-class _MediaBtn extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final bool active;
-  const _MediaBtn({required this.icon, required this.label, required this.onTap, this.active = false});
-
-  @override
-  Widget build(BuildContext context) => GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-          decoration: BoxDecoration(
-            color: active ? copperAccent.withValues(alpha: 0.9) : Colors.black54,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(icon, color: Colors.white, size: 13),
-            const SizedBox(width: 4),
-            Text(label, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600)),
-          ]),
-        ),
-      );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
