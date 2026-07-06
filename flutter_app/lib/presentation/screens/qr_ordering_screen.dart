@@ -3,6 +3,7 @@
 // Handles: session resume, feature-flag check, menu browse, order placement, tracking
 
 import 'dart:async';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +11,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
+import '../../core/config/app_config.dart';
 import '../../core/config/app_theme.dart';
 import '../../core/utils/web_window.dart';
 import '../../core/network/dio_client.dart';
@@ -776,7 +778,16 @@ class _QrMenuTile extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => Container(
+  Widget build(BuildContext context) {
+    // Cache-busted absolute URL — the backend serves the photo at a stable
+    // `/menu/:id/image` path so we append `?v=<updatedAt-ms>` to force a
+    // fresh fetch every time the admin re-uploads. Same pattern as the
+    // admin-side card.
+    final v = item.updatedAt?.millisecondsSinceEpoch ?? 0;
+    final fullImageUrl = (item.imageUrl != null && item.imageUrl!.isNotEmpty)
+        ? '${AppConfig.baseUrl}${item.imageUrl}?v=$v'
+        : null;
+    return Container(
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
@@ -787,6 +798,24 @@ class _QrMenuTile extends StatelessWidget {
         ),
         child: Row(
           children: [
+            if (fullImageUrl != null) ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: CachedNetworkImage(
+                  imageUrl: fullImageUrl,
+                  height: 64, width: 64, fit: BoxFit.cover,
+                  placeholder: (_, __) => Container(
+                      height: 64, width: 64,
+                      color: BrandColors.of(context).surface),
+                  errorWidget: (_, __, ___) => Container(
+                      height: 64, width: 64,
+                      color: BrandColors.of(context).surface,
+                      child: Icon(Icons.restaurant,
+                          color: BrandColors.of(context).textLo, size: 22)),
+                ),
+              ),
+              const SizedBox(width: 12),
+            ],
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -871,6 +900,7 @@ class _QrMenuTile extends StatelessWidget {
           ],
         ),
       ).animate().fadeIn(duration: 250.ms);
+  }
 }
 
 /// A compact "3D" chip rendered next to the menu tile's price.

@@ -54,6 +54,11 @@ class MenuItemModel {
   final String? usdzUrl;
   final List<MenuVariant> variants;
   final List<MenuModifier> modifiers;
+  /// Mongoose `timestamps: true` on the menu item — bumps every time the
+  /// admin re-uploads the photo. Used as the cache-buster (`?v=<ms>`)
+  /// so a new upload replaces the cached body instead of getting served
+  /// the stale one.
+  final DateTime? updatedAt;
 
   const MenuItemModel({
     required this.id,
@@ -68,6 +73,7 @@ class MenuItemModel {
     this.usdzUrl,
     this.variants = const [],
     this.modifiers = const [],
+    this.updatedAt,
   });
 
   factory MenuItemModel.fromJson(Map<String, dynamic> j) => MenuItemModel(
@@ -87,6 +93,9 @@ class MenuItemModel {
         modifiers: (j['modifiers'] as List? ?? [])
             .map((m) => MenuModifier.fromJson(Map<String, dynamic>.from(m)))
             .toList(),
+        updatedAt: j['updatedAt'] != null
+            ? DateTime.tryParse(j['updatedAt'].toString())
+            : null,
       );
 }
 
