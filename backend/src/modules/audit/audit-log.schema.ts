@@ -25,6 +25,8 @@ export enum AuditEventType {
   BILL_REFUNDED = 'BILL_REFUNDED',
   // Inventory
   INVENTORY_APPROVED = 'INVENTORY_APPROVED',
+  // Orders
+  ORDER_DELETED = 'ORDER_DELETED',
 }
 
 @Schema({ timestamps: { createdAt: true, updatedAt: false } })

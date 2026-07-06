@@ -6,6 +6,7 @@ import { Order, OrderDocument, OrderStatus } from '../orders/order.schema';
 import { Bill, BillDocument } from '../billing/bill.schema';
 import { User, UserDocument } from '../users/user.schema';
 import { Ingredient, IngredientDocument } from '../inventory/ingredient.schema';
+import { Branch, BranchDocument } from '../branches/branch.schema';
 import {
   PAYMENT_GATEWAY,
   PaymentGateway,
@@ -21,6 +22,7 @@ export class AdminService {
     @InjectModel(Bill.name) private billModel: Model<BillDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(Ingredient.name) private ingredientModel: Model<IngredientDocument>,
+    @InjectModel(Branch.name) private branchModel: Model<BranchDocument>,
     @Inject(PAYMENT_GATEWAY) private paymentGateway: PaymentGateway,
     private audit: AuditService,
   ) {}
@@ -246,14 +248,89 @@ export class AdminService {
 
   // ── Force Close Order ──────────────────────────────────────────────────────
   async forceCloseOrder(orderId: string, adminId: string) {
-    const order = await this.orderModel.findById(orderId);
+    // Use lean() + updateOne rather than findById().save() so schema-level
+    // validation is bypassed. Some legacy orders in Mongo predate the
+    // `branchId` required-field constraint and their branchId is null;
+    // calling `save()` on those throws a validation error before the
+    // status update lands. Force-close should always succeed — it's the
+    // escape hatch for exactly these misshapen documents.
+    const order = await this.orderModel.findById(orderId).lean();
     if (!order) throw new NotFoundException('Order not found');
-    if (order.status === OrderStatus.CLOSED) throw new BadRequestException('Already closed');
+    if ((order as any).status === OrderStatus.CLOSED) {
+      throw new BadRequestException('Already closed');
+    }
+    const prev = (order as any).status;
+    await this.orderModel.updateOne(
+      { _id: orderId },
+      {
+        $set: { status: OrderStatus.CLOSED },
+        $push: {
+          auditLog: {
+            action: 'FORCE_CLOSED',
+            by: adminId.toString(),
+            at: new Date(),
+            meta: { previousStatus: prev },
+          },
+        },
+      },
+    );
+    return this.orderModel.findById(orderId).lean();
+  }
 
-    const prev = order.status;
-    order.status = OrderStatus.CLOSED;
-    order.auditLog.push({ action: 'FORCE_CLOSED', by: adminId.toString(), at: new Date(), meta: { previousStatus: prev } });
-    return order.save();
+  // ── Hard-delete Order ─────────────────────────────────────────────────────
+  // Purge an order document. Distinct from force-close, which sets status
+  // to CLOSED and keeps the record for audit — this leaves nothing behind.
+  // Records the tombstone in the audit feed before the row disappears.
+  async deleteOrder(orderId: string, adminId: string) {
+    const order = await this.orderModel.findById(orderId).lean();
+    if (!order) throw new NotFoundException('Order not found');
+    await this.audit.record({
+      type: AuditEventType.ORDER_DELETED,
+      actorId: adminId.toString(),
+      branchId: (order as any).branchId ?? null,
+      meta: {
+        orderId,
+        tableLabel: (order as any).tableLabel,
+        previousStatus: (order as any).status,
+        itemCount: ((order as any).items ?? []).length,
+      },
+    });
+    await this.orderModel.deleteOne({ _id: orderId });
+    return { deletedOrderId: orderId, actorId: adminId, at: new Date().toISOString() };
+  }
+
+  // ── Bulk cleanup: orders whose branchId no longer exists ─────────────────
+  // These are the ones that count under "All Branches" on the admin
+  // dashboard but never surface under any specific branch filter —
+  // there's no real branch to attribute or act on them. Safe purge.
+  async wipeOrphanOrders(adminId: string) {
+    const branchIds = await this.branchModel.distinct('_id');
+    const branchIdStrings = branchIds.map((id: any) => id.toString());
+    const orphaned = await this.orderModel
+      .find({ branchId: { $nin: branchIdStrings } })
+      .select('_id branchId tableLabel status')
+      .lean();
+    if (orphaned.length === 0) {
+      return { deletedOrders: 0, actorId: adminId, at: new Date().toISOString() };
+    }
+    await this.audit.record({
+      type: AuditEventType.ORDER_DELETED,
+      actorId: adminId.toString(),
+      branchId: null,
+      meta: {
+        reason: 'orphan-cleanup',
+        count: orphaned.length,
+        orderIds: orphaned.map((o: any) => o._id.toString()),
+      },
+    });
+    const res = await this.orderModel.deleteMany({
+      _id: { $in: orphaned.map((o: any) => o._id) },
+    });
+    return {
+      deletedOrders: res.deletedCount ?? 0,
+      actorId: adminId,
+      at: new Date().toISOString(),
+    };
   }
 
   // ── System Health ──────────────────────────────────────────────────────────

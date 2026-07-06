@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Patch, Body, Param, Query,
+  Controller, Get, Post, Patch, Delete, Body, Param, Query,
   UseGuards, Request, UsePipes, ValidationPipe,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -79,6 +79,26 @@ export class AdminController {
   @Patch('orders/:id/force-close')
   forceClose(@Param('id') id: string, @Request() req: any) {
     return this.adminService.forceCloseOrder(id, req.user._id);
+  }
+
+  // ── Hard Delete Order ─────────────────────────────────────────────────────
+  // Purge the order document entirely — used to clean up test/demo/orphan
+  // orders that were never real transactions. Different from Force Close,
+  // which leaves an audited CLOSED order behind. Always logged in the
+  // audit feed before removal.
+  @Delete('orders/:id')
+  deleteOrder(@Param('id') id: string, @Request() req: any) {
+    return this.adminService.deleteOrder(id, req.user._id);
+  }
+
+  // ── Bulk cleanup of orphan orders ─────────────────────────────────────────
+  // Removes orders whose branchId no longer maps to any current branch —
+  // these accumulate when a branch is deleted while leftover CREATED orders
+  // still reference it, and they're the ones that show under "All Branches"
+  // but never under any specific branch filter (nothing to attribute them to).
+  @Post('orders/wipe-orphans')
+  wipeOrphanOrders(@Request() req: any) {
+    return this.adminService.wipeOrphanOrders(req.user._id);
   }
 
   // ── System Health ──────────────────────────────────────────────────────────

@@ -1582,6 +1582,12 @@ class AdminOrdersTab extends ConsumerWidget {
                     '${filtered.where((o) => o['status'] == 'paid').length}',
                     emerald),
               ]),
+              const SizedBox(height: 12),
+              // Bulk cleanup — deletes seed orders + orders whose branchId
+              // no longer maps to any current branch. The latter is what
+              // shows in "All Branches" but disappears the moment admin
+              // filters by any specific branch.
+              _WipeOrphanOrdersBar(orderCount: orders.length),
               const SizedBox(height: 16),
               if (filtered.isEmpty)
                 Padding(
@@ -1693,33 +1699,32 @@ class _AdminOrderCard extends ConsumerWidget {
               ])),
           _StatusBadge(status),
         ]),
-        if (!isClosed) ...[
-          const SizedBox(height: 12),
-          Row(children: [
+        const SizedBox(height: 12),
+        Row(children: [
+          if (!isClosed && advance != null)
             // Normal path — advance one step through the state machine.
             // Uses the same PATCH /orders/:id/status route the other
             // roles use; admin bypasses the role gate in the service so
             // it works from any state.
-            if (advance != null)
-              _OrderActionBtn(
-                label: advance.label,
-                color: advance.next == 'paid' || advance.next == 'closed'
-                    ? emerald
-                    : copperAccent,
-                onTap: () => _confirmAdvance(
-                    context, ref, id, version, advance.next, advance.label),
-              ),
-            const Spacer(),
-            // Escape hatch — closes the order in any state. Logged
-            // separately in the audit feed so we can tell "normal
-            // close" from "admin intervened".
             _OrderActionBtn(
-              label: 'Force Close',
-              color: crimson,
-              onTap: () => _confirmForceClose(context, ref, id),
+              label: advance.label,
+              color: advance.next == 'paid' || advance.next == 'closed'
+                  ? emerald
+                  : copperAccent,
+              onTap: () => _confirmAdvance(
+                  context, ref, id, version, advance.next, advance.label),
             ),
-          ]),
-        ],
+          const Spacer(),
+          // Permanent removal — the previous Force Close only set the
+          // status to CLOSED, leaving the row on the dashboard forever.
+          // Delete purges the document so test/orphan orders actually
+          // disappear. Audit record captures who/when before it's gone.
+          _OrderActionBtn(
+            label: 'Delete',
+            color: crimson,
+            onTap: () => _confirmDelete(context, ref, id),
+          ),
+        ]),
       ]),
     );
   }
@@ -1791,15 +1796,15 @@ class _AdminOrderCard extends ConsumerWidget {
     );
   }
 
-  void _confirmForceClose(BuildContext context, WidgetRef ref, String id) {
+  void _confirmDelete(BuildContext context, WidgetRef ref, String id) {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: BrandColors.of(context).card,
-        title: Text('Force Close Order?',
+        title: Text('Delete Order?',
             style: TextStyle(color: BrandColors.of(context).textHi)),
         content: Text(
-            'This will immediately close the order regardless of state. Only use when the normal flow is stuck. This action is logged.',
+            'This removes the order document permanently. The audit log records the delete, but the row will no longer appear anywhere on the dashboard. Cannot be undone.',
             style: TextStyle(color: BrandColors.of(context).textLo)),
         actions: [
           TextButton(
@@ -1811,23 +1816,16 @@ class _AdminOrderCard extends ConsumerWidget {
               Navigator.pop(context);
               try {
                 final dio = createDioClient(ref.read(authProvider).token);
-                await dio.patch(
-                  '/admin/orders/$id/force-close',
-                  options: Options(headers: {
-                    'Idempotency-Key': newIdempotencyKey('force-close-$id')
-                  }),
-                );
+                await dio.delete('/admin/orders/$id');
                 ref.invalidate(_allOrdersProvider);
-                if (context.mounted) {
-                  _showSuccess(context, 'Order force-closed');
-                }
+                if (context.mounted) _showSuccess(context, 'Order deleted');
               } catch (e) {
                 if (context.mounted) _showError(context, describeApiError(e));
               }
             },
-            child: const Text('Force Close',
-                style:
-                    TextStyle(color: crimson, fontWeight: FontWeight.w700)),
+            child: const Text('Delete',
+                style: TextStyle(
+                    color: crimson, fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -1864,6 +1862,126 @@ class _OrderActionBtn extends StatelessWidget {
                   fontWeight: FontWeight.w700)),
         ),
       );
+}
+
+/// One-shot cleanup bar for the admin Orders tab.
+///
+/// Combines two backend endpoints in a single tap:
+///  - `/admin/wipe-demo-data`   → nukes orders + bills tagged `seed-*`
+///  - `/admin/orders/wipe-orphans` → nukes orders whose branchId no longer
+///    maps to any current branch (these accumulate when a branch is
+///    deleted while leftover CREATED orders still reference it, and they
+///    are the ones that show in "All Branches" but never surface under
+///    any specific branch filter).
+class _WipeOrphanOrdersBar extends ConsumerStatefulWidget {
+  final int orderCount;
+  const _WipeOrphanOrdersBar({required this.orderCount});
+
+  @override
+  ConsumerState<_WipeOrphanOrdersBar> createState() =>
+      _WipeOrphanOrdersBarState();
+}
+
+class _WipeOrphanOrdersBarState
+    extends ConsumerState<_WipeOrphanOrdersBar> {
+  bool _busy = false;
+
+  Future<void> _wipe() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: BrandColors.of(context).card,
+        title: Text('Clear demo + orphan orders?',
+            style: TextStyle(
+                color: BrandColors.of(context).textHi, fontSize: 15)),
+        content: Text(
+          'Removes seed-tagged demo orders AND orders whose branch no longer exists. Real transactions on active branches stay untouched.',
+          style: TextStyle(
+              color: BrandColors.of(context).textLo, fontSize: 12),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel',
+                style: TextStyle(color: BrandColors.of(context).textLo)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Clear',
+                style: TextStyle(color: crimson, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    setState(() => _busy = true);
+    try {
+      final dio = createDioClient(ref.read(authProvider).token);
+      // Fire in sequence — the same order model is written by both, so
+      // parallel calls would race on the audit trail.
+      final demoRes = await dio.post(
+        '/admin/wipe-demo-data',
+        options: Options(headers: {
+          'Idempotency-Key': newIdempotencyKey('wipe-demo'),
+        }),
+      );
+      final orphanRes = await dio.post(
+        '/admin/orders/wipe-orphans',
+        options: Options(headers: {
+          'Idempotency-Key': newIdempotencyKey('wipe-orphan-orders'),
+        }),
+      );
+      final demoCount = (demoRes.data['deletedOrders'] ?? 0) +
+          (demoRes.data['deletedBills'] ?? 0);
+      final orphanCount = orphanRes.data['deletedOrders'] ?? 0;
+      ref.invalidate(_allOrdersProvider);
+      if (mounted) {
+        _showSuccess(context,
+            'Cleared $demoCount demo + $orphanCount orphan records');
+      }
+    } catch (e) {
+      if (mounted) _showError(context, describeApiError(e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: _busy ? null : _wipe,
+      child: Container(
+        padding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: crimson.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: crimson.withValues(alpha: 0.3)),
+        ),
+        child: Row(children: [
+          Icon(
+            _busy
+                ? Icons.hourglass_top_outlined
+                : Icons.cleaning_services_outlined,
+            color: crimson,
+            size: 16,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              _busy
+                  ? 'Clearing…'
+                  : 'Clear demo + orphan orders (safe: skips real transactions)',
+              style: const TextStyle(
+                  color: crimson,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
