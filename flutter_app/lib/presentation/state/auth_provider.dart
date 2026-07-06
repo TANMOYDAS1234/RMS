@@ -51,13 +51,27 @@ class AuthState {
 class AuthNotifier extends StateNotifier<AuthState> {
   static const _boxName = 'auth';
   StreamSubscription<void>? _unauthorizedSub;
+  // Timestamp of the last successful login. 401s that arrive within
+  // _loginGracePeriod after login are ignored — the FCM PATCH, WebSocket
+  // upgrade, and dashboard poll all fire concurrently and a Render
+  // cold-start proxy hiccup on any one of them would otherwise kick the
+  // user straight back to LoginScreen.
+  DateTime? _loggedInAt;
+  static const _loginGracePeriod = Duration(seconds: 8);
 
   AuthNotifier() : super(const AuthState()) {
     _restoreSession();
     // Any request that returns 401 logs the user out automatically so the
     // UI stops sitting in a half-authenticated zombie state.
     _unauthorizedSub = unauthorizedEvents.stream.listen((_) {
-      if (state.isAuthenticated) logout();
+      if (!state.isAuthenticated) return;
+      final loggedInAt = _loggedInAt;
+      if (loggedInAt != null &&
+          DateTime.now().difference(loggedInAt) < _loginGracePeriod) {
+        // Post-login grace window — swallow.
+        return;
+      }
+      logout();
     });
   }
 
@@ -114,6 +128,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await _secureStorage.write(
           key: _kUserKey, value: jsonEncode(res.data['user']));
 
+      _loggedInAt = DateTime.now();
       state = AuthState(user: user, token: token, isRestoring: false);
       return true;
     } on DioException catch (e) {
@@ -146,6 +161,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final box = await Hive.openBox<String>(_boxName);
       await box.deleteAll(['token', 'user']);
     } catch (_) {}
+    _loggedInAt = null;
     state = const AuthState(isRestoring: false);
   }
 

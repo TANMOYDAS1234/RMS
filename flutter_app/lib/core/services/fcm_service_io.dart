@@ -222,9 +222,14 @@ class FcmService {
           'deviceId': deviceId,
           'platform': _platform(),
         },
-        options: Options(headers: {
-          'Idempotency-Key': newIdempotencyKey('fcm-token-${fcmToken.hashCode}-${deviceId.hashCode}'),
-        }),
+        options: Options(
+          headers: {
+            'Idempotency-Key': newIdempotencyKey('fcm-token-${fcmToken.hashCode}-${deviceId.hashCode}'),
+          },
+          // Best-effort side call — never bounce the user back to
+          // LoginScreen if this 401s (e.g. cold-start race just after login).
+          extra: {'skipAuthLogout': true},
+        ),
       );
     } catch (_) {
       // Best-effort — losing a push registration shouldn't crash the app.
@@ -238,9 +243,10 @@ class FcmService {
       final dio = createDioClient(authToken);
       await dio.patch(
         '/users/me/fcm-token/clear',
-        options: Options(headers: {
-          'Idempotency-Key': newIdempotencyKey('fcm-clear'),
-        }),
+        options: Options(
+          headers: {'Idempotency-Key': newIdempotencyKey('fcm-clear')},
+          extra: {'skipAuthLogout': true},
+        ),
       );
     } catch (_) {}
     try {

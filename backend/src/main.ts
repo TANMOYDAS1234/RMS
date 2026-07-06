@@ -94,6 +94,29 @@ async function bootstrap() {
   await app.listen(port);
   logger.log(`RMS Backend running on http://localhost:${port}`);
   logger.log(`OpenAPI docs at http://localhost:${port}/docs`);
+
+  // Render's free web service spins down after 15 min without an inbound
+  // HTTP request. Self-ping the public /health endpoint every 10 min so
+  // the dyno stays warm for as long as this process is running.
+  //
+  // Render auto-injects RENDER_EXTERNAL_URL with the public origin, so
+  // this works out of the box on Render. KEEP_ALIVE_URL is an explicit
+  // override for other hosts or local testing; unset both to disable.
+  const keepAliveUrl = process.env.KEEP_ALIVE_URL ?? process.env.RENDER_EXTERNAL_URL;
+  if (keepAliveUrl) {
+    const url = `${keepAliveUrl.replace(/\/+$/, '')}/health`;
+    const tenMinutes = 10 * 60 * 1000;
+    const ping = async () => {
+      try {
+        const res = await fetch(url);
+        logger.log(`keep-alive ping ${url} → ${res.status}`);
+      } catch (e) {
+        logger.warn(`keep-alive ping failed: ${(e as Error).message}`);
+      }
+    };
+    setInterval(ping, tenMinutes).unref();
+    logger.log(`Self-ping enabled: ${url} every 10 min`);
+  }
 }
 
 bootstrap();

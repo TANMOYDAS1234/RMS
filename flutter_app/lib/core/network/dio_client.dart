@@ -72,11 +72,17 @@ class _RetryInterceptor extends Interceptor {
 /// Surfaces 401s to a global stream so auth providers can react (clear
 /// session, route to /login). Without this, an expired token silently
 /// failed every request and the UI looked logged-in-but-broken.
+///
+/// Callers can opt a request out of auto-logout with
+/// `Options(extra: {'skipAuthLogout': true})` — used for best-effort side
+/// calls (FCM token registration, logout ping) whose failure should not
+/// bounce the user back to LoginScreen.
 class _UnauthorizedInterceptor extends Interceptor {
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
     if (err.response?.statusCode == 401) {
-      if (!unauthorizedEvents.isClosed) unauthorizedEvents.add(null);
+      final skip = err.requestOptions.extra['skipAuthLogout'] == true;
+      if (!skip && !unauthorizedEvents.isClosed) unauthorizedEvents.add(null);
     }
     handler.next(err);
   }
