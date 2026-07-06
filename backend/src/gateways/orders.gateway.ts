@@ -149,7 +149,14 @@ export class OrdersGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const tableId = payload.tableId;
     const branchId = payload.branchId;
     if (tableId) this.server.to(`table:${tableId}`).emit(event, enriched);
-    if (branchId) this.server.to(`branch:${branchId}`).emit(event, enriched);
+    if (branchId) {
+      this.server.to(`branch:${branchId}`).emit(event, enriched);
+      // Admins have no branchId on their JWT (they oversee every branch)
+      // so they never joined `branch:X` rooms. Fan the same event out to
+      // `role:admin` so the admin Orders/Tables screens update in real
+      // time when any branch's order changes.
+      this.server.to('role:admin').emit(event, enriched);
+    }
     // Staff broadcast — every role:* room sees their own org-wide events.
     if (!tableId && !branchId) this.server.emit(event, enriched);
 

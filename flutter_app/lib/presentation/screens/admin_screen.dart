@@ -1493,13 +1493,23 @@ class _StaffAvatar extends ConsumerWidget {
 // TAB 4 — ORDERS OVERSIGHT
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/// Selected branch id filter for the admin Orders tab.
+/// `null` = "All branches" — admin sees every branch's active orders
+/// in one list. Any other value scopes the list to that branch id.
+final _orderBranchFilterProvider = StateProvider<String?>((_) => null);
+
 class AdminOrdersTab extends ConsumerWidget {
   const AdminOrdersTab({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ordersAsync = ref.watch(_allOrdersProvider);
+    final branchesAsync = ref.watch(_branchesProvider);
+    final selectedBranchId = ref.watch(_orderBranchFilterProvider);
 
+    // Real-time updates: admin now receives `order:*` events fanned to the
+    // `role:admin` room (backend change), so this listener catches
+    // multi-branch activity without joining every `branch:*` room.
     ref.listen(wsEventsProvider, (_, next) {
       next.whenData((evt) {
         if (evt.event == 'order:updated' || evt.event == 'order:created') {
@@ -1508,6 +1518,13 @@ class AdminOrdersTab extends ConsumerWidget {
       });
     });
 
+    // Look-up so each order card can render its branch name without
+    // fetching /branches per row.
+    final branchName = <String, String>{
+      for (final b in (branchesAsync.asData?.value ?? const []))
+        (b['_id'] as String? ?? ''): (b['name'] as String? ?? 'Unnamed'),
+    };
+
     return RefreshIndicator(
       color: copperAccent,
       backgroundColor: BrandColors.of(context).card,
@@ -1515,20 +1532,79 @@ class AdminOrdersTab extends ConsumerWidget {
       child: ordersAsync.when(
         loading: () => const Center(child: CircularProgressIndicator(color: copperAccent)),
         error: (e, _) => Center(child: _ErrorText(describeApiError(e))),
-        data: (orders) => ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
-          children: [
-            // Summary row
-            Row(children: [
-              _SmallStat('Total', '${orders.length}', copperAccent),
-              _SmallStat('Active', '${orders.where((o) => !['closed', 'paid'].contains(o['status'])).length}', amber),
-              _SmallStat('Paid', '${orders.where((o) => o['status'] == 'paid').length}', emerald),
-            ]),
-            const SizedBox(height: 16),
-            ...orders.map((o) => _AdminOrderCard(order: o)),
-          ],
-        ),
+        data: (orders) {
+          final filtered = selectedBranchId == null
+              ? orders
+              : orders
+                  .where((o) => o['branchId'] == selectedBranchId)
+                  .toList();
+          return ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(16),
+            children: [
+              // Branch filter — admin oversees every branch, so the
+              // default is "All Branches". Picking one scopes the list
+              // and summary row so admin can drill into a specific site.
+              branchesAsync.when(
+                loading: () => const SizedBox.shrink(),
+                error: (_, __) => const SizedBox.shrink(),
+                data: (branches) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: DropdownButtonFormField<String?>(
+                    initialValue: selectedBranchId,
+                    dropdownColor: BrandColors.of(context).surface,
+                    style: TextStyle(
+                        color: BrandColors.of(context).textHi, fontSize: 13),
+                    decoration: _inputDec(context, 'Branch'),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                          value: null, child: Text('All Branches')),
+                      ...branches.map((b) => DropdownMenuItem<String?>(
+                            value: b['_id'] as String,
+                            child: Text(b['name'] as String? ?? ''),
+                          )),
+                    ],
+                    onChanged: (v) => ref
+                        .read(_orderBranchFilterProvider.notifier)
+                        .state = v,
+                  ),
+                ),
+              ),
+              // Summary row — reflects the current filter.
+              Row(children: [
+                _SmallStat('Total', '${filtered.length}', copperAccent),
+                _SmallStat(
+                    'Active',
+                    '${filtered.where((o) => !['closed', 'paid'].contains(o['status'])).length}',
+                    amber),
+                _SmallStat(
+                    'Paid',
+                    '${filtered.where((o) => o['status'] == 'paid').length}',
+                    emerald),
+              ]),
+              const SizedBox(height: 16),
+              if (filtered.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 40),
+                  child: Center(
+                    child: Text(
+                      selectedBranchId == null
+                          ? 'No active orders across any branch.'
+                          : 'No active orders for this branch.',
+                      style: TextStyle(
+                          color: BrandColors.of(context).textLo,
+                          fontSize: 12),
+                    ),
+                  ),
+                )
+              else
+                ...filtered.map((o) => _AdminOrderCard(
+                    order: o,
+                    branchName:
+                        branchName[o['branchId'] as String? ?? ''] ?? '')),
+            ],
+          );
+        },
       ),
     );
   }
@@ -1560,13 +1636,33 @@ class _SmallStat extends StatelessWidget {
 
 class _AdminOrderCard extends ConsumerWidget {
   final Map<String, dynamic> order;
-  const _AdminOrderCard({required this.order});
+  final String branchName;
+  const _AdminOrderCard({required this.order, this.branchName = ''});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final status = order['status'] as String? ?? '';
     final id = order['_id'] as String? ?? '';
+    final version = order['version'] as int? ?? 0;
     final isClosed = status == 'closed' || status == 'paid';
+    // `tableLabel` on the order document is already the full label
+    // (e.g. "Table 1"), so we don't prefix another "Table " — that's
+    // what produced the "Table Table 1" duplicate on the card.
+    final label = (order['tableLabel'] as String? ?? '').trim();
+    // What the next legal state-machine transition looks like from the
+    // current status. The backend enforces the same TRANSITIONS table —
+    // this is just so the button's label matches the effect.
+    // Missing entries fall through to "Force Close only".
+    const nextTransition = <String, ({String next, String label})>{
+      'created': (next: 'confirmed', label: 'Confirm'),
+      'confirmed': (next: 'preparing', label: 'Start Prep'),
+      'preparing': (next: 'ready', label: 'Mark Ready'),
+      'ready': (next: 'served', label: 'Mark Served'),
+      'served': (next: 'billed', label: 'Mark Billed'),
+      'billed': (next: 'paid', label: 'Mark Paid'),
+      'paid': (next: 'closed', label: 'Close'),
+    };
+    final advance = nextTransition[status];
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -1576,30 +1672,122 @@ class _AdminOrderCard extends ConsumerWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: BrandColors.of(context).divider),
       ),
-      child: Row(children: [
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Table ${order['tableLabel'] ?? ''}',
-              style: TextStyle(color: BrandColors.of(context).textHi, fontSize: 13, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 2),
-          Text('${(order['items'] as List?)?.length ?? 0} items',
-              style: TextStyle(color: BrandColors.of(context).textLo, fontSize: 11)),
-        ])),
-        _StatusBadge(status),
-        const SizedBox(width: 8),
-        if (!isClosed)
-          GestureDetector(
-            onTap: () => _confirmForceClose(context, ref, id),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: crimson.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: crimson.withValues(alpha: 0.3)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                Text(label.isEmpty ? '—' : label,
+                    style: TextStyle(
+                        color: BrandColors.of(context).textHi,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Text(
+                    '${(order['items'] as List?)?.length ?? 0} items'
+                    '${branchName.isNotEmpty ? ' · $branchName' : ''}',
+                    style: TextStyle(
+                        color: BrandColors.of(context).textLo,
+                        fontSize: 11)),
+              ])),
+          _StatusBadge(status),
+        ]),
+        if (!isClosed) ...[
+          const SizedBox(height: 12),
+          Row(children: [
+            // Normal path — advance one step through the state machine.
+            // Uses the same PATCH /orders/:id/status route the other
+            // roles use; admin bypasses the role gate in the service so
+            // it works from any state.
+            if (advance != null)
+              _OrderActionBtn(
+                label: advance.label,
+                color: advance.next == 'paid' || advance.next == 'closed'
+                    ? emerald
+                    : copperAccent,
+                onTap: () => _confirmAdvance(
+                    context, ref, id, version, advance.next, advance.label),
               ),
-              child: const Text('Force Close', style: TextStyle(color: crimson, fontSize: 10, fontWeight: FontWeight.w700)),
+            const Spacer(),
+            // Escape hatch — closes the order in any state. Logged
+            // separately in the audit feed so we can tell "normal
+            // close" from "admin intervened".
+            _OrderActionBtn(
+              label: 'Force Close',
+              color: crimson,
+              onTap: () => _confirmForceClose(context, ref, id),
             ),
-          ),
+          ]),
+        ],
       ]),
+    );
+  }
+
+  Future<void> _patchStatus(
+    BuildContext context,
+    WidgetRef ref,
+    String id,
+    int version,
+    String next,
+    String successMsg,
+  ) async {
+    try {
+      final dio = createDioClient(ref.read(authProvider).token);
+      await dio.patch(
+        '/orders/$id/status',
+        data: {'status': next, 'version': version},
+        options: Options(headers: {
+          'Idempotency-Key': newIdempotencyKey('order-status-$id-$next'),
+        }),
+      );
+      ref.invalidate(_allOrdersProvider);
+      if (context.mounted) _showSuccess(context, successMsg);
+    } catch (e) {
+      if (context.mounted) _showError(context, describeApiError(e));
+    }
+  }
+
+  /// Confirms and applies the next state-machine transition for this
+  /// order. Wraps `_patchStatus` — the dialog text is derived from
+  /// `label`/`next` so we don't need a per-transition dialog function.
+  void _confirmAdvance(
+    BuildContext context,
+    WidgetRef ref,
+    String id,
+    int version,
+    String next,
+    String label,
+  ) {
+    final upper = next.toUpperCase();
+    final terminal = next == 'paid' || next == 'closed';
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: BrandColors.of(context).card,
+        title: Text('$label?',
+            style: TextStyle(color: BrandColors.of(context).textHi)),
+        content: Text(
+            'Move this order to $upper. The audit log records it.',
+            style: TextStyle(color: BrandColors.of(context).textLo)),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancel',
+                  style: TextStyle(color: BrandColors.of(context).textLo))),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await _patchStatus(
+                  context, ref, id, version, next, 'Order → $upper');
+            },
+            child: Text(label,
+                style: TextStyle(
+                    color: terminal ? emerald : copperAccent,
+                    fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1608,11 +1796,16 @@ class _AdminOrderCard extends ConsumerWidget {
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: BrandColors.of(context).card,
-        title: Text('Force Close Order?', style: TextStyle(color: BrandColors.of(context).textHi)),
-        content: Text('This will immediately close the order. This action is logged.',
+        title: Text('Force Close Order?',
+            style: TextStyle(color: BrandColors.of(context).textHi)),
+        content: Text(
+            'This will immediately close the order regardless of state. Only use when the normal flow is stuck. This action is logged.',
             style: TextStyle(color: BrandColors.of(context).textLo)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel', style: TextStyle(color: BrandColors.of(context).textLo))),
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancel',
+                  style: TextStyle(color: BrandColors.of(context).textLo))),
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
@@ -1620,20 +1813,57 @@ class _AdminOrderCard extends ConsumerWidget {
                 final dio = createDioClient(ref.read(authProvider).token);
                 await dio.patch(
                   '/admin/orders/$id/force-close',
-                  options: Options(headers: {'Idempotency-Key': newIdempotencyKey('force-close-$id')}),
+                  options: Options(headers: {
+                    'Idempotency-Key': newIdempotencyKey('force-close-$id')
+                  }),
                 );
                 ref.invalidate(_allOrdersProvider);
-                if (context.mounted) _showSuccess(context, 'Order force-closed');
+                if (context.mounted) {
+                  _showSuccess(context, 'Order force-closed');
+                }
               } catch (e) {
                 if (context.mounted) _showError(context, describeApiError(e));
               }
             },
-            child: const Text('Force Close', style: TextStyle(color: crimson, fontWeight: FontWeight.w700)),
+            child: const Text('Force Close',
+                style:
+                    TextStyle(color: crimson, fontWeight: FontWeight.w700)),
           ),
         ],
       ),
     );
   }
+}
+
+class _OrderActionBtn extends StatelessWidget {
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+  const _OrderActionBtn({
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        child: Container(
+          margin: const EdgeInsets.only(right: 8),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: color.withValues(alpha: 0.3)),
+          ),
+          child: Text(label,
+              style: TextStyle(
+                  color: color,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700)),
+        ),
+      );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
